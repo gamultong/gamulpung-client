@@ -7,6 +7,7 @@ import useScreenSize from '@/hooks/useScreenSize';
 import useClickStore from '@/store/clickStore';
 import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
+import Chat from '../chat';
 
 class TileNode {
   x: number;
@@ -116,6 +117,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
   const [leftPaths, setLeftPaths] = useState<Path>({ x: 0, y: 0 });
   const [renderedTiles, setRenderedTiles] = useState<string[][]>([]);
   const [cachedVectorImages, setCachedVectorImages] = useState<VectorImages>();
+  const [isChatting, setIsChatting] = useState<boolean>(false);
 
   /** Cancel interval function for animation. */
   const cancelCurrentMovement = () => {
@@ -130,8 +132,10 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     const preventContextMenu = (event: MouseEvent) => {
       event.preventDefault();
     };
+    window.addEventListener('keydown', startChat);
     window.addEventListener('contextmenu', preventContextMenu);
     return () => {
+      window.removeEventListener('keydown', startChat);
       window.removeEventListener('contextmenu', preventContextMenu);
       cancelCurrentMovement();
     };
@@ -140,6 +144,12 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
   /** Check if the tile has been opened */
   const checkTileHasOpened = (tile: string) => {
     return !['F', 'C'].some(c => tile.includes(c));
+  };
+
+  const startChat = (event: KeyboardEvent) => {
+    if (event.key === 'Enter') {
+      setIsChatting(true);
+    }
   };
 
   /**
@@ -636,6 +646,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
         </div>
       ) : (
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
+          {isChatting && <Chat color={color} isClient={true} x={cursorOriginX} y={cursorOriginY} />}{' '}
           <canvas className={S.canvas} id="TileCanvas" ref={canvasRefs.tileCanvasRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas
