@@ -16,6 +16,11 @@ export default function Chat({ isClient, x, y, color }: ChatProps) {
     top: '51%',
     backgroundColor: color,
   };
+  const otherStyle: CSSProperties = {
+    left: `${x}%`,
+    top: `${y}%`,
+    backgroundColor: color,
+  };
   const messageRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
@@ -24,7 +29,7 @@ export default function Chat({ isClient, x, y, color }: ChatProps) {
     }
   }, [message]);
   return (
-    <div className={S.chat} style={isClient ? clientStyle : {}}>
+    <div className={S.chat} style={isClient ? clientStyle : otherStyle}>
       <input
         type="text"
         value={message}
