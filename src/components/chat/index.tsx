@@ -1,6 +1,7 @@
 'use client';
 import { CSSProperties, useEffect, useRef, useState } from 'react';
 import S from './style.module.scss';
+import useWebSocketStore from '@/store/websocketStore';
 
 interface ChatProps {
   isClient: boolean;
@@ -10,10 +11,11 @@ interface ChatProps {
   msg?: string;
 }
 export default function Chat({ isClient, x, y, color, msg }: ChatProps) {
+  const seconds = 8;
   const [message, setMessage] = useState(msg || '');
   const [messageWidth, setMessageWidth] = useState(0);
   const [countDown, setCountDown] = useState(0);
-  const seconds = 8;
+  const { sendMessage } = useWebSocketStore();
 
   const inputRef = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLParagraphElement>(null);
@@ -63,6 +65,13 @@ export default function Chat({ isClient, x, y, color, msg }: ChatProps) {
     e.preventDefault();
     if (message === '' || countDown <= 0) return;
     /** Send message using websocket. */
+    const body = JSON.stringify({
+      event: 'send-chat',
+      payload: {
+        message: message,
+      },
+    });
+    sendMessage(body);
     setMessage('');
   };
 
