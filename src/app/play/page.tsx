@@ -254,17 +254,32 @@ export default function Play() {
           addCursors(newCursors);
           break;
         }
+        case 'cursors-died': {
+          const { cursors: deadCursors, revive_at } = payload;
+          const revive_time = new Date(revive_at)?.getTime();
+          const newCursors = cursors.map(({ x, y, color }) => {
+            for (const deadCursor of deadCursors) {
+              if (deadCursor.position.x === x && deadCursor.position.y === y) {
+                return { x, y, color, revive_at: revive_time };
+              }
+            }
+            return { x, y, color };
+          });
+          setCursors(newCursors);
+          break;
+        }
         /** Receives movement events from other users. */
         case 'moved': {
           const { origin_position, new_position, color } = payload;
           const { x: originX, y: originY } = origin_position;
           const { x: newX, y: newY } = new_position;
-          const newCursors = [...cursors];
-          const index = newCursors.findIndex((cursor: CursorState) => {
+          const newCursors = cursors.map((cursor: CursorState) => {
             const { x, y, color: cursorColor } = cursor;
-            return x === originX && y === originY && cursorColor === color.toLowerCase();
+            if (x === originX && y === originY && cursorColor === color.toLowerCase()) {
+              return { x: newX, y: newY, color: color.toLowerCase() };
+            }
+            return cursor;
           });
-          if (index !== -1) newCursors[index] = { x: newX, y: newY, color: color.toLowerCase() };
           setCursors(newCursors);
           break;
         }

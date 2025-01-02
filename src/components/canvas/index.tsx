@@ -46,6 +46,7 @@ interface Path {
 
 interface VectorImages {
   cursor: Path2D;
+  stun: Path2D[];
   flag: {
     pole: Path2D;
     flag: Path2D;
@@ -71,7 +72,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
   const animationFrames = 30; // frames
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
-  const { boomPaths, cursorPaths, flagPaths, tileColors, countColors } = Paths;
+  const { boomPaths, cursorPaths, flagPaths, stunPaths, tileColors, countColors } = Paths;
   const cursorColors: { [key: string]: string } = {
     red: '#FF4D00',
     blue: '#0094FF',
@@ -294,13 +295,28 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
    * @param x x position
    * @param y y position
    */
-  const drawCursor = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, scale: number = 1) => {
+  const drawCursor = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, revive_at: number | null, scale: number = 1) => {
     const adjustedScale = (zoom / 3.5) * scale;
     ctx.fillStyle = color;
     ctx.save();
     ctx.translate(x + tileSize / 6 / scale, y + tileSize / 6 / scale);
     ctx.scale(adjustedScale, adjustedScale);
     ctx.fill(cachedVectorImages?.cursor as Path2D);
+    ctx.restore();
+    if (revive_at) {
+      const stunScale = (zoom / 2) * scale;
+      ctx.save();
+      ctx.translate(x - tileSize / 2 / scale, y - tileSize / 2 / scale);
+      if (Date.now() < revive_at && cachedVectorImages?.stun) {
+        ctx.fillStyle = 'white';
+        ctx.strokeStyle = 'black';
+        ctx.scale(stunScale, stunScale);
+        for (let i = 0; i < cachedVectorImages?.stun.length; i++) {
+          ctx.fill(cachedVectorImages.stun[i]);
+          ctx.stroke(cachedVectorImages.stun[i]);
+        }
+      }
+    }
     ctx.restore();
   };
 
@@ -310,7 +326,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     otherCursorsCtx.clearRect(0, 0, windowWidth, windowHeight);
     cursors.forEach(cursor => {
       const [x, y] = [cursor.x - cursorOriginX + tilePaddingWidth, cursor.y - cursorOriginY + tilePaddingHeight];
-      drawCursor(otherCursorsCtx, x * tileSize, y * tileSize, cursorColors[cursor.color]);
+      drawCursor(otherCursorsCtx, x * tileSize, y * tileSize, cursorColors[cursor.color], cursor.revive_at || null);
     });
   };
 
@@ -501,7 +517,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
               !(colIndex === relativeX && rowIndex === relativeY) &&
               content.includes('C')
             ) {
-              drawCursor(interactionCtx, x, y, '#0000002f', 0.5);
+              drawCursor(interactionCtx, x, y, '#0000002f', null, 0.5);
               tileCtx.fillStyle = 'white';
             }
             tileCtx.fill(tileEdgeVector);
@@ -569,7 +585,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
       /** Display the path in the middle to prevent it from appearing displaced */
       if (rowIndex === Math.floor((tiles.length * 3) / 10)) {
         // Draw my cursor
-        drawCursor(interactionCtx, cursorCanvasX, cursorCanvasY, cursorColor);
+        drawCursor(interactionCtx, cursorCanvasX, cursorCanvasY, cursorColor, null);
         // Draw other users' cursor
         drawOtherUserCursors();
         // Describe clicked tile border
@@ -610,6 +626,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
       // Set vector images
       setCachedVectorImages({
         cursor: new Path2D(cursorPaths),
+        stun: [new Path2D(stunPaths[0]), new Path2D(stunPaths[1]), new Path2D(stunPaths[2])],
         flag: {
           flag: new Path2D(flagPaths[0]),
           pole: new Path2D(flagPaths[1]),
