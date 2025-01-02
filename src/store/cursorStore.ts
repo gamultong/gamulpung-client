@@ -6,6 +6,7 @@ export interface CursorState {
   x: number;
   y: number;
   color: Color;
+  revive_at?: number;
 }
 
 interface ClientCursorState extends CursorState {

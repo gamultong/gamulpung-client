@@ -29,8 +29,8 @@ export default function CanvasDashboard() {
           {Math.ceil(zoom * 100)}%
         </p>
         <div className={S.buttons}>
-          <button onClick={() => setZoom(zoom / zoomScale > 0.15 ? zoom / zoomScale : zoom)}>-</button>
-          <button onClick={() => setZoom(zoom * zoomScale < 1.7 ? zoom * zoomScale : zoom)}>+</button>
+          <button onPointerDown={() => setZoom(zoom / zoomScale > 0.15 ? zoom / zoomScale : zoom)}>-</button>
+          <button onPointerDown={() => setZoom(zoom * zoomScale < 1.7 ? zoom * zoomScale : zoom)}>+</button>
         </div>
       </div>
     </div>
