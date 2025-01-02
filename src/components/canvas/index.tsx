@@ -249,6 +249,12 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     return;
   };
 
+  /**
+   * Check if the clicked tile is already a neighbor of the cursor, which means the cursor should not move to the clicked tile.
+   * @param x number
+   * @param y number
+   * @returns boolean
+   */
   const isAlreadyCursorNeighbor = (x: number, y: number) => {
     const directions = [
       [-1, 0], // left
@@ -294,6 +300,9 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
    * @param ctx CanvasRenderingContext2D
    * @param x x position
    * @param y y position
+   * @param color cursor color
+   * @param revive_at revive time
+   * @param scale scale of cursor
    */
   const drawCursor = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, revive_at: number | null, scale: number = 1) => {
     const adjustedScale = (zoom / 3.5) * scale;
@@ -303,18 +312,16 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     ctx.scale(adjustedScale, adjustedScale);
     ctx.fill(cachedVectorImages?.cursor as Path2D);
     ctx.restore();
-    if (revive_at) {
+    if (revive_at && Date.now() < revive_at && cachedVectorImages?.stun) {
       const stunScale = (zoom / 2) * scale;
       ctx.save();
       ctx.translate(x - tileSize / 2 / scale, y - tileSize / 2 / scale);
-      if (Date.now() < revive_at && cachedVectorImages?.stun) {
-        ctx.fillStyle = 'white';
-        ctx.strokeStyle = 'black';
-        ctx.scale(stunScale, stunScale);
-        for (let i = 0; i < cachedVectorImages?.stun.length; i++) {
-          ctx.fill(cachedVectorImages.stun[i]);
-          ctx.stroke(cachedVectorImages.stun[i]);
-        }
+      ctx.fillStyle = 'white';
+      ctx.strokeStyle = 'black';
+      ctx.scale(stunScale, stunScale);
+      for (let i = 0; i < cachedVectorImages?.stun.length; i++) {
+        ctx.fill(cachedVectorImages.stun[i]);
+        ctx.stroke(cachedVectorImages.stun[i]);
       }
     }
     ctx.restore();
