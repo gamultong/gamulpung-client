@@ -295,6 +295,11 @@ export default function Play() {
           setCursors(newCursors);
           break;
         }
+        case 'send-chat': {
+          const { position, message, color } = payload;
+          const { x, y } = position;
+          console.log(x, y, message, color);
+        }
         case 'error': {
           const { msg } = payload;
           console.error(msg);
