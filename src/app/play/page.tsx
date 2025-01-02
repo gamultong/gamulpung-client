@@ -299,6 +299,7 @@ export default function Play() {
           const { position, message, color } = payload;
           const { x, y } = position;
           console.log(x, y, message, color);
+          break;
         }
         case 'error': {
           const { msg } = payload;
