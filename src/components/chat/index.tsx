@@ -47,6 +47,10 @@ export default function Chat({ isClient, x, y, color, msg }: ChatProps) {
       setCountDown(seconds);
       inputRef.current?.focus();
     }
+    if (event.key === 'Escape' && isClient) {
+      setMessage('');
+      setCountDown(0);
+    }
   };
 
   useEffect(() => {
@@ -78,7 +82,7 @@ export default function Chat({ isClient, x, y, color, msg }: ChatProps) {
             value={message}
             maxLength={40}
             onChange={onChange}
-            style={{ width: `${messageWidth}px`, color: color === 'yellow' ? 'black' : 'white' }}
+            style={{ width: `${messageWidth + 5}px`, color: color === 'yellow' ? 'black' : 'white' }}
           />
           <div ref={messageRef} aria-hidden>
             {message}
