@@ -8,7 +8,7 @@ import useScreenSize from '@/hooks/useScreenSize';
 import { CursorState, useCursorStore, useOtherUserCursorsStore } from '../../store/cursorStore';
 
 /** components */
-import CanvasRenderer from '@/components/canvas';
+import CanvasRenderComponent from '@/components/canvas';
 import useClickStore from '@/store/clickStore';
 import useWebSocketStore from '@/store/websocketStore';
 import Inactive from '@/components/inactive';
@@ -454,7 +454,7 @@ export default function Play() {
     <div className={S.page}>
       {leftReviveTime > 0 && <Inactive time={leftReviveTime} />}
       <CanvasDashboard />
-      <CanvasRenderer
+      <CanvasRenderComponent
         leftReviveTime={leftReviveTime}
         paddingTiles={renderRange}
         tiles={renderTiles}

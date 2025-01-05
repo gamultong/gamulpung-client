@@ -7,7 +7,7 @@ import useScreenSize from '@/hooks/useScreenSize';
 import useClickStore from '@/store/clickStore';
 import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
-// import Chat from '../chat';
+// import ChatComponent from '../chat';
 
 class TileNode {
   x: number;
@@ -28,7 +28,7 @@ class TileNode {
 }
 
 /** 타입 정의 */
-interface CanvasRendererProps {
+interface CanvasRenderComponentProps {
   tiles: string[][];
   tileSize: number;
   cursorOriginX: number;
@@ -57,7 +57,7 @@ interface VectorImages {
   };
 }
 
-const CanvasRenderer: React.FC<CanvasRendererProps> = ({
+const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   paddingTiles,
   tiles,
   tileSize,
@@ -661,7 +661,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
         </div>
       ) : (
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
-          {/* <Chat color={color} isClient={true} x={cursorOriginX} y={cursorOriginY} /> */}
+          {/* <ChatComponent color={color} isClient={true} x={cursorOriginX} y={cursorOriginY} /> */}
           <canvas className={S.canvas} id="TileCanvas" ref={canvasRefs.tileCanvasRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas
@@ -678,4 +678,4 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
   );
 };
 
-export default CanvasRenderer;
+export default CanvasRenderComponent;
