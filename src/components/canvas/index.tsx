@@ -7,7 +7,7 @@ import useScreenSize from '@/hooks/useScreenSize';
 import useClickStore from '@/store/clickStore';
 import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
-import Chat from '../chat';
+// import Chat from '../chat';
 
 class TileNode {
   x: number;
@@ -159,7 +159,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     setMovecost(paths.length - 1);
     setCusorPosition(relativeTileX + startPoint.x, relativetileY + startPoint.y);
 
-    const animateTileMoving = (dx: number, dy: number) => {
+    const animationOfTileMoving = (dx: number, dy: number) => {
       let countFrame = 0;
       const animation = setInterval(() => {
         const { tileCanvasRef, interactionCanvasRef, otherCursorsRef } = canvasRefs;
@@ -197,7 +197,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
       else if (dx === 0 && dy === -1) goup();
 
       currentPath = path;
-      animateTileMoving(dx, dy);
+      animationOfTileMoving(dx, dy);
       setPaths(paths.slice(index));
     }, movingSpeed);
   };
@@ -619,7 +619,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     });
   };
 
-  /** Render */
+  /** Load and Render */
   useEffect(() => {
     if (!loading) {
       renderTiles();
@@ -661,7 +661,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
         </div>
       ) : (
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
-          <Chat color={color} isClient={true} x={cursorOriginX} y={cursorOriginY} />
+          {/* <Chat color={color} isClient={true} x={cursorOriginX} y={cursorOriginY} /> */}
           <canvas className={S.canvas} id="TileCanvas" ref={canvasRefs.tileCanvasRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas
