@@ -8,7 +8,7 @@ import { useSearchParams } from 'next/navigation';
 export default function Navigation() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const searchParams = useSearchParams();
-  const lang = searchParams.get('lang') || 'en';
+  const lang = searchParams.get('lang') || 'ko';
   const host = process.env.NEXT_PUBLIC_HOST;
   return (
     <nav className={S.nav} onPointerOver={() => setIsMenuOpen(true)} onPointerLeave={() => setIsMenuOpen(false)}>
