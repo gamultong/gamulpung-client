@@ -7,6 +7,7 @@ import useScreenSize from '@/hooks/useScreenSize';
 import useClickStore from '@/store/clickStore';
 import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
+// import ChatComponent from '../chat';
 
 class TileNode {
   x: number;
@@ -27,7 +28,7 @@ class TileNode {
 }
 
 /** 타입 정의 */
-interface CanvasRendererProps {
+interface CanvasRenderComponentProps {
   tiles: string[][];
   tileSize: number;
   cursorOriginX: number;
@@ -45,6 +46,7 @@ interface Path {
 
 interface VectorImages {
   cursor: Path2D;
+  stun: Path2D[];
   flag: {
     pole: Path2D;
     flag: Path2D;
@@ -55,7 +57,7 @@ interface VectorImages {
   };
 }
 
-const CanvasRenderer: React.FC<CanvasRendererProps> = ({
+const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   paddingTiles,
   tiles,
   tileSize,
@@ -70,7 +72,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
   const animationFrames = 30; // frames
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
-  const { boomPaths, cursorPaths, flagPaths, tileColors, countColors } = Paths;
+  const { boomPaths, cursorPaths, flagPaths, stunPaths, tileColors, countColors } = Paths;
   const cursorColors: { [key: string]: string } = {
     red: '#FF4D00',
     blue: '#0094FF',
@@ -157,7 +159,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     setMovecost(paths.length - 1);
     setCusorPosition(relativeTileX + startPoint.x, relativetileY + startPoint.y);
 
-    const animateTileMoving = (dx: number, dy: number) => {
+    const animationOfTileMoving = (dx: number, dy: number) => {
       let countFrame = 0;
       const animation = setInterval(() => {
         const { tileCanvasRef, interactionCanvasRef, otherCursorsRef } = canvasRefs;
@@ -195,7 +197,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
       else if (dx === 0 && dy === -1) goup();
 
       currentPath = path;
-      animateTileMoving(dx, dy);
+      animationOfTileMoving(dx, dy);
       setPaths(paths.slice(index));
     }, movingSpeed);
   };
@@ -247,6 +249,12 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     return;
   };
 
+  /**
+   * Check if the clicked tile is already a neighbor of the cursor, which means the cursor should not move to the clicked tile.
+   * @param x number
+   * @param y number
+   * @returns boolean
+   */
   const isAlreadyCursorNeighbor = (x: number, y: number) => {
     const directions = [
       [-1, 0], // left
@@ -292,14 +300,30 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
    * @param ctx CanvasRenderingContext2D
    * @param x x position
    * @param y y position
+   * @param color cursor color
+   * @param revive_at revive time
+   * @param scale scale of cursor
    */
-  const drawCursor = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, scale: number = 1) => {
+  const drawCursor = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, revive_at: number | null, scale: number = 1) => {
     const adjustedScale = (zoom / 3.5) * scale;
     ctx.fillStyle = color;
     ctx.save();
     ctx.translate(x + tileSize / 6 / scale, y + tileSize / 6 / scale);
     ctx.scale(adjustedScale, adjustedScale);
     ctx.fill(cachedVectorImages?.cursor as Path2D);
+    ctx.restore();
+    if (revive_at && Date.now() < revive_at && cachedVectorImages?.stun) {
+      const stunScale = (zoom / 2) * scale;
+      ctx.save();
+      ctx.translate(x - tileSize / 2 / scale, y - tileSize / 2 / scale);
+      ctx.fillStyle = 'white';
+      ctx.strokeStyle = 'black';
+      ctx.scale(stunScale, stunScale);
+      for (let i = 0; i < cachedVectorImages?.stun.length; i++) {
+        ctx.fill(cachedVectorImages.stun[i]);
+        ctx.stroke(cachedVectorImages.stun[i]);
+      }
+    }
     ctx.restore();
   };
 
@@ -309,7 +333,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     otherCursorsCtx.clearRect(0, 0, windowWidth, windowHeight);
     cursors.forEach(cursor => {
       const [x, y] = [cursor.x - cursorOriginX + tilePaddingWidth, cursor.y - cursorOriginY + tilePaddingHeight];
-      drawCursor(otherCursorsCtx, x * tileSize, y * tileSize, cursorColors[cursor.color]);
+      drawCursor(otherCursorsCtx, x * tileSize, y * tileSize, cursorColors[cursor.color], cursor.revive_at || null);
     });
   };
 
@@ -500,7 +524,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
               !(colIndex === relativeX && rowIndex === relativeY) &&
               content.includes('C')
             ) {
-              drawCursor(interactionCtx, x, y, '#0000002f', 0.5);
+              drawCursor(interactionCtx, x, y, '#0000002f', null, 0.5);
               tileCtx.fillStyle = 'white';
             }
             tileCtx.fill(tileEdgeVector);
@@ -568,7 +592,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
       /** Display the path in the middle to prevent it from appearing displaced */
       if (rowIndex === Math.floor((tiles.length * 3) / 10)) {
         // Draw my cursor
-        drawCursor(interactionCtx, cursorCanvasX, cursorCanvasY, cursorColor);
+        drawCursor(interactionCtx, cursorCanvasX, cursorCanvasY, cursorColor, null);
         // Draw other users' cursor
         drawOtherUserCursors();
         // Describe clicked tile border
@@ -595,7 +619,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     });
   };
 
-  /** Render */
+  /** Load and Render */
   useEffect(() => {
     if (!loading) {
       renderTiles();
@@ -609,6 +633,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
       // Set vector images
       setCachedVectorImages({
         cursor: new Path2D(cursorPaths),
+        stun: [new Path2D(stunPaths[0]), new Path2D(stunPaths[1]), new Path2D(stunPaths[2])],
         flag: {
           flag: new Path2D(flagPaths[0]),
           pole: new Path2D(flagPaths[1]),
@@ -636,6 +661,7 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
         </div>
       ) : (
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
+          {/* <ChatComponent color={color} isClient={true} x={cursorOriginX} y={cursorOriginY} /> */}
           <canvas className={S.canvas} id="TileCanvas" ref={canvasRefs.tileCanvasRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas
@@ -652,4 +678,4 @@ const CanvasRenderer: React.FC<CanvasRendererProps> = ({
   );
 };
 
-export default CanvasRenderer;
+export default CanvasRenderComponent;

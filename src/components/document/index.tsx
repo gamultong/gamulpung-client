@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 export default function Document({ endpoint, files, dir }: { endpoint: string; files: string[]; dir: string }) {
   const url = process.env.NEXT_PUBLIC_HOST;
   const [data, setData] = useState('');
-  const lang = useSearchParams().get('lang') || 'en';
+  const lang = useSearchParams().get('lang') || 'ko';
   const fetchMarkdownFiles = async () => {
     try {
       const url = process.env.NEXT_PUBLIC_HOST;
@@ -44,10 +44,7 @@ export default function Document({ endpoint, files, dir }: { endpoint: string; f
               <summary>{key}</summary>
               <ul>
                 {Object.entries(aside[key as keyof typeof aside]).map(([value, href]) => (
-                  <Link
-                    href={`${url}/documents/${key.replaceAll(/ /g, '-').toLowerCase()}?lang=${lang}${href}`}
-                    key={value}
-                  >
+                  <Link href={`${url}/documents/${key.replaceAll(/ /g, '-').toLowerCase()}?lang=${lang}${href}`} key={value}>
                     <li>{value}</li>
                   </Link>
                 ))}

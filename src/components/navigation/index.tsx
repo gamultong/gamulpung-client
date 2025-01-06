@@ -8,7 +8,7 @@ import { useSearchParams } from 'next/navigation';
 export default function Navigation() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const searchParams = useSearchParams();
-  const lang = searchParams.get('lang') || 'en';
+  const lang = searchParams.get('lang') || 'ko';
   const host = process.env.NEXT_PUBLIC_HOST;
   return (
     <nav className={S.nav} onPointerOver={() => setIsMenuOpen(true)} onPointerLeave={() => setIsMenuOpen(false)}>
@@ -47,11 +47,11 @@ export default function Navigation() {
               </Link>
             </div>
             <div>
-              <Link href="?">
-                <p>English</p>
-              </Link>
               <Link href="?lang=ko">
                 <p>한국어</p>
+              </Link>
+              <Link href="?/lang=en">
+                <p>English</p>
               </Link>
               {/* <Link href="?lang=ja">
                 <p>日本語</p>

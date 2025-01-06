@@ -13,7 +13,7 @@ export default function StepVideo({ num, text, source: gif }: { num: number; tex
     <div className={S.stepVideo}>
       <div>
         <p>Step {num}</p>
-        <p>{text[lang === 'ko' ? 'ko' : 'en']}</p>
+        <p>{text[lang !== 'en' ? 'ko' : 'en']}</p>
       </div>
       <Image src={host + gif} alt={gif} width={400} height={225} />
     </div>
