@@ -7,7 +7,7 @@ import useScreenSize from '@/hooks/useScreenSize';
 import useClickStore from '@/store/clickStore';
 import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
-// import ChatComponent from '../chat';
+import ChatComponent from '../chat';
 
 class TileNode {
   x: number;
@@ -83,6 +83,16 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     '2': '#0094FF',
     '3': '#BC3FDC',
   };
+  const otherCursorColors: { [key: string]: string } = {
+    red: '#FBCBB6',
+    blue: '#A8DBFF',
+    yellow: '#FFEE99',
+    purple: '#E8BEF3',
+    '0': '#FBCBB6',
+    '1': '#A8DBFF',
+    '2': '#FFEE99',
+    '3': '#E8BEF3',
+  };
   /** stores */
   const { windowHeight, windowWidth } = useScreenSize();
   const {
@@ -110,6 +120,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     tileCanvasRef: useRef<HTMLCanvasElement>(null),
     interactionCanvasRef: useRef<HTMLCanvasElement>(null),
     otherCursorsRef: useRef<HTMLCanvasElement>(null),
+    otherPointerRef: useRef<HTMLCanvasElement>(null),
   };
 
   /** States */
@@ -129,9 +140,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   /** Prevent default right click event */
   useEffect(() => {
-    const preventContextMenu = (event: MouseEvent) => {
-      event.preventDefault();
-    };
+    const preventContextMenu = (event: MouseEvent) => event.preventDefault();
     window.addEventListener('contextmenu', preventContextMenu);
     return () => {
       window.removeEventListener('contextmenu', preventContextMenu);
@@ -233,6 +242,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     setClickPosition(tileX, tileY, clickedTileContent);
 
     const clickType = event.buttons === 2 ? 'SPECIAL_CLICK' : 'GENERAL_CLICK';
+    clickEvent(tileX, tileY, clickType);
     if (movementInterval.current) {
       cancelCurrentMovement();
       setCachingTiles(tiles);
@@ -240,7 +250,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
     if (isAlreadyCursorNeighbor(tileX, tileY)) {
       moveCursor(tileArrayX, tileArrayY, tileX, tileY, clickType);
-      clickEvent(tileX, tileY, clickType);
       return;
     }
 
@@ -334,6 +343,25 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     cursors.forEach(cursor => {
       const [x, y] = [cursor.x - cursorOriginX + tilePaddingWidth, cursor.y - cursorOriginY + tilePaddingHeight];
       drawCursor(otherCursorsCtx, x * tileSize, y * tileSize, cursorColors[cursor.color], cursor.revive_at || null);
+    });
+  };
+
+  const drawPointer = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, borderPixel: number) => {
+    if (!ctx) return;
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = borderPixel;
+    ctx.strokeRect(x + borderPixel / 2, y + borderPixel / 2, tileSize - borderPixel, tileSize - borderPixel);
+    ctx.closePath();
+  };
+
+  const drawOtherUserPointers = (borderPixel: number) => {
+    const otherPointerCtx = canvasRefs.otherPointerRef.current?.getContext('2d');
+    if (!otherPointerCtx) return;
+    otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
+    cursors.forEach(cursor => {
+      const [x, y] = [cursor.x - cursorOriginX + tilePaddingWidth, cursor.y - cursorOriginY + tilePaddingHeight];
+      drawPointer(otherPointerCtx, x * tileSize, y * tileSize, otherCursorColors[cursor.color], borderPixel);
     });
   };
 
@@ -593,14 +621,12 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       if (rowIndex === Math.floor((tiles.length * 3) / 10)) {
         // Draw my cursor
         drawCursor(interactionCtx, cursorCanvasX, cursorCanvasY, cursorColor, null);
+        // Describe my clicked tile border
+        drawPointer(interactionCtx, clickCanvasX, clickCanvasY, cursorColor, borderPixel);
         // Draw other users' cursor
         drawOtherUserCursors();
-        // Describe clicked tile border
-        interactionCtx.beginPath();
-        interactionCtx.strokeStyle = cursorColor;
-        interactionCtx.lineWidth = borderPixel;
-        interactionCtx.strokeRect(clickCanvasX + borderPixel / 2, clickCanvasY + borderPixel / 2, tileSize - borderPixel, tileSize - borderPixel);
-        interactionCtx.closePath();
+        // Draw other users' clicked tile border
+        drawOtherUserPointers(borderPixel);
         // Draw path
         if (paths.length > 0) {
           const [x, y] = [paths[0].x + compenX + 0.5, paths[0].y + compenY + 0.5];
@@ -650,7 +676,12 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   }, [tiles, loading, tileSize, cursorOriginX, cursorOriginY, startPoint, clickX, clickY, color, zoom]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => drawOtherUserCursors(), [cursors]);
+  useEffect(() => {
+    const borderPixel = 5 * zoom;
+    drawOtherUserCursors();
+    drawOtherUserPointers(borderPixel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cursors]);
 
   return (
     <>
@@ -661,9 +692,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         </div>
       ) : (
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
-          {/* <ChatComponent color={color} isClient={true} x={cursorOriginX} y={cursorOriginY} /> */}
+          <ChatComponent color={color} isClient={true} x={cursorOriginX} y={cursorOriginY} />
           <canvas className={S.canvas} id="TileCanvas" ref={canvasRefs.tileCanvasRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
+          <canvas className={S.canvas} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />
           <canvas
             className={S.canvas}
             id="InteractionCanvas"
