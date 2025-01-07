@@ -140,9 +140,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   /** Prevent default right click event */
   useEffect(() => {
-    const preventContextMenu = (event: MouseEvent) => {
-      event.preventDefault();
-    };
+    const preventContextMenu = (event: MouseEvent) => event.preventDefault();
     window.addEventListener('contextmenu', preventContextMenu);
     return () => {
       window.removeEventListener('contextmenu', preventContextMenu);
@@ -357,7 +355,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     ctx.closePath();
   };
 
-  const drawOtherUserPointer = (borderPixel: number) => {
+  const drawOtherUserPointers = (borderPixel: number) => {
     const otherPointerCtx = canvasRefs.otherPointerRef.current?.getContext('2d');
     if (!otherPointerCtx) return;
     otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
@@ -628,7 +626,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         // Draw other users' cursor
         drawOtherUserCursors();
         // Draw other users' clicked tile border
-        drawOtherUserPointer(borderPixel);
+        drawOtherUserPointers(borderPixel);
         // Draw path
         if (paths.length > 0) {
           const [x, y] = [paths[0].x + compenX + 0.5, paths[0].y + compenY + 0.5];
@@ -681,7 +679,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   useEffect(() => {
     const borderPixel = 5 * zoom;
     drawOtherUserCursors();
-    drawOtherUserPointer(borderPixel);
+    drawOtherUserPointers(borderPixel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursors]);
 

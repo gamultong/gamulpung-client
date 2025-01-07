@@ -194,7 +194,7 @@ export default function Play() {
   useEffect(() => {
     if (!message) return;
     try {
-      const { event, payload } = JSON.parse(message as string);
+      const { event, payload } = JSON.parse(message);
       switch (event) {
         /** When receiving requested tiles */
         case 'tiles': {
@@ -215,10 +215,7 @@ export default function Play() {
         }
         case 'pointer-set': {
           const { id, pointer } = payload;
-          const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => {
-            if (id === cursor.id) return { ...cursor, pointer };
-            return cursor;
-          });
+          const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => (id === cursor.id ? { ...cursor, pointer } : cursor));
           setCursors(newCursors);
         }
         case 'single-tile-opened': {
@@ -257,36 +254,30 @@ export default function Play() {
         }
         case 'cursors': {
           const { cursors } = payload;
-          const newCursors = cursors.map(
-            ({
-              position: { x, y },
-              color,
-              id,
-              pointer,
-            }: {
-              position: { x: number; y: number };
-              color: string;
-              id: string;
-              pointer: { x: number; y: number };
-            }) => ({
-              id,
-              pointer,
-              x,
-              y,
-              color: color.toLowerCase(),
-            }),
-          );
+          type newCursorType = {
+            position: { x: number; y: number };
+            id: string;
+            color: string;
+            pointer: { x: number; y: number };
+          };
+          const newCursors = cursors.map(({ position: { x, y }, color, id, pointer }: newCursorType) => ({
+            id,
+            pointer,
+            x,
+            y,
+            color: color.toLowerCase(),
+          }));
           addCursors(newCursors);
           break;
         }
         case 'cursors-died': {
           const { cursors: deadCursors, revive_at } = payload;
           const revive_time = new Date(revive_at)?.getTime();
-          const newCursors = cursors.map(({ x, y, color, id, pointer }: OtherUserSingleCursorState) => {
+          const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => {
             for (const deadCursor of deadCursors as OtherUserSingleCursorState[]) {
-              if (id === deadCursor.id) return { id, x, y, color, revive_at: revive_time, pointer };
+              if (cursor.id === deadCursor.id) return { ...cursor, revive_at: revive_time };
             }
-            return { id, x, y, color, pointer };
+            return cursor;
           });
           setCursors(newCursors);
           break;
@@ -294,10 +285,9 @@ export default function Play() {
         /** Receives movement events from other users. */
         case 'moved': {
           const { id, new_position } = payload;
-          const { x: newX, y: newY } = new_position;
+          const { x, y } = new_position;
           const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => {
-            const { color, pointer } = cursor;
-            if (id === cursor.id) return { id, x: newX, y: newY, color, pointer };
+            if (id === cursor.id) return { ...cursor, x, y };
             return cursor;
           });
           setCursors(newCursors);
@@ -307,9 +297,7 @@ export default function Play() {
         case 'cursor-quit': {
           const { id } = payload;
           const newCursors = [...cursors];
-          const index = newCursors.findIndex((cursor: OtherUserSingleCursorState) => {
-            return cursor.id === id;
-          });
+          const index = newCursors.findIndex((cursor: OtherUserSingleCursorState) => cursor.id === id);
           if (index !== -1) newCursors.splice(index, 1);
           setCursors(newCursors);
           break;
