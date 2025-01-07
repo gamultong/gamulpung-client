@@ -7,7 +7,7 @@ import useScreenSize from '@/hooks/useScreenSize';
 import useClickStore from '@/store/clickStore';
 import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
-// import ChatComponent from '../chat';
+import ChatComponent from '../chat';
 
 class TileNode {
   x: number;
@@ -82,6 +82,16 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     '1': '#F0C800',
     '2': '#0094FF',
     '3': '#BC3FDC',
+  };
+  const otherCursorColors: { [key: string]: string } = {
+    red: '#FBCBB6',
+    blue: '#FFEE99',
+    yellow: '#A8DBFF',
+    purple: '#E8BEF3',
+    '0': '#FBCBB6',
+    '1': '#FFEE99',
+    '2': '#A8DBFF',
+    '3': '#E8BEF3',
   };
   /** stores */
   const { windowHeight, windowWidth } = useScreenSize();
@@ -335,6 +345,17 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const [x, y] = [cursor.x - cursorOriginX + tilePaddingWidth, cursor.y - cursorOriginY + tilePaddingHeight];
       drawCursor(otherCursorsCtx, x * tileSize, y * tileSize, cursorColors[cursor.color], cursor.revive_at || null);
     });
+  };
+
+  const drawPointer = (x: number, y: number, color: string, borderPixel: number) => {
+    if (!canvasRefs.interactionCanvasRef.current) return;
+    const interactionCtx = canvasRefs.interactionCanvasRef.current.getContext('2d');
+    if (!interactionCtx) return;
+    interactionCtx.beginPath();
+    interactionCtx.strokeStyle = color;
+    interactionCtx.lineWidth = borderPixel;
+    interactionCtx.strokeRect(x + borderPixel / 2, y + borderPixel / 2, tileSize - borderPixel, tileSize - borderPixel);
+    interactionCtx.closePath();
   };
 
   /**
@@ -596,11 +617,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         // Draw other users' cursor
         drawOtherUserCursors();
         // Describe clicked tile border
-        interactionCtx.beginPath();
-        interactionCtx.strokeStyle = cursorColor;
-        interactionCtx.lineWidth = borderPixel;
-        interactionCtx.strokeRect(clickCanvasX + borderPixel / 2, clickCanvasY + borderPixel / 2, tileSize - borderPixel, tileSize - borderPixel);
-        interactionCtx.closePath();
+        drawPointer(clickCanvasX, clickCanvasY, cursorColor, borderPixel);
         // Draw path
         if (paths.length > 0) {
           const [x, y] = [paths[0].x + compenX + 0.5, paths[0].y + compenY + 0.5];
@@ -661,7 +678,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         </div>
       ) : (
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
-          {/* <ChatComponent color={color} isClient={true} x={cursorOriginX} y={cursorOriginY} /> */}
+          <ChatComponent color={color} isClient={true} x={cursorOriginX} y={cursorOriginY} />
           <canvas className={S.canvas} id="TileCanvas" ref={canvasRefs.tileCanvasRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas

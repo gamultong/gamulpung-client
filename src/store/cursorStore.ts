@@ -2,7 +2,8 @@ import { create } from 'zustand';
 
 type Color = 'red' | 'blue' | 'yellow' | 'purple';
 
-export interface CursorState {
+interface CursorState {
+  id: string;
   x: number;
   y: number;
   color: Color;
@@ -10,8 +11,10 @@ export interface CursorState {
 }
 
 interface ClientCursorState extends CursorState {
+  id: string;
   originX: number;
   originY: number;
+  setId: (id: string) => void;
   setColor: (newColor: Color) => void;
   setPosition: (x: number, y: number) => void;
   setX: (x: number) => void;
@@ -29,20 +32,26 @@ interface ClientCursorState extends CursorState {
   setZoom: (zoom: number) => void;
 }
 
+export interface OtherUserSingleCursorState extends CursorState {
+  pointer: { x: number; y: number };
+}
+
 interface OtherUserCursorsState {
-  cursors: CursorState[];
-  addCursors: (cursor: CursorState[]) => void;
-  removeCursor: (cursor: CursorState) => void;
-  setCursors: (cursors: CursorState[]) => void;
+  cursors: OtherUserSingleCursorState[];
+  addCursors: (cursor: OtherUserSingleCursorState[]) => void;
+  removeCursor: (cursor: OtherUserSingleCursorState) => void;
+  setCursors: (cursors: OtherUserSingleCursorState[]) => void;
 }
 
 export const useCursorStore = create<ClientCursorState>(set => ({
+  id: '',
   x: 100,
   y: 100,
   color: 'blue',
   originX: 100,
   originY: 100,
   zoom: 1,
+  setId: id => set({ id }),
   setColor: color => set({ color }),
   setX: x => set({ x }),
   setY: y => set({ y }),
