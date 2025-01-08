@@ -242,12 +242,21 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     setClickPosition(tileX, tileY, clickedTileContent);
 
     const clickType = event.buttons === 2 ? 'SPECIAL_CLICK' : 'GENERAL_CLICK';
-    clickEvent(tileX, tileY, clickType);
     if (movementInterval.current) {
       cancelCurrentMovement();
       setCachingTiles(tiles);
     }
+    clickEvent(tileX, tileY, clickType);
 
+    /**
+     * What if the clicked tile is not a closed tile and the click type is special click,
+     * Then the cursor will not move.
+     */
+    if (clickType === 'SPECIAL_CLICK' && !clickedTileContent.includes('C')) return;
+    /**
+     * What if the clicked tile is closed and It has any neighbor opened tile,
+     * Then the cursor will move to the neighbor tile.
+     */
     if (isAlreadyCursorNeighbor(tileX, tileY)) {
       moveCursor(tileArrayX, tileArrayY, tileX, tileY, clickType);
       return;
@@ -259,7 +268,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   };
 
   /**
-   * Check if the clicked tile is already a neighbor of the cursor, which means the cursor should not move to the clicked tile.
+   * Check if the clicked tile is already a neighbor of the cursor,
+   * which means the cursor should not move to the clicked tile.
    * @param x number
    * @param y number
    * @returns boolean
@@ -305,19 +315,36 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   };
 
   /**
-   * Draw cursor
+   * Draw cursor on canvas
    * @param ctx CanvasRenderingContext2D
    * @param x x position
    * @param y y position
    * @param color cursor color
    * @param revive_at revive time
+   * @param rotate rotate of cursor
    * @param scale scale of cursor
    */
-  const drawCursor = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, revive_at: number | null, scale: number = 1) => {
+  const drawCursor = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    color: string,
+    revive_at: number | null,
+    rotate: number | null,
+    scale: number = 1,
+  ) => {
     const adjustedScale = (zoom / 3.5) * scale;
     ctx.fillStyle = color;
     ctx.save();
-    ctx.translate(x + tileSize / 6 / scale, y + tileSize / 6 / scale);
+    /**
+     * What if the cursor is rotating.
+     * Then the cursor will rotate.
+     */
+    if (rotate !== null) {
+      const [rotateX, rotateY] = [Math.cos(rotate - 1 / 4) * 2 * Math.PI, Math.sin(rotate - 1 / 4) * 2 * Math.PI];
+      ctx.translate(x - (rotateX * tileSize) / 18 / scale + tileSize / 2, y - (rotateY * tileSize) / 18 / scale + tileSize / 2);
+      ctx.rotate(rotate - (Math.PI / 24) * 8);
+    } else ctx.translate(x + tileSize / 6 / scale, y + tileSize / 6 / scale);
     ctx.scale(adjustedScale, adjustedScale);
     ctx.fill(cachedVectorImages?.cursor as Path2D);
     ctx.restore();
@@ -342,7 +369,15 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     otherCursorsCtx.clearRect(0, 0, windowWidth, windowHeight);
     cursors.forEach(cursor => {
       const [x, y] = [cursor.x - cursorOriginX + tilePaddingWidth, cursor.y - cursorOriginY + tilePaddingHeight];
-      drawCursor(otherCursorsCtx, x * tileSize, y * tileSize, cursorColors[cursor.color], cursor.revive_at || null);
+      /**
+       * Calculate the distance between the cursor and the pointer to rotate the cursor.
+       * What if the pointer is not exist or the cursor overlaps the cursor's pointer,
+       * Then the cursor will not rotate.
+       * */
+      const [distanceX, distanceY] = [cursor.x - (cursor.pointer?.x ?? cursor.x), cursor.y - (cursor.pointer?.y ?? cursor.y)];
+      let rotate = null;
+      if (distanceX !== 0 || distanceY !== 0) rotate = Math.atan2(distanceY, distanceX);
+      drawCursor(otherCursorsCtx, x * tileSize, y * tileSize, cursorColors[cursor.color], cursor.revive_at || null, rotate);
     });
   };
 
@@ -481,6 +516,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
     // setting cursor color
     const cursorColor = cursorColors[color];
+    // Setting compensation value for cursor positions
     const compenX = cursorX - cursorOriginX - tilePaddingWidth - leftPaths.x;
     const compenY = cursorY - cursorOriginY - tilePaddingHeight - leftPaths.y;
 
@@ -552,7 +588,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
               !(colIndex === relativeX && rowIndex === relativeY) &&
               content.includes('C')
             ) {
-              drawCursor(interactionCtx, x, y, '#0000002f', null, 0.5);
+              drawCursor(interactionCtx, x, y, '#0000002f', null, null, 0.5);
               tileCtx.fillStyle = 'white';
             }
             tileCtx.fill(tileEdgeVector);
@@ -619,8 +655,12 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       });
       /** Display the path in the middle to prevent it from appearing displaced */
       if (rowIndex === Math.floor((tiles.length * 3) / 10)) {
+        // If both distanceX and distanceY are 0, the cursor will not rotate.
+        const [distanceX, distanceY] = [cursorOriginX - clickX, cursorOriginY - clickY];
+        let rotate = null;
+        if (distanceX !== 0 || distanceY !== 0) rotate = Math.atan2(distanceY, distanceX);
         // Draw my cursor
-        drawCursor(interactionCtx, cursorCanvasX, cursorCanvasY, cursorColor, null);
+        drawCursor(interactionCtx, cursorCanvasX, cursorCanvasY, cursorColor, null, rotate);
         // Describe my clicked tile border
         drawPointer(interactionCtx, clickCanvasX, clickCanvasY, cursorColor, borderPixel);
         // Draw other users' cursor
@@ -675,7 +715,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles, loading, tileSize, cursorOriginX, cursorOriginY, startPoint, clickX, clickY, color, zoom]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const borderPixel = 5 * zoom;
     drawOtherUserCursors();
