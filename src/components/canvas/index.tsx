@@ -395,7 +395,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     if (!otherPointerCtx) return;
     otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
     cursors.forEach(cursor => {
-      const [x, y] = [cursor.x - cursorOriginX + tilePaddingWidth, cursor.y - cursorOriginY + tilePaddingHeight];
+      const [x, y] = [cursor.pointer?.x - cursorOriginX + tilePaddingWidth, cursor.pointer?.y - cursorOriginY + tilePaddingHeight];
       drawPointer(otherPointerCtx, x * tileSize, y * tileSize, otherCursorColors[cursor.color], borderPixel);
     });
   };
