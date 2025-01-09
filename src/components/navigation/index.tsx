@@ -45,6 +45,9 @@ export default function Navigation() {
               <Link href={`/documents/release-notes?lang=${lang}`}>
                 <p>Releases</p>
               </Link>
+              <Link href={`/documents/blog?lang=${lang}`}>
+                <p>Blogs</p>
+              </Link>
             </div>
             <div>
               <Link href="?lang=ko">
