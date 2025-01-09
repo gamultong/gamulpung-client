@@ -395,7 +395,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     if (!otherPointerCtx) return;
     otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
     cursors.forEach(cursor => {
-      const [x, y] = [cursor.x - cursorOriginX + tilePaddingWidth, cursor.y - cursorOriginY + tilePaddingHeight];
+      const [x, y] = [cursor.pointer?.x - cursorOriginX + tilePaddingWidth, cursor.pointer?.y - cursorOriginY + tilePaddingHeight];
       drawPointer(otherPointerCtx, x * tileSize, y * tileSize, otherCursorColors[cursor.color], borderPixel);
     });
   };
@@ -731,7 +731,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         </div>
       ) : (
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
-          <ChatComponent color={color} isClient={true} x={cursorOriginX} y={cursorOriginY} />
+          <ChatComponent />
           <canvas className={S.canvas} id="TileCanvas" ref={canvasRefs.tileCanvasRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />

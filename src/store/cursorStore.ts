@@ -34,6 +34,8 @@ interface ClientCursorState extends CursorState {
 
 export interface OtherUserSingleCursorState extends CursorState {
   pointer: { x: number; y: number };
+  message: string;
+  messageTime: number;
 }
 
 interface OtherUserCursorsState {
