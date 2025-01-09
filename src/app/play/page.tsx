@@ -303,10 +303,13 @@ export default function Play() {
           setCursors(newCursors);
           break;
         }
-        case 'send-chat': {
-          const { position, message, color } = payload;
-          const { x, y } = position;
-          console.log(x, y, message, color);
+        case 'chat': {
+          const { cursor_id, message } = payload;
+          const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => {
+            if (cursor.id === cursor_id) return { ...cursor, message, messageTime: Date.now() + 1000 * 8 };
+            return cursor;
+          });
+          setCursors(newCursors);
           break;
         }
         case 'error': {

@@ -3,77 +3,57 @@ import S from './style.module.scss';
 import { CSSProperties, useEffect, useRef, useState } from 'react';
 
 import useWebSocketStore from '@/store/websocketStore';
+import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
+import useScreenSize from '@/hooks/useScreenSize';
 
-interface ChatProps {
-  isClient: boolean;
-  color: 'red' | 'blue' | 'yellow' | 'purple';
-  x?: number;
-  y?: number;
-  msg?: string;
-}
-
-export default function ChatComponent({ isClient, x, y, color, msg }: ChatProps) {
+export default function ChatComponent() {
   /** constants */
   const seconds = 8;
 
   /** states */
-  const [message, setMessage] = useState(msg || '');
+  const [message, setMessage] = useState('');
   const [messageWidth, setMessageWidth] = useState(0);
-  const [countDown, setCountDown] = useState(0);
+  const [startChatTime, setStartChatTime] = useState(0);
+  const [now, setNow] = useState(Date.now());
 
   /** stores */
   const { sendMessage } = useWebSocketStore();
+  const { color, originX, originY, zoom } = useCursorStore();
+  const { cursors } = useOtherUserCursorsStore();
+  const { windowHeight, windowWidth } = useScreenSize();
 
   /** references */
   const inputRef = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLParagraphElement>(null);
-  const countDownTimeoutRef = useRef<NodeJS.Timeout>();
 
   /** styles */
   const clientStyle: CSSProperties = {
     left: '51%',
     top: '51%',
     backgroundColor: color,
-    opacity: countDown > seconds / 2 ? 1 : countDown / (seconds / 2),
-  };
-  const otherStyle: CSSProperties = {
-    left: `${x}%`,
-    top: `${y}%`,
-    backgroundColor: color,
+    opacity: startChatTime - now > (1000 * seconds) / 2 ? 1 : (startChatTime - now) / ((1000 * seconds) / 2),
   };
 
   useEffect(() => {
     if (messageRef.current) setMessageWidth(messageRef?.current.getBoundingClientRect().width);
   }, [message]);
 
-  useEffect(() => {
-    clearTimeout(countDownTimeoutRef.current);
-    if (countDown > 0) countDownTimeoutRef.current = setTimeout(() => setCountDown(countDown - 1), 1000);
-  }, [countDown]);
-
   const handleKeyEvent = (event: KeyboardEvent) => {
     /** Start Chat */
-    if (event.key === 'Enter' && isClient) {
-      setCountDown(seconds);
+    if (event.key === 'Enter') {
       inputRef.current?.focus();
     }
     /** End Chat */
-    if (event.key === 'Escape' && isClient) {
+    if (event.key === 'Escape') {
       setMessage('');
-      setCountDown(0);
     }
   };
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyEvent);
-    return () => window.removeEventListener('keydown', handleKeyEvent);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   /** Send chat message to server */
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (message === '' || countDown <= 0) return;
+    setStartChatTime(Date.now() + 1000 * seconds);
+    if (message === '' || startChatTime < now) return;
     /** Send message using websocket. */
     const body = JSON.stringify({
       event: 'send-chat',
@@ -87,32 +67,50 @@ export default function ChatComponent({ isClient, x, y, color, msg }: ChatProps)
 
   const ChangingMessage = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMessage(e.target.value);
-    setCountDown(seconds);
+    setStartChatTime(Date.now() + 1000 * seconds);
   };
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyEvent);
+    return () => window.removeEventListener('keydown', handleKeyEvent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    setTimeout(() => setNow(Date.now()), 1000);
+  }, [now]);
 
   return (
     <>
-      {isClient && (
-        <form className={S.chat} onSubmit={onSubmit} style={clientStyle}>
-          <input
-            type="text"
-            ref={inputRef}
-            className={S.message}
-            value={message}
-            maxLength={40}
-            onChange={ChangingMessage}
-            style={{ width: `${messageWidth + 5}px`, color: color === 'yellow' ? 'black' : 'white' }}
-          />
-          <div ref={messageRef} aria-hidden>
-            {message}
-          </div>
-        </form>
-      )}
-      {!isClient && (
-        <div className={S.chat} style={otherStyle}>
-          <p className={S.message}>{message}</p>
+      <form className={S.chat} onSubmit={onSubmit} style={clientStyle}>
+        <input
+          type="text"
+          ref={inputRef}
+          className={S.message}
+          value={message}
+          maxLength={40}
+          onChange={ChangingMessage}
+          style={{ width: `${messageWidth + 5}px`, color: color === 'yellow' ? 'black' : 'white' }}
+        />
+        <div ref={messageRef} aria-hidden>
+          {message}
         </div>
-      )}
+      </form>
+      {cursors.map(cursor => (
+        <div
+          key={cursor.id}
+          className={S.chat}
+          style={{
+            left: `${windowWidth / 2 + (cursor.x - originX - 1 / zoom / 2) * zoom * 80}px`,
+            top: `${windowHeight / 2 + (cursor.y - originY - 1 / zoom / 2) * zoom * 80}px`,
+            backgroundColor: cursor.color,
+            color: cursor.color === 'yellow' ? 'black' : 'white',
+            opacity: cursor.messageTime - now > (1000 * seconds) / 2 ? 1 : (cursor.messageTime - now) / ((1000 * seconds) / 2),
+          }}
+        >
+          {cursor.message}
+        </div>
+      ))}
     </>
   );
 }
