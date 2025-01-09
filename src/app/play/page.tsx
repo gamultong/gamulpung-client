@@ -13,6 +13,7 @@ import useClickStore from '@/store/clickStore';
 import useWebSocketStore from '@/store/websocketStore';
 import Inactive from '@/components/inactive';
 import CanvasDashboard from '@/components/canvasDashboard';
+import TutorialStep from '@/components/tutorialstep';
 
 interface Point {
   x: number;
@@ -376,11 +377,11 @@ export default function Play() {
     const [tilePaddingWidth, tilePaddingHeight] = [Math.floor(tileVisibleWidth / 2), Math.floor(tileVisibleHeight / 2)];
     let [heightReductionLength, widthReductionLength] = [0, 0];
     if (tileVisibleWidth > endPoint.x - startPoint.x + 1 || tileVisibleHeight > endPoint.y - startPoint.y + 1) {
-      /** Request for expanded entire tiles */
+      /** For Extending */
       heightReductionLength = Math.floor(tilePaddingHeight - (endPoint.y - startPoint.y) / 2);
       widthReductionLength = Math.round(tilePaddingWidth - (endPoint.x - startPoint.x) / 2);
     } else {
-      /** Request for reduced entire tiles */
+      /** For reducing */
       heightReductionLength = -Math.round((endPoint.y - startPoint.y - tileVisibleHeight) / 2);
       widthReductionLength = -Math.round((endPoint.x - startPoint.x - tileVisibleWidth) / 2);
     }
@@ -460,6 +461,7 @@ export default function Play() {
   return (
     <div className={S.page}>
       {leftReviveTime > 0 && <Inactive time={leftReviveTime} />}
+      <TutorialStep />
       <CanvasDashboard />
       <CanvasRenderComponent
         leftReviveTime={leftReviveTime}
