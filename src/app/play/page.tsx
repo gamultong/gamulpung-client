@@ -55,7 +55,6 @@ export default function Play() {
   const [renderTiles, setRenderTiles] = useState<string[][]>([...cachingTiles.map(row => [...row])]);
   const [leftReviveTime, setLeftReviveTime] = useState<number>(-1);
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
-  const [tutorialStep, setTutorialStep] = useState<number>(0);
 
   /**
    * Request Tiles
@@ -462,7 +461,7 @@ export default function Play() {
   return (
     <div className={S.page}>
       {leftReviveTime > 0 && <Inactive time={leftReviveTime} />}
-      <TutorialStep step={tutorialStep} setStep={setTutorialStep} />
+      <TutorialStep />
       <CanvasDashboard />
       <CanvasRenderComponent
         leftReviveTime={leftReviveTime}

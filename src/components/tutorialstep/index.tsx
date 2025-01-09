@@ -4,12 +4,15 @@ import docs from '@/app/video.json';
 import { useSearchParams } from 'next/navigation';
 import Pageupsvg from '@/assets/pageupsvg';
 import Pagedownsvg from '@/assets/pagedownsvg';
+import { useState } from 'react';
 
-export default function TutorialStep({ step, setStep }: { step: number; setStep: (step: number) => void }) {
+export default function TutorialStep() {
   const host = process.env.NEXT_PUBLIC_HOST;
   const searchParams = useSearchParams();
   const lang = (searchParams.get('lang') as 'en' | 'ko') || 'ko';
+  const [step, setStep] = useState(0);
   const data = docs.data[step];
+
   const up = () => {
     if (step > 0) {
       setStep(step - 1);
