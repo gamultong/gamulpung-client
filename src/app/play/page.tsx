@@ -13,6 +13,7 @@ import useClickStore from '@/store/clickStore';
 import useWebSocketStore from '@/store/websocketStore';
 import Inactive from '@/components/inactive';
 import CanvasDashboard from '@/components/canvasDashboard';
+import TutorialStep from '@/components/tutorialstep';
 
 interface Point {
   x: number;
@@ -54,6 +55,7 @@ export default function Play() {
   const [renderTiles, setRenderTiles] = useState<string[][]>([...cachingTiles.map(row => [...row])]);
   const [leftReviveTime, setLeftReviveTime] = useState<number>(-1);
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
+  const [tutorialStep, setTutorialStep] = useState<number>(0);
 
   /**
    * Request Tiles
@@ -460,6 +462,7 @@ export default function Play() {
   return (
     <div className={S.page}>
       {leftReviveTime > 0 && <Inactive time={leftReviveTime} />}
+      <TutorialStep step={tutorialStep} setStep={setTutorialStep} />
       <CanvasDashboard />
       <CanvasRenderComponent
         leftReviveTime={leftReviveTime}
