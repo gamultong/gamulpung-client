@@ -1,0 +1,22 @@
+.statsComponent {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  gap: 30px;
+  background-color: #a8ec67;
+  padding: 30px;
+  width: 100%;
+  color: gray;
+
+  .statsContainer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    .stats {
+      width: fit-content;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+    }
+  }
+}

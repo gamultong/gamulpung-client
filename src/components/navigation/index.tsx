@@ -53,7 +53,7 @@ export default function Navigation() {
               <Link href="?lang=ko">
                 <p>한국어</p>
               </Link>
-              <Link href="?/lang=en">
+              <Link href="?lang=en">
                 <p>English</p>
               </Link>
               {/* <Link href="?lang=ja">

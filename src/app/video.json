@@ -1,45 +1,52 @@
-
 {
   "data": [
     {
       "id": 1,
       "gif": "/mainvideos/moving.gif",
       "description": {
-       "en": "Click Open Tile to move cursor",
-       "ko": "열린 타일을 클릭하여 커서를 이동하세요"
+        "en": "Click Open Tile to move cursor",
+        "ko": "열린 타일을 클릭하여 커서를 이동하세요"
       }
     },
     {
       "id": 2,
       "description": {
-       "en": "Click - and + buttons to zoom in and out",
-       "ko": "확대 및 축소 버튼을 클릭하여 확대 및 축소하세요"
+        "en": "Click - and + buttons to zoom in and out",
+        "ko": "확대 및 축소 버튼을 클릭하여 확대 및 축소하세요"
       },
       "gif": "/mainvideos/zoom.gif"
     },
     {
       "id": 3,
       "description": {
-       "en": "Click left mouse button on closed tile to open tile",
-       "ko": "닫힌 타일에 왼쪽 마우스 버튼을 클릭하여 타일을 엽니다"
+        "en": "Click left mouse button on closed tile to open tile",
+        "ko": "닫힌 타일에 왼쪽 마우스 버튼을 클릭하여 타일을 엽니다"
       },
       "gif": "/mainvideos/open_tile.gif"
     },
     {
       "id": 4,
       "description": {
-       "en": "Click right mouse button on open tile to flag tile",
-       "ko": "열린 타일에 오른쪽 마우스 버튼을 클릭하여 타일을 깃발로 표시하세요"
+        "en": "Click right mouse button on open tile to flag tile",
+        "ko": "열린 타일에 오른쪽 마우스 버튼을 클릭하여 타일을 깃발로 표시하세요"
       },
       "gif": "/mainvideos/flag.gif"
     },
     {
       "id": 5,
       "description": {
-       "en": "If the tile you clicked is a mine, you get a stun for 3 minutes",
-       "ko": "클릭한 타일이 지뢰인 경우 3분간 스턴을 받습니다"
+        "en": "If the tile you clicked is a mine, you get a stun for 3 minutes",
+        "ko": "클릭한 타일이 지뢰인 경우 3분간 스턴을 받습니다"
       },
       "gif": "/mainvideos/mine.gif"
+    },
+    {
+      "id": 6,
+      "description": {
+        "en": "If you click on a tile that is not a mine, the number of mines around the tile will be displayed",
+        "ko": "엔터 버튼을 누를 경우 채팅이 활성화 되며, 끄려면 ESC를 누르세요. 입력하고 엔터를 다시 누를 경우 채팅이 전송됩니다."
+      },
+      "gif": "/mainvideos/chat.gif"
     }
   ]
 }
