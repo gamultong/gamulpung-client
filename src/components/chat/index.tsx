@@ -13,7 +13,7 @@ export default function ChatComponent() {
   /** states */
   const [message, setMessage] = useState('');
   const [messageWidth, setMessageWidth] = useState(0);
-  const [startChatTime, setStartChatTime] = useState(0);
+  const [startChatTime, setStartChatTime] = useState<number | null>(0);
   const [now, setNow] = useState(Date.now());
 
   /** stores */
@@ -26,12 +26,19 @@ export default function ChatComponent() {
   const inputRef = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLParagraphElement>(null);
 
+  const getOpacity = (messageTime: number | null) => {
+    if (!messageTime) {
+      return 0;
+    }
+    return messageTime - now > (1000 * seconds) / 2 ? 1 : (messageTime - now) / ((1000 * seconds) / 2);
+  };
+
   /** styles */
   const clientStyle: CSSProperties = {
     left: '51%',
     top: '51%',
     backgroundColor: color,
-    opacity: startChatTime - now > (1000 * seconds) / 2 ? 1 : (startChatTime - now) / ((1000 * seconds) / 2),
+    opacity: getOpacity(startChatTime),
   };
 
   useEffect(() => {
@@ -46,6 +53,7 @@ export default function ChatComponent() {
     /** End Chat */
     if (event.key === 'Escape') {
       setMessage('');
+      setStartChatTime(null);
     }
   };
 
@@ -53,7 +61,7 @@ export default function ChatComponent() {
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setStartChatTime(Date.now() + 1000 * seconds);
-    if (message === '' || startChatTime < now) return;
+    if (message === '' || (startChatTime as number) < now) return;
     /** Send message using websocket. */
     const body = JSON.stringify({
       event: 'send-chat',
@@ -105,7 +113,7 @@ export default function ChatComponent() {
             top: `${windowHeight / 2 + (cursor.y - originY - 1 / zoom / 2) * zoom * 80}px`,
             backgroundColor: cursor.color,
             color: cursor.color === 'yellow' ? 'black' : 'white',
-            opacity: cursor.messageTime - now > (1000 * seconds) / 2 ? 1 : (cursor.messageTime - now) / ((1000 * seconds) / 2),
+            opacity: getOpacity(cursor.messageTime),
           }}
         >
           {cursor.message}
