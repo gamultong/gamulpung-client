@@ -10,43 +10,51 @@
     },
     {
       "id": 2,
+      "gif": "/mainvideos/block.gif",
       "description": {
-        "en": "Click - and + buttons to zoom in and out",
-        "ko": "확대 및 축소 버튼을 클릭하여 확대 및 축소하세요"
-      },
-      "gif": "/mainvideos/zoom.gif"
+        "en": "If the path to the tile you clicked is blocked, you cannot move.",
+        "ko": "클릭한 타일로 가는 길이 막혀있을 경우 이동이 되지 않습니다."
+      }
     },
     {
       "id": 3,
+      "gif": "/mainvideos/zoom.gif",
       "description": {
-        "en": "Click left mouse button on closed tile to open tile",
-        "ko": "닫힌 타일에 왼쪽 마우스 버튼을 클릭하여 타일을 엽니다"
-      },
-      "gif": "/mainvideos/open_tile.gif"
+        "en": "Click - and + buttons to zoom in and out",
+        "ko": "확대 및 축소 버튼을 클릭하여 확대 및 축소하세요"
+      }
     },
     {
       "id": 4,
+      "gif": "/mainvideos/open_tile.gif",
       "description": {
-        "en": "Click right mouse button on open tile to flag tile",
-        "ko": "열린 타일에 오른쪽 마우스 버튼을 클릭하여 타일을 깃발로 표시하세요"
-      },
-      "gif": "/mainvideos/flag.gif"
+        "en": "Click left mouse button on closed tile to open tile",
+        "ko": "닫힌 타일에 왼쪽 마우스 버튼을 클릭하여 타일을 엽니다"
+      }
     },
     {
       "id": 5,
+      "gif": "/mainvideos/flag.gif",
       "description": {
-        "en": "If the tile you clicked is a mine, you get a stun for 3 minutes",
-        "ko": "클릭한 타일이 지뢰인 경우 3분간 스턴을 받습니다"
-      },
-      "gif": "/mainvideos/mine.gif"
+        "en": "Click right mouse button on open tile to flag tile",
+        "ko": "열린 타일에 오른쪽 마우스 버튼을 클릭하여 타일을 깃발로 표시하세요"
+      }
     },
     {
       "id": 6,
+      "gif": "/mainvideos/mine.gif",
+      "description": {
+        "en": "If the tile you clicked is a mine, you get a stun for 3 minutes",
+        "ko": "클릭한 타일이 지뢰인 경우 3분간 스턴을 받습니다"
+      }
+    },
+    {
+      "id": 7,
+      "gif": "/mainvideos/chat.gif",
       "description": {
         "en": "If you click on a tile that is not a mine, the number of mines around the tile will be displayed",
         "ko": "엔터 버튼을 누를 경우 채팅이 활성화 되며, 끄려면 ESC를 누르세요. 입력하고 엔터를 다시 누를 경우 채팅이 전송됩니다."
-      },
-      "gif": "/mainvideos/chat.gif"
+      }
     }
   ]
 }
