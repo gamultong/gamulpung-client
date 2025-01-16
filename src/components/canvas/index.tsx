@@ -107,7 +107,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     goUpLeft,
     goUpRight,
     zoom,
-    setZoom,
+    // setZoom,
     color,
     setPosition: setCusorPosition,
   } = useCursorStore();
@@ -199,12 +199,12 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const [dx, dy] = [Math.sign(path.x - currentPath.x), Math.sign(path.y - currentPath.y)];
 
       // if the other cursor is on the tile, find another path
-      if (checkIsOtherCursorOnTile(dx + innerCursorX, dy + innerCursorY)) {
-        cancelCurrentMovement();
-        setZoom(zoom - 0.0001);
-        moveCursor(relativeTileX, relativetileY, clickedX, clickedY, type);
-        return;
-      }
+      // if (checkIsOtherCursorOnTile(dx + innerCursorX, dy + innerCursorY)) {
+      //   cancelCurrentMovement();
+      //   setZoom(zoom - 0.0001);
+      //   moveCursor(relativeTileX, relativetileY, clickedX, clickedY, type);
+      //   return;
+      // }
 
       if (dx === 1 && dy === 1) goDownRight();
       else if (dx === 1 && dy === -1) goUpRight();
