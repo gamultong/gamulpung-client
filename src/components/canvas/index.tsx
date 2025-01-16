@@ -107,6 +107,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     goUpLeft,
     goUpRight,
     zoom,
+    // setZoom,
     color,
     setPosition: setCusorPosition,
   } = useCursorStore();
@@ -165,6 +166,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const paths = findPathUsingAStar(relativeX, relativeY, relativeTileX, relativetileY);
     let currentPath = paths[index];
     if (currentPath?.x === undefined || currentPath?.y === undefined) return;
+    let [innerCursorX, innerCursorY] = [cursorOriginX, cursorOriginY];
     setMovecost(paths.length - 1);
     setCusorPosition(relativeTileX + startPoint.x, relativetileY + startPoint.y);
 
@@ -196,6 +198,14 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       if (!path) return;
       const [dx, dy] = [Math.sign(path.x - currentPath.x), Math.sign(path.y - currentPath.y)];
 
+      // if the other cursor is on the tile, find another path
+      // if (checkIsOtherCursorOnTile(dx + innerCursorX, dy + innerCursorY)) {
+      //   cancelCurrentMovement();
+      //   setZoom(zoom - 0.0001);
+      //   moveCursor(relativeTileX, relativetileY, clickedX, clickedY, type);
+      //   return;
+      // }
+
       if (dx === 1 && dy === 1) goDownRight();
       else if (dx === 1 && dy === -1) goUpRight();
       else if (dx === 1 && dy === 0) goright();
@@ -205,6 +215,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       else if (dx === 0 && dy === 1) godown();
       else if (dx === 0 && dy === -1) goup();
 
+      [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       currentPath = path;
       animationOfTileMoving(dx, dy);
       setPaths(paths.slice(index));
@@ -401,6 +412,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   };
 
   /**
+   * Check if the other cursor is on the tile
+   */
+  const checkIsOtherCursorOnTile = (tileArrayX: number, tileArrayY: number) => {
+    return cursors.some(cursor => cursor.x === tileArrayX + startPoint.x && cursor.y === tileArrayY + startPoint.y);
+  };
+
+  /**
    * Find path using A* algorithm avoiding flags and move cursor in 8 directions
    * @param startX x position of start point
    * @param startY y position of start point
@@ -424,7 +442,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       for (const [dx, dy] of directions) {
         const [x, y] = [node.x + dx, node.y + dy];
         // Make sure the neighbor is within bounds and not an obstacle
-        if (y >= 0 && y < grid.length && x >= 0 && x < grid[y].length && grid[y][x] !== null) {
+        if (y >= 0 && y < grid.length && x >= 0 && x < grid[y].length && grid[y][x] !== null && !checkIsOtherCursorOnTile(x, y)) {
           neighbors.push({ node: grid[y][x], isDiagonal: dx !== 0 && dy !== 0 });
         }
       }
