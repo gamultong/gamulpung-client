@@ -1,5 +1,26 @@
 # Gamulpung
-It follows the same rules as Minesweeper. However, the map expands infinitely, allowing you to perform as many actions as you want!
+It follows the same rules as Minesweeper. 
+However, the map expands infinitely, and you can play with oher people in this website!
+
+## What is this Project?
+This project is an online multiplayer version of Minesweeper, where the map expands infinitely. Players can join and play together in real-time, making it a unique and engaging experience compared to the traditional single-player Minesweeper game.
+
+### Features
+- **Infinite Map**: The game map expands infinitely as you explore.
+- **Multiplayer**: Play with other people in real-time.
+- **Real-time Updates**: See the moves of other players instantly.
+- **User-friendly Interface**: Easy to navigate and play.
+
+### Technologies Used
+- **Frontend**: Next.js
+- **WebSocket**: For real-time communication
+
+### Project Structure
+- **/src**: Contains the source code for the frontend and backend.
+- **/public**: Contains static files and assets.
+
+### Getting Started
+To get started with the project, follow the instructions in the "Contribute" section below to set up your development environment and start contributing.
 
 ## Play
 Let's play the game [here](https://gamultong.github.io/gamulpung-client/).
