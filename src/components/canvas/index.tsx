@@ -69,7 +69,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 }) => {
   /** constants */
   const movingSpeed = 200; // milliseconds
-  const animationFrames = 30; // frames
+  const animationFrames = 20; // frames
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
   const { boomPaths, cursorPaths, flagPaths, stunPaths, tileColors, countColors } = Paths;
@@ -122,6 +122,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     interactionCanvasRef: useRef<HTMLCanvasElement>(null),
     otherCursorsRef: useRef<HTMLCanvasElement>(null),
     otherPointerRef: useRef<HTMLCanvasElement>(null),
+    myCursorRef: useRef<HTMLCanvasElement>(null),
   };
 
   /** States */
@@ -173,9 +174,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const animationOfTileMoving = (dx: number, dy: number) => {
       let countFrame = 0;
       const animation = setInterval(() => {
-        const { tileCanvasRef, interactionCanvasRef, otherCursorsRef } = canvasRefs;
-        if (!tileCanvasRef.current || !interactionCanvasRef.current || !otherCursorsRef.current) return;
-        const currentRefs = [tileCanvasRef.current, interactionCanvasRef.current, otherCursorsRef.current];
+        const { tileCanvasRef, interactionCanvasRef, otherCursorsRef, otherPointerRef } = canvasRefs;
+        if (!tileCanvasRef.current || !interactionCanvasRef.current || !otherCursorsRef.current || !otherPointerRef.current) return;
+        const currentRefs = [tileCanvasRef.current, interactionCanvasRef.current, otherCursorsRef.current, otherPointerRef.current];
         if (countFrame >= 1) {
           for (const canvas of currentRefs) canvas.style.transform = '0'; // reset transform
           clearInterval(animation);
@@ -504,12 +505,16 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const renderTiles = () => {
     const tileCanvas = canvasRefs.tileCanvasRef.current;
     const interactionCanvas = canvasRefs.interactionCanvasRef.current;
-    if (!tileCanvas || !interactionCanvas || tileSize === 0) return;
+    const myCursorCanvas = canvasRefs.myCursorRef.current;
+    if (!tileCanvas || !myCursorCanvas || !interactionCanvas || tileSize === 0) return;
 
     const tileCtx = tileCanvas.getContext('2d');
     const interactionCtx = interactionCanvas.getContext('2d');
-    if (!tileCtx || !interactionCtx) return;
+    const myCursorCtx = myCursorCanvas.getContext('2d');
+    if (!tileCtx || !interactionCtx || !myCursorCtx) return;
 
+    // intialize my cursor canvas
+    myCursorCtx.clearRect(0, 0, windowWidth, windowHeight);
     // initialize interaction canvas
     interactionCtx.clearRect(0, 0, windowWidth, windowHeight);
     const borderPixel = 5 * zoom;
@@ -678,7 +683,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         let rotate = null;
         if (distanceX !== 0 || distanceY !== 0) rotate = Math.atan2(distanceY, distanceX);
         // Draw my cursor
-        drawCursor(interactionCtx, cursorCanvasX, cursorCanvasY, cursorColor, null, rotate);
+        drawCursor(myCursorCtx, cursorCanvasX, cursorCanvasY, cursorColor, null, rotate);
         // Describe my clicked tile border
         drawPointer(interactionCtx, clickCanvasX, clickCanvasY, cursorColor, borderPixel);
         // Draw other users' cursor
@@ -753,6 +758,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
           <canvas className={S.canvas} id="TileCanvas" ref={canvasRefs.tileCanvasRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />
+          <canvas className={S.canvas} id="MyCursor" ref={canvasRefs.myCursorRef} width={windowWidth} height={windowHeight} />
           <canvas
             className={S.canvas}
             id="InteractionCanvas"
