@@ -130,7 +130,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const [paths, setPaths] = useState<Path[]>([]);
   const [leftPaths, setLeftPaths] = useState<Path>({ x: 0, y: 0 });
   const [renderedTiles, setRenderedTiles] = useState<string[][]>([]);
-  const [cachedVectorImages, setCachedVectorImages] = useState<VectorImages>();
+  const [cachedVectorAssets, setCachedVectorAssets] = useState<VectorImages>();
 
   /** Cancel interval function for animation. */
   const cancelCurrentMovement = () => {
@@ -358,18 +358,18 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       ctx.rotate(rotate - (Math.PI / 24) * 8);
     } else ctx.translate(x + tileSize / 6 / scale, y + tileSize / 6 / scale);
     ctx.scale(adjustedScale, adjustedScale);
-    ctx.fill(cachedVectorImages?.cursor as Path2D);
+    ctx.fill(cachedVectorAssets?.cursor as Path2D);
     ctx.restore();
-    if (revive_at && Date.now() < revive_at && cachedVectorImages?.stun) {
+    if (revive_at && Date.now() < revive_at && cachedVectorAssets?.stun) {
       const stunScale = (zoom / 2) * scale;
       ctx.save();
       ctx.translate(x - tileSize / 2 / scale, y - tileSize / 2 / scale);
       ctx.fillStyle = 'white';
       ctx.strokeStyle = 'black';
       ctx.scale(stunScale, stunScale);
-      for (let i = 0; i < cachedVectorImages?.stun.length; i++) {
-        ctx.fill(cachedVectorImages.stun[i]);
-        ctx.stroke(cachedVectorImages.stun[i]);
+      for (let i = 0; i < cachedVectorAssets?.stun.length; i++) {
+        ctx.fill(cachedVectorAssets.stun[i]);
+        ctx.stroke(cachedVectorAssets.stun[i]);
       }
     }
     ctx.restore();
@@ -543,6 +543,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const compenX = cursorX - cursorOriginX - tilePaddingWidth - leftPaths.x;
     const compenY = cursorY - cursorOriginY - tilePaddingHeight - leftPaths.y;
 
+    // x0, y0, x1, y1
     const innerGradientValues: [number, number, number, number] = [borderPixel, borderPixel, tileSize - borderPixel * 2, tileSize - borderPixel * 2];
     const outerGradientValues: [number, number, number, number] = [0, 0, tileSize, tileSize];
 
@@ -627,11 +628,11 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
             /** flag color follows cursor color. */
             tileCtx.fillStyle = cursorColors[content.slice(1, -1).toLowerCase() as keyof typeof cursorColors];
-            tileCtx.fill(cachedVectorImages?.flag.flag as Path2D);
+            tileCtx.fill(cachedVectorAssets?.flag.flag as Path2D);
 
             // draw pole
             tileCtx.fillStyle = gradientObject.flag;
-            tileCtx.fill(cachedVectorImages?.flag.pole as Path2D);
+            tileCtx.fill(cachedVectorAssets?.flag.pole as Path2D);
             break;
           }
           /** Tile has been opend. */
@@ -654,9 +655,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
             if (content === 'B') {
               tileCtx.scale(zoom / 4, zoom / 4);
               tileCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-              tileCtx.fill(cachedVectorImages?.boom.inner as Path2D); // draw inner path
+              tileCtx.fill(cachedVectorAssets?.boom.inner as Path2D); // draw inner path
               tileCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-              tileCtx.fill(cachedVectorImages?.boom.outer as Path2D); // draw outer path
+              tileCtx.fill(cachedVectorAssets?.boom.outer as Path2D); // draw outer path
             }
             tileCtx.restore();
 
@@ -720,7 +721,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     );
     Promise.all([lotteriaChabFont.load()]).then(() => {
       // Set vector images
-      setCachedVectorImages({
+      setCachedVectorAssets({
         cursor: new Path2D(cursorPaths),
         stun: [new Path2D(stunPaths[0]), new Path2D(stunPaths[1]), new Path2D(stunPaths[2])],
         flag: {
