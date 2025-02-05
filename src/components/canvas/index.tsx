@@ -134,10 +134,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   /** Cancel interval function for animation. */
   const cancelCurrentMovement = () => {
-    if (movementInterval.current) {
-      clearInterval(movementInterval.current);
-      movementInterval.current = null;
-    }
+    if (!movementInterval.current) return;
+    clearInterval(movementInterval.current);
+    movementInterval.current = null;
   };
 
   /** Prevent default right click event */
@@ -151,9 +150,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   }, []);
 
   /** Check if the tile has been opened */
-  const checkTileHasOpened = (tile: string) => {
-    return !['F', 'C'].some(c => tile.includes(c));
-  };
+  const checkTileHasOpened = (tile: string) => !['F', 'C'].some(c => tile.includes(c));
 
   /**
    * General Click Event Handler
@@ -215,6 +212,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       else if (dx === -1 && dy === 0) goleft();
       else if (dx === 0 && dy === 1) godown();
       else if (dx === 0 && dy === -1) goup();
+
+      if (index % 20 === 0 || paths.length === index + 1) renderTiles(true);
 
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       currentPath = path;
@@ -535,7 +534,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   };
 
   /** start render */
-  const renderTiles = () => {
+  const renderTiles = (renderAll = false) => {
     const tileCanvas = canvasRefs.tileCanvasRef.current;
     if (!tileCanvas || tileSize === 0) return;
     const tileCtx = tileCanvas.getContext('2d');
@@ -576,16 +575,16 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     gradientObject.flag.addColorStop(0, '#E8E8E8');
     gradientObject.flag.addColorStop(1, 'transparent');
 
-    gradientObject.inner.forEach((gradient, index) => {
-      gradient.addColorStop(0, tileColors.inner[index][0]);
-      gradient.addColorStop(1, tileColors.inner[index][1]);
+    gradientObject.inner.forEach((gradient, idx) => {
+      gradient.addColorStop(0, tileColors.inner[idx][0]);
+      gradient.addColorStop(1, tileColors.inner[idx][1]);
     });
 
-    gradientObject.outer.forEach((gradient, index) => {
-      gradient.addColorStop(0, tileColors.outer[index][0]);
-      gradient.addColorStop(0.4, tileColors.outer[index][0]);
-      gradient.addColorStop(0.6, tileColors.outer[index][1]);
-      gradient.addColorStop(1, tileColors.outer[index][1]);
+    gradientObject.outer.forEach((gradient, idx) => {
+      gradient.addColorStop(0, tileColors.outer[idx][0]);
+      gradient.addColorStop(0.4, tileColors.outer[idx][0]);
+      gradient.addColorStop(0.6, tileColors.outer[idx][1]);
+      gradient.addColorStop(1, tileColors.outer[idx][1]);
     });
 
     // set cursor position Delta
@@ -595,26 +594,21 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     let tileImage: ImageData | undefined;
     // sx, sy, sw, sh
     if (!tiles[0]) return;
-    const cachedRange = 10;
-    const cachedCanvasPositions: [number, number, number, number] = [
-      -cachedRange * tileSize,
-      -cachedRange * tileSize,
-      windowWidth + cachedRange * tileSize,
-      windowHeight + cachedRange * tileSize,
-    ];
+    const cachedCanvasPositions: [number, number, number, number] = [-tileSize, -tileSize, windowWidth + tileSize * 2, windowHeight + tileSize * 2];
 
     // cache the tiles when the cursor is moving
-    if (cursorDeltaX !== 0 || cursorDeltaY !== 0) {
-      tileImage = tileCtx.getImageData(...cachedCanvasPositions);
-    }
+    if (cursorDeltaX !== 0 || cursorDeltaY !== 0) tileImage = tileCtx.getImageData(...cachedCanvasPositions);
+
     // clear the canvas
     tileCtx.clearRect(0, 0, windowWidth, windowHeight);
 
     const [renderedX, renderedY] = [cachedCanvasPositions[0] + cursorDeltaX * tileSize, cachedCanvasPositions[1] + cursorDeltaY * tileSize];
+
     // restore the tiles
-    if (tileImage) {
-      tileCtx.putImageData(tileImage, renderedX, renderedY);
-    }
+    if (tileImage) tileCtx.putImageData(tileImage, renderedX, renderedY);
+
+    let renderCount = 0;
+    let renderCachedCount = 0;
 
     // draw tiles
     tiles?.forEach((row, rowIndex) => {
@@ -622,17 +616,21 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         const [x, y] = [(colIndex - tilePaddingWidth) * tileSize, (rowIndex - tilePaddingHeight) * tileSize];
         // render range check
         if (x < -tileSize || y < -tileSize || x > windowWidth + tileSize || y > windowHeight + tileSize) return;
-        if (tileImage) {
+        const isNeedToReRender = Math.abs(rowIndex - relativeY) <= 2 && Math.abs(colIndex - relativeX) <= 2;
+        if (tileImage && !isNeedToReRender && !renderAll) {
           // if cursor is moving, skip the tile that is already rendered in screen by delta values
           if (
             x > cursorDeltaX * tileSize &&
             x < (cursorDeltaX - 1) * tileSize + windowWidth &&
             y > cursorDeltaY * tileSize &&
             y < (cursorDeltaY - 1) * tileSize + windowHeight
-          )
+          ) {
+            renderCachedCount++;
             return;
+          }
         }
 
+        renderCount++;
         tileCtx.save();
         tileCtx.translate(x, y);
         switch (content) {
@@ -725,6 +723,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     });
     /** Display the path in the middle to prevent it from appearing displaced */
     setRenderedTiles(tiles);
+    console.log('cached', renderCachedCount, 'rendered', renderCount);
   };
 
   const renderInteractionCanvas = () => {

@@ -22,7 +22,7 @@ interface Point {
 
 export default function Play() {
   /** constants */
-  const renderRange = 2;
+  const renderRange = 3;
   const originTileSize = 80;
   const webSocketUrl = `${process.env.NEXT_PUBLIC_WS_HOST}/session`;
 
