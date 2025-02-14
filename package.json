@@ -3,24 +3,24 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev --turbo -p 3001",
     "build": "next build",
     "export": "next export",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
-    "next": "^15.1.0",
-    "react": "^19.0.0-rc.1",
-    "react-dom": "^19.0.0-rc.1",
+    "@pixi/react": "^7.1.2",
+    "next": "^14.2.24",
+    "pixi.js": "^7.4.2",
     "sass": "^1.80.7",
     "showdown": "^2.1.0",
     "zustand": "^5.0.1"
   },
   "devDependencies": {
     "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
     "@types/showdown": "^2.0.6",
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.1.0",

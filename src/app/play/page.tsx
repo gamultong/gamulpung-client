@@ -210,7 +210,13 @@ export default function Play() {
           const { position, is_set, color } = payload;
           const { x, y } = position;
           const newTiles = [...cachingTiles];
-          newTiles[y - startPoint.y][x - startPoint.x] = (is_set ? 'F' + color : 'C') + ((x + y) % 2 === 0 ? '0' : '1');
+          const colorMap: Record<string, string> = {
+            RED: '0',
+            YELLOW: '1',
+            BLUE: '2',
+            PURPLE: '3',
+          };
+          newTiles[y - startPoint.y][x - startPoint.x] = (is_set ? 'F' + (colorMap[color] ?? color) : 'C') + ((x + y) % 2 === 0 ? '0' : '1');
           setCachingTiles(newTiles);
           break;
         }

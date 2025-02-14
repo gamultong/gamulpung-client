@@ -104,9 +104,9 @@ export default function ChatComponent() {
           {message}
         </div>
       </form>
-      {cursors.map(cursor => (
+      {cursors.map((cursor, index) => (
         <div
-          key={cursor.id}
+          key={`${cursor.id}-${index}`}
           className={S.chat}
           style={{
             left: `${windowWidth / 2 + (cursor.x - originX - 1 / zoom / 2) * zoom * 80}px`,
