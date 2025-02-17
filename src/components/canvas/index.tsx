@@ -198,6 +198,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         const translateY = dy * translate;
 
         currentRefs.forEach(canvas => {
+          if (zoom < 0.4) return;
           canvas.style.transform = `translate(${translateX}px, ${translateY}px)`;
         });
 
