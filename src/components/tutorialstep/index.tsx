@@ -17,19 +17,16 @@ export default function TutorialStep() {
     if (localStorage.getItem('tutorial') !== 'done') setStep(0);
   }, []);
 
-  const up = () => {
-    if (step > 0) {
-      setStep(step - 1);
-    }
-  };
+  const up = () => setStep(step > 0 ? step - 1 : step);
+
   const down = () => {
-    if (step < docs.data.length - 1) {
-      setStep(step + 1);
-    } else {
+    if (step < docs.data.length - 1) setStep(step + 1);
+    else {
       setStep(-1);
       localStorage.setItem('tutorial', 'done');
     }
   };
+
   return (
     <>
       {step !== -1 && (

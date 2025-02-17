@@ -180,7 +180,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     setMovecost(paths.length - 1);
     setCusorPosition(relativeTileX + startPoint.x, relativetileY + startPoint.y);
 
-    const animationOfTileMoving = (dx: number, dy: number) => {
+    const animationOfMoving = (dx: number, dy: number) => {
       const { tileCanvasRef, interactionCanvasRef, otherCursorsRef, otherPointerRef } = canvasRefs;
       const tilemap = document.getElementById('Tilemap') as HTMLCanvasElement;
       const currentRefs = [tileCanvasRef.current, interactionCanvasRef.current, otherCursorsRef.current, otherPointerRef.current, tilemap].filter(
@@ -197,19 +197,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         const translateX = dx * translate;
         const translateY = dy * translate;
 
-        currentRefs.forEach(canvas => {
-          if (zoom < 0.4) return;
-          canvas.style.transform = `translate(${translateX}px, ${translateY}px)`;
-        });
+        currentRefs.forEach(canvas => (canvas.style.transform = `translate(${translateX}px, ${translateY}px)`));
 
         if (progress < 1) {
           requestAnimationFrame(animate);
-        } else {
+        } else
           // Ensure the transform resets at the end
-          currentRefs.forEach(canvas => {
-            canvas.style.transform = 'translate(0, 0)';
-          });
-        }
+          currentRefs.forEach(canvas => (canvas.style.transform = 'translate(0, 0)'));
       };
 
       requestAnimationFrame(animate);
@@ -246,8 +240,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       currentPath = path;
-      animationOfTileMoving(dx, dy);
       setPaths(paths.slice(index));
+      if (zoom < 0.4) return;
+      animationOfMoving(dx, dy);
     }, movingSpeed);
   };
 

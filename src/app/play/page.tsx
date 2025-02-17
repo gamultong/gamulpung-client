@@ -139,7 +139,6 @@ export default function Play() {
   const parseHex = (hex: string) => {
     const hexArray = hex.match(/.{1,2}/g);
     if (!hexArray) return '';
-    // hex to byte
     const byte = hexArray.map(hex => parseInt(hex, 16).toString(2).padStart(8, '0')).join('');
     // byte 0 - IsOpen, 1 - IsMine, 2 - IsFlag, 3 ~ 4 color, 5 ~ 7 number of mines
     const isTileOpened = byte[0] === '1';
@@ -158,10 +157,7 @@ export default function Play() {
     for (let i = 0; i < columnlength; i++) {
       const tempTilelist = [] as string[];
       const sortedlist = unsortedTiles.slice(i * rowlength, (i + 1) * rowlength);
-      for (let j = 0; j < rowlength / 2; j++) {
-        const hex = sortedlist.slice(j * 2, j * 2 + 2);
-        tempTilelist[j] = parseHex(hex);
-      }
+      for (let j = 0; j < rowlength / 2; j++) tempTilelist[j] = parseHex(sortedlist.slice(j * 2, j * 2 + 2));
       sortedTiles[i] = tempTilelist;
     }
     /** The y-axis is reversed.*/
@@ -401,13 +397,10 @@ export default function Play() {
       startPoint.y - heightReductionLength,
       'A',
     );
-    const body = JSON.stringify({
-      event: 'set-view-size',
-      payload: {
-        width: Math.floor(Math.floor((windowWidth * renderRange) / newTileSize)),
-        height: Math.floor(Math.floor((windowHeight * renderRange) / newTileSize)),
-      },
-    });
+    const width = Math.floor((windowWidth * renderRange) / newTileSize);
+    const height = Math.floor((windowHeight * renderRange) / newTileSize);
+    const payload = { width, height };
+    const body = JSON.stringify({ event: 'set-view-size', payload });
     sendMessage(body);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowWidth, windowHeight, zoom, renderRange, isInitialized]);
@@ -449,15 +442,10 @@ export default function Play() {
   /** Send user move event */
   useEffect(() => {
     if (!isInitialized) return;
-    const body = JSON.stringify({
-      event: 'moving',
-      payload: {
-        position: {
-          x: cursorOriginX,
-          y: cursorOriginY,
-        },
-      },
-    });
+    const event = 'moving';
+    const position = { x: cursorOriginX, y: cursorOriginY };
+    const payload = { position };
+    const body = JSON.stringify({ event, payload });
     sendMessage(body);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursorOriginX, cursorOriginY]);

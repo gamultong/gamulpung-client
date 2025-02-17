@@ -1,6 +1,6 @@
 'use client';
 import { Container, Sprite, Stage, Text } from '@pixi/react';
-import { cloneElement, useMemo, useRef } from 'react';
+import { cloneElement, useMemo, useRef, useState } from 'react';
 import { useCursorStore } from '@/store/cursorStore';
 import Paths from '@/assets/paths.json';
 import useScreenSize from '@/hooks/useScreenSize';
@@ -19,6 +19,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
   const cursorColors = useMemo(() => ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'], []);
   const { flagPaths, tileColors, countColors, boomPaths } = Paths;
   const { zoom } = useCursorStore();
+  const [innerZoom, setInnerZoom] = useState(zoom);
   const { windowHeight, windowWidth } = useScreenSize();
 
   // 캐시 객체를 useRef로 한 번만 생성
@@ -38,8 +39,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       if (newTileTextures.has(key)) return newTileTextures.get(key)!;
 
       const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = tileSize;
-      tempCanvas.height = tileSize;
+      tempCanvas.width = tempCanvas.height = tileSize;
       const ctx = tempCanvas.getContext('2d');
       if (!ctx) return;
       const gradient = ctx.createLinearGradient(0, 0, tileSize, tileSize);
@@ -62,8 +62,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
     // Boom texture
     const boomCanvas = document.createElement('canvas');
-    boomCanvas.width = tileSize;
-    boomCanvas.height = tileSize;
+    boomCanvas.width = boomCanvas.height = tileSize;
     const boomCtx = boomCanvas.getContext('2d');
     if (boomCtx) {
       boomCtx.scale(zoom / 4, zoom / 4);
@@ -82,8 +81,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     // Flag textures
     for (let i = 0; i < 4; i++) {
       const flagCanvas = document.createElement('canvas');
-      flagCanvas.width = tileSize;
-      flagCanvas.height = tileSize;
+      flagCanvas.width = flagCanvas.height = tileSize;
       const flagCtx = flagCanvas.getContext('2d');
       if (!flagCtx) continue;
       const flagGradient = flagCtx.createLinearGradient(36.5, 212.5, 36.5, 259);
@@ -102,22 +100,24 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       flagTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
       newTileTextures.set(`flag-${i}`, flagTexture);
     }
-
+    setInnerZoom(zoom);
     return newTileTextures;
   }, [tileSize, tileColors, boomPaths, flagPaths, cursorColors, zoom]);
 
   // Cache text styles for numbers using useMemo
-  const cachedTextStyles = useMemo(() => {
-    return Array.from(
-      { length: 8 },
-      (_, i) =>
-        new TextStyle({
-          fontFamily: 'LOTTERIACHAB',
-          fontSize: 50 * zoom,
-          fill: countColors[i],
-        }),
-    );
-  }, [zoom, countColors]);
+  const cachedTextStyles = useMemo(
+    () =>
+      Array.from(
+        { length: 8 },
+        (_, i) =>
+          new TextStyle({
+            fontFamily: 'LOTTERIACHAB',
+            fontSize: 50 * zoom,
+            fill: countColors[i],
+          }),
+      ),
+    [zoom, countColors],
+  );
 
   // Memoize sprites creation using cached base sprites from useRef
   const { outerSprites, innerSprites, boomSprites, flagSprites, textElements } = useMemo(() => {
@@ -135,6 +135,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         const x = (ci - tilePaddingWidth) * tileSize;
         const y = (ri - tilePaddingHeight) * tileSize;
         if (x < -tileSize || y < -tileSize || x > windowWidth + tileSize || y > windowHeight + tileSize) continue;
+        const tileKey = `${ri}-${ci}-${tileSize}`;
 
         // 기본 텍스처 선택
         let outerTexture = textures.get(`${tileColors.outer[2][0]}-${tileColors.outer[2][1]}-${tileSize}`);
@@ -153,19 +154,18 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
             baseOuter = <Sprite interactive={false} texture={outerTexture} width={tileSize} height={tileSize} />;
             outerCache.set(outerKey, baseOuter);
           }
-
-          outerSpritesArr.push(cloneElement(baseOuter, { key: `outer-${ri}-${ci}-${tileSize}`, x, y }));
+          outerSpritesArr.push(cloneElement(baseOuter, { key: `outer-${tileKey}`, x, y }));
         }
 
         // Inner sprite
         if (innerTexture) {
-          const innerKey = `${innerTexture.textureCacheIds || innerTexture}-${tileSize}-${zoom}`;
+          const innerKey = `${innerTexture.textureCacheIds || innerTexture}-${tileSize}`;
           let baseInner = innerCache.get(innerKey);
           if (!baseInner) {
             baseInner = <Sprite interactive={false} texture={innerTexture} width={tileSize - 10 * zoom} height={tileSize - 10 * zoom} />;
             innerCache.set(innerKey, baseInner);
           }
-          innerSpritesArr.push(cloneElement(baseInner, { key: `inner-${ri}-${ci}-${tileSize}`, x: x + 5 * zoom, y: y + 5 * zoom }));
+          innerSpritesArr.push(cloneElement(baseInner, { key: `inner-${tileKey}`, x: x + 5 * zoom, y: y + 5 * zoom }));
         }
 
         // Boom sprite
@@ -176,19 +176,19 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
             baseBoom = <Sprite interactive={false} texture={textures.get('boom')} width={tileSize} height={tileSize} />;
             boomCache.set(boomKey, baseBoom);
           }
-          boomSpritesArr.push(cloneElement(baseBoom, { key: `boom-${ri}-${ci}-${tileSize}`, x, y }));
+          boomSpritesArr.push(cloneElement(baseBoom, { key: `boom-${tileKey}`, x, y }));
         }
 
         // Flag sprite
         if (content[0] === 'F') {
           const flagIndex = content[1];
-          const flagKey = `flag-${flagIndex}-${tileSize}-${zoom}`;
+          const flagKey = `flag-${flagIndex}-${tileSize}`;
           let baseFlag = flagCache.get(flagKey);
           if (!baseFlag) {
             baseFlag = <Sprite interactive={false} texture={textures.get(`flag-${flagIndex}`)} anchor={0.5} width={tileSize} height={tileSize} />;
             flagCache.set(flagKey, baseFlag);
           }
-          flagSpritesArr.push(cloneElement(baseFlag, { key: `flag-${ri}-${ci}-${tileSize}`, x: x + tileSize / 2, y: y + tileSize / 2 }));
+          flagSpritesArr.push(cloneElement(baseFlag, { key: `flag-${tileKey}`, x: x + tileSize / 2, y: y + tileSize / 2 }));
         }
 
         // 숫자 텍스트 (재생성해도 큰 비용은 아님)
@@ -196,7 +196,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         if (num > 0) {
           textElementsArr.push(
             <Text
-              key={`text-${ri}-${ci}`}
+              key={`text-${tileKey}`}
               text={content}
               x={x + tileSize / 2}
               y={y + tileSize / 2}
@@ -215,6 +215,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       flagSprites: flagSpritesArr,
       textElements: textElementsArr,
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles, textures, zoom, cachedTextStyles]);
 
   if (!textures.size || !cachedTextStyles) return null;
@@ -232,7 +233,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         autoDensity: true,
       }}
     >
-      <Container sortableChildren={false}>
+      <Container sortableChildren={false} interactiveChildren={false} cacheAsBitmap={!isMoving && zoom !== innerZoom}>
         {outerSprites}
         {innerSprites}
         {boomSprites}
