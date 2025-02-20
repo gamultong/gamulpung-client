@@ -97,14 +97,8 @@ export default function Play() {
       }
       return newTiles;
     });
-
-    const body = JSON.stringify({
-      event: 'fetch-tiles',
-      payload: {
-        start_p: { x: start_x, y: start_y },
-        end_p: { x: end_x, y: end_y },
-      },
-    });
+    const payload = { start_p: { x: start_x, y: start_y }, end_p: { x: end_x, y: end_y } };
+    const body = JSON.stringify({ event: 'fetch-tiles', payload });
     sendMessage(body);
     return;
   };
@@ -145,7 +139,7 @@ export default function Play() {
     const isTileOpened = byte[0] === '1';
     const isMine = byte[1] === '1';
     const isFlag = byte[2] === '1';
-    const color = parseInt(byte.slice(3, 5), 2).toString(); /** 00 red, 01 yellow, 10 blue, 11 purple */
+    const color = parseInt(byte.slice(3, 5), 2); /** 00 red, 01 yellow, 10 blue, 11 purple */
     const number = parseInt(byte.slice(5), 2);
     if (isTileOpened) return isMine ? 'B' : number === 0 ? 'O' : number.toString();
     if (isFlag) return 'F' + color;
@@ -156,7 +150,7 @@ export default function Play() {
     const [rowlength, columnlength] = [Math.abs(end_x - start_x + 1) * 2, Math.abs(start_y - end_y + 1)];
     const sortedTiles: string[][] = [];
     for (let i = 0; i < columnlength; i++) {
-      const tempTilelist = [] as string[];
+      const tempTilelist: string[] = [];
       const sortedlist = unsortedTiles.slice(i * rowlength, (i + 1) * rowlength);
       for (let j = 0; j < rowlength / 2; j++) tempTilelist[j] = parseHex(sortedlist.slice(j * 2, j * 2 + 2));
       sortedTiles[i] = tempTilelist;
@@ -179,9 +173,7 @@ export default function Play() {
       newTiles[rowIndex] = newTiles[rowIndex] ?? [];
       for (let j = 0; j < rowlength; j++) {
         let tile = sortedTiles[i][j];
-        if (['C', 'F'].some(c => tile?.includes(c))) {
-          tile += (i - end_y + j - start_x) % 2 === 0 ? '0' : '1';
-        }
+        if (['C', 'F'].some(c => tile?.includes(c))) tile += (i - end_y + j - start_x) % 2 === 0 ? '0' : '1';
         if (tile) newTiles[rowIndex][j + start_x - startPoint.x] = tile;
       }
     }

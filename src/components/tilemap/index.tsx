@@ -1,10 +1,10 @@
 'use client';
 import { Container, Sprite, Stage, Text } from '@pixi/react';
 import { cloneElement, useMemo, useRef, useState } from 'react';
-import { useCursorStore } from '@/store/cursorStore';
-import Paths from '@/assets/paths.json';
-import useScreenSize from '@/hooks/useScreenSize';
 import { Texture, TextStyle, SCALE_MODES } from 'pixi.js';
+import Paths from '@/assets/paths.json';
+import { useCursorStore } from '@/store/cursorStore';
+import useScreenSize from '@/hooks/useScreenSize';
 
 interface TilemapProps {
   tiles: string[][];
@@ -19,8 +19,9 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
   const cursorColors = useMemo(() => ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'], []);
   const { flagPaths, tileColors, countColors, boomPaths } = Paths;
   const { zoom } = useCursorStore();
-  const [innerZoom, setInnerZoom] = useState(zoom);
   const { windowHeight, windowWidth } = useScreenSize();
+
+  const [innerZoom, setInnerZoom] = useState(zoom);
 
   // Generate textures for tiles, boom, and flags
   const cachesRef = useRef({

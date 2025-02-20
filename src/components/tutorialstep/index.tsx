@@ -18,7 +18,6 @@ export default function TutorialStep() {
   }, []);
 
   const up = () => setStep(step > 0 ? step - 1 : step);
-
   const down = () => {
     if (step < docs.data.length - 1) setStep(step + 1);
     else {

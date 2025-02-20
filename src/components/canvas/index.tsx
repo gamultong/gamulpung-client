@@ -177,30 +177,20 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     setCusorPosition(relativeTileX + startPoint.x, relativetileY + startPoint.y);
 
     const animationOfMoving = (dx: number, dy: number) => {
-      const { interactionCanvasRef, otherCursorsRef, otherPointerRef } = canvasRefs;
+      const { interactionCanvasRef: I_ref, otherCursorsRef: C_ref, otherPointerRef: P_ref } = canvasRefs;
       const tilemap = document.getElementById('Tilemap') as HTMLCanvasElement;
-      const currentRefs = [interactionCanvasRef.current, otherCursorsRef.current, otherPointerRef.current, tilemap].filter(
-        Boolean,
-      ) as HTMLCanvasElement[];
-
-      const duration = movingSpeed; // total duration in ms
+      const currentRefs = [I_ref.current, C_ref.current, P_ref.current, tilemap].filter(Boolean) as HTMLCanvasElement[];
       const start = performance.now();
-
       const animate = (now: number) => {
         const elapsed = now - start;
-        const progress = Math.min(elapsed / duration, 1);
+        const progress = Math.min(elapsed / movingSpeed, 1);
         const translate = tileSize * (1 - progress);
-        const translateX = dx * translate;
-        const translateY = dy * translate;
-
-        currentRefs.forEach(canvas => (canvas.style.transform = `translate(${translateX}px, ${translateY}px)`));
-
+        const [translateX, translateY] = [translate * dx, translate * dy];
+        currentRefs.forEach(c => (c.style.transform = `translate(${translateX}px, ${translateY}px)`));
         if (progress < 1) requestAnimationFrame(animate);
-        else
-          // Ensure the transform resets at the end
-          currentRefs.forEach(canvas => (canvas.style.transform = 'translate(0, 0)'));
+        // Ensure the transform resets at the end
+        else currentRefs.forEach(c => (c.style.transform = 'translate(0, 0)'));
       };
-
       requestAnimationFrame(animate);
     };
 
@@ -504,10 +494,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   /** Load and Render */
   useEffect(() => {
-    if (!isInitializing && tiles.length > 0) {
-      // renderTiles();
-      return;
-    }
+    if (!isInitializing && tiles.length > 0) return;
     const lotteriaChabFont = new FontFace(
       'LOTTERIACHAB',
       "url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2302@1.0/LOTTERIACHAB.woff2') format('woff2')",

@@ -21,11 +21,10 @@ export default function CanvasDashboard({ tileSize, renderRange, maxTileCount }:
   const checkMaxTileCount = () => (w * renderRange) / (tileSize / zoomScale) + (h * renderRange) / (tileSize / zoomScale) > maxTileCount;
 
   const moreZoom = () => {
-    if (zoom * zoomScale <= 1.7) setZoom(zoom * zoomScale);
+    if (!(zoom * zoomScale > 1.7)) setZoom(zoom * zoomScale);
   };
   const lessZoom = () => {
-    if (zoom / zoomScale < 0.15 || checkMaxTileCount()) return;
-    setZoom(zoom / zoomScale);
+    if (!(zoom / zoomScale < 0.15 || checkMaxTileCount())) setZoom(zoom / zoomScale);
   };
 
   return (
