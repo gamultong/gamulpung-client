@@ -24,6 +24,7 @@ export default function Play() {
   /** constants */
   const renderRange = 3;
   const originTileSize = 80;
+  const maxTileCount = 530;
   const webSocketUrl = `${process.env.NEXT_PUBLIC_WS_HOST}/session`;
 
   /** stores */
@@ -368,7 +369,7 @@ export default function Play() {
     });
     setTileSize(newTileSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowWidth, windowHeight, zoom, cursorOriginX, cursorOriginY, cursorX, cursorY, renderRange, isInitialized]);
+  }, [windowWidth, windowHeight, zoom, cursorOriginX, cursorOriginY, cursorX, cursorY, isInitialized]);
 
   /** Handling zoom event */
   useEffect(() => {
@@ -403,7 +404,7 @@ export default function Play() {
     const body = JSON.stringify({ event: 'set-view-size', payload });
     sendMessage(body);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowWidth, windowHeight, zoom, renderRange, isInitialized]);
+  }, [windowWidth, windowHeight, zoom, isInitialized]);
 
   /** When cursor position has changed. */
   useEffect(() => {
@@ -459,7 +460,7 @@ export default function Play() {
     <div className={S.page}>
       {leftReviveTime > 0 && <Inactive time={leftReviveTime} />}
       <TutorialStep />
-      <CanvasDashboard />
+      <CanvasDashboard tileSize={tileSize} renderRange={renderRange} maxTileCount={maxTileCount} />
       <CanvasRenderComponent
         leftReviveTime={leftReviveTime}
         paddingTiles={renderRange}

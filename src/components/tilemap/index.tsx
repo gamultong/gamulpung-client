@@ -22,7 +22,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
   const [innerZoom, setInnerZoom] = useState(zoom);
   const { windowHeight, windowWidth } = useScreenSize();
 
-  // 캐시 객체를 useRef로 한 번만 생성
+  // Generate textures for tiles, boom, and flags
   const cachesRef = useRef({
     outerCache: new Map<string, JSX.Element>(),
     innerCache: new Map<string, JSX.Element>(),
@@ -47,9 +47,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       gradient.addColorStop(1, color2);
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, tileSize, tileSize);
-      const texture = Texture.from(tempCanvas);
-      texture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
-      texture.baseTexture.resolution = 0.0001;
+      const texture = Texture.from(tempCanvas, { resolution: 0.0001, scaleMode: SCALE_MODES.NEAREST });
       newTileTextures.set(key, texture);
       return texture;
     };
@@ -72,9 +70,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       const outer = new Path2D(boomPaths[1]);
       boomCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
       boomCtx.fill(outer);
-      const boomTexture = Texture.from(boomCanvas);
-      boomTexture.baseTexture.resolution = 0.5;
-      boomTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
+      const boomTexture = Texture.from(boomCanvas, { resolution: 0.5, scaleMode: SCALE_MODES.NEAREST });
       newTileTextures.set('boom', boomTexture);
     }
 
@@ -95,9 +91,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       flagCtx.fill(flagPath);
       flagCtx.fillStyle = flagGradient;
       flagCtx.fill(polePath);
-      const flagTexture = Texture.from(flagCanvas);
-      flagTexture.baseTexture.resolution = 0.5;
-      flagTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
+      const flagTexture = Texture.from(flagCanvas, { resolution: 0.5, scaleMode: SCALE_MODES.NEAREST });
       newTileTextures.set(`flag-${i}`, flagTexture);
     }
     setInnerZoom(zoom);
@@ -137,7 +131,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         if (x < -tileSize || y < -tileSize || x > windowWidth + tileSize || y > windowHeight + tileSize) continue;
         const tileKey = `${ri}-${ci}-${tileSize}`;
 
-        // 기본 텍스처 선택
+        // Select textures based on tile content
         let outerTexture = textures.get(`${tileColors.outer[2][0]}-${tileColors.outer[2][1]}-${tileSize}`);
         let innerTexture = textures.get(`${tileColors.inner[2][0]}-${tileColors.inner[2][1]}-${tileSize}`);
         if (['C', 'F'].includes(content[0])) {
@@ -151,7 +145,9 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           const outerKey = `${outerTexture.textureCacheIds || outerTexture}-${tileSize}`;
           let baseOuter = outerCache.get(outerKey);
           if (!baseOuter) {
-            baseOuter = <Sprite interactive={false} texture={outerTexture} width={tileSize} height={tileSize} />;
+            baseOuter = (
+              <Sprite scale={0.1} interactive={false} texture={outerTexture} width={tileSize} height={tileSize} cacheAsBitmapResolution={0.1} />
+            );
             outerCache.set(outerKey, baseOuter);
           }
           outerSpritesArr.push(cloneElement(baseOuter, { key: `outer-${tileKey}`, x, y }));
@@ -162,7 +158,8 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           const innerKey = `${innerTexture.textureCacheIds || innerTexture}-${tileSize}`;
           let baseInner = innerCache.get(innerKey);
           if (!baseInner) {
-            baseInner = <Sprite interactive={false} texture={innerTexture} width={tileSize - 10 * zoom} height={tileSize - 10 * zoom} />;
+            const size = tileSize - 10 * zoom;
+            baseInner = <Sprite scale={0.1} interactive={false} texture={innerTexture} width={size} height={size} cacheAsBitmapResolution={0.1} />;
             innerCache.set(innerKey, baseInner);
           }
           innerSpritesArr.push(cloneElement(baseInner, { key: `inner-${tileKey}`, x: x + 5 * zoom, y: y + 5 * zoom }));
@@ -173,7 +170,16 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           const boomKey = `boom-${tileSize}`;
           let baseBoom = boomCache.get(boomKey);
           if (!baseBoom) {
-            baseBoom = <Sprite interactive={false} texture={textures.get('boom')} width={tileSize} height={tileSize} />;
+            baseBoom = (
+              <Sprite
+                scale={0.1}
+                interactive={false}
+                texture={textures.get('boom')}
+                width={tileSize}
+                height={tileSize}
+                cacheAsBitmapResolution={0.1}
+              />
+            );
             boomCache.set(boomKey, baseBoom);
           }
           boomSpritesArr.push(cloneElement(baseBoom, { key: `boom-${tileKey}`, x, y }));
@@ -185,13 +191,23 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           const flagKey = `flag-${flagIndex}-${tileSize}`;
           let baseFlag = flagCache.get(flagKey);
           if (!baseFlag) {
-            baseFlag = <Sprite interactive={false} texture={textures.get(`flag-${flagIndex}`)} anchor={0.5} width={tileSize} height={tileSize} />;
+            baseFlag = (
+              <Sprite
+                interactive={false}
+                texture={textures.get(`flag-${flagIndex}`)}
+                anchor={0.5}
+                scale={0.1}
+                width={tileSize}
+                height={tileSize}
+                cacheAsBitmapResolution={0.1}
+              />
+            );
             flagCache.set(flagKey, baseFlag);
           }
           flagSpritesArr.push(cloneElement(baseFlag, { key: `flag-${tileKey}`, x: x + tileSize / 2, y: y + tileSize / 2 }));
         }
 
-        // 숫자 텍스트 (재생성해도 큰 비용은 아님)
+        // Text elements
         const num = parseInt(content);
         if (num > 0) {
           textElementsArr.push(
@@ -216,7 +232,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       textElements: textElementsArr,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles, textures, zoom, cachedTextStyles]);
+  }, [tiles]);
 
   if (!textures.size || !cachedTextStyles) return null;
   return (
@@ -227,7 +243,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       height={windowHeight}
       options={{
         backgroundColor: 0x808080,
-        resolution: isMoving ? 0.5 : 0.8,
+        resolution: isMoving ? 0.4 : 0.8,
         antialias: false,
         powerPreference: 'high-performance',
         autoDensity: true,

@@ -58,8 +58,6 @@ interface VectorImages {
   };
 }
 
-type fourNumberArray = [number, number, number, number];
-
 const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   paddingTiles,
   tiles,
@@ -74,7 +72,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const movingSpeed = 200; // milliseconds
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
-  const { boomPaths, cursorPaths, flagPaths, stunPaths, tileColors, countColors } = Paths;
+  const { boomPaths, cursorPaths, flagPaths, stunPaths } = Paths;
   const directions = [
     [-1, 0], // left
     [0, -1], // up
@@ -129,7 +127,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   /** References */
   const movementInterval = useRef<NodeJS.Timeout | null>(null);
   const canvasRefs = {
-    tileCanvasRef: useRef<HTMLCanvasElement>(null),
     interactionCanvasRef: useRef<HTMLCanvasElement>(null),
     otherCursorsRef: useRef<HTMLCanvasElement>(null),
     otherPointerRef: useRef<HTMLCanvasElement>(null),
@@ -142,7 +139,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const [leftPaths, setLeftPaths] = useState<Path>({ x: 0, y: 0 });
   const [forwardPath, setForwardPath] = useState<Path>();
   const [cachedVectorAssets, setCachedVectorAssets] = useState<VectorImages>();
-  const [renderedTiles, setRenderedTiles] = useState<string[][]>(tiles);
 
   /** Cancel interval function for animation. */
   const cancelCurrentMovement = () => {
@@ -181,9 +177,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     setCusorPosition(relativeTileX + startPoint.x, relativetileY + startPoint.y);
 
     const animationOfMoving = (dx: number, dy: number) => {
-      const { tileCanvasRef, interactionCanvasRef, otherCursorsRef, otherPointerRef } = canvasRefs;
+      const { interactionCanvasRef, otherCursorsRef, otherPointerRef } = canvasRefs;
       const tilemap = document.getElementById('Tilemap') as HTMLCanvasElement;
-      const currentRefs = [tileCanvasRef.current, interactionCanvasRef.current, otherCursorsRef.current, otherPointerRef.current, tilemap].filter(
+      const currentRefs = [interactionCanvasRef.current, otherCursorsRef.current, otherPointerRef.current, tilemap].filter(
         Boolean,
       ) as HTMLCanvasElement[];
 
@@ -199,9 +195,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
         currentRefs.forEach(canvas => (canvas.style.transform = `translate(${translateX}px, ${translateY}px)`));
 
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        } else
+        if (progress < 1) requestAnimationFrame(animate);
+        else
           // Ensure the transform resets at the end
           currentRefs.forEach(canvas => (canvas.style.transform = 'translate(0, 0)'));
       };
@@ -255,14 +250,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   /** Click Event Handler */
   const handleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    const tileCanvas = canvasRefs.tileCanvasRef.current;
-    if (!tileCanvas) return;
-    const { left: rectLeft, top: rectTop } = tileCanvas.getBoundingClientRect();
+    const interactionCanvas = canvasRefs.interactionCanvasRef.current;
+    if (!interactionCanvas) return;
+    const { left: rectLeft, top: rectTop } = interactionCanvas.getBoundingClientRect();
     const [clickX, clickY] = [event.clientX - rectLeft, event.clientY - rectTop];
 
-    // Transform canvas coordinate to relative coordinate
+    // Transform canvas coordinate to relative and absolute coordinate
     const [tileArrayX, tileArrayY] = [Math.floor(clickX / tileSize + tilePaddingWidth), Math.floor(clickY / tileSize + tilePaddingHeight)];
-    // Transform canvas coordinate to absolute coordinate
     const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
     // Getting content of clicked tile
     const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
@@ -277,7 +271,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     clickEvent(tileX, tileY, clickType);
 
     if (clickType === 'SPECIAL_CLICK' && !clickedTileContent.includes('C')) return;
-
     let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
     if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];
     moveCursor(targetTileX, targetTileY, tileX, tileY, clickType);
@@ -296,9 +289,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const directionsWithCenter = [[0, 0], ...directions];
     for (const [dx, dy] of directionsWithCenter) {
       const [nx, ny] = [x + dx, y + dy];
-      if (tiles[ny]?.[nx] && checkTileHasOpened(tiles[ny][nx])) {
-        return { x: nx, y: ny };
-      }
+      if (tiles[ny]?.[nx] && checkTileHasOpened(tiles[ny][nx])) return { x: nx, y: ny };
     }
     return { x: Infinity, y: Infinity };
   };
@@ -452,140 +443,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     return [];
   };
 
-  /** start render */
-  const renderTiles = () => {
-    const tileCanvas = canvasRefs.tileCanvasRef.current;
-    if (!tileCanvas || tileSize === 0 || !tiles[0]) return;
-    const tileCtx = tileCanvas.getContext('2d');
-    if (!tileCtx) return;
-    const borderPixel = 5 * zoom;
-    const tileEdgeVector = new Path2D(`
-      M0 0
-      L${tileSize} 0
-      L${tileSize} ${tileSize}
-      L0 ${tileSize}
-      L0 0
-      `);
-    const tileVector = new Path2D(`
-      M${borderPixel} ${borderPixel}
-      L${tileSize - borderPixel} ${borderPixel}
-      L${tileSize - borderPixel} ${tileSize - borderPixel}
-      L${borderPixel} ${tileSize - borderPixel}
-      L${borderPixel} ${borderPixel}
-      `);
-
-    // x0, y0, x1, y1
-    const innerGradientValues: fourNumberArray = [borderPixel, borderPixel, tileSize - borderPixel * 2, tileSize - borderPixel * 2];
-    const outerGradientValues: fourNumberArray = [0, 0, tileSize, tileSize];
-
-    // create gradient objects
-    const createGradients = (values: fourNumberArray, count: number) => Array.from({ length: count }, () => tileCtx.createLinearGradient(...values));
-    const inner = createGradients(innerGradientValues, 3);
-    const outer = createGradients(outerGradientValues, 3);
-    const flag = tileCtx.createLinearGradient(36.5, 212.5, 36.5, 259);
-    const gradientObject = { inner, outer, flag };
-
-    gradientObject.flag.addColorStop(0, '#E8E8E8');
-    gradientObject.flag.addColorStop(1, 'transparent');
-
-    gradientObject.inner.forEach((gradient, idx) => {
-      gradient.addColorStop(0, tileColors.inner[idx][0]);
-      gradient.addColorStop(1, tileColors.inner[idx][1]);
-    });
-
-    gradientObject.outer.forEach((gradient, idx) => {
-      gradient.addColorStop(0, tileColors.outer[idx][0]);
-      gradient.addColorStop(0.4, tileColors.outer[idx][0]);
-      gradient.addColorStop(0.6, tileColors.outer[idx][1]);
-      gradient.addColorStop(1, tileColors.outer[idx][1]);
-    });
-
-    // draw tiles
-    tiles?.forEach((row, rowIndex) => {
-      row?.forEach((content, colIndex) => {
-        const [x, y] = [(colIndex - tilePaddingWidth) * tileSize, (rowIndex - tilePaddingHeight) * tileSize];
-        // If tile is same as before or out of screen, skip rendering
-        if (content.length === renderedTiles.length && content === renderedTiles[rowIndex][colIndex]) return;
-        if (x < -tileSize || y < -tileSize || x > windowWidth + tileSize || y > windowHeight + tileSize) return;
-
-        tileCtx.save();
-        tileCtx.translate(x, y);
-        switch (content[0]) {
-          /** Locked tiles */
-          case 'C': /** Closed */
-          case 'F' /** Flag Red */: {
-            const isEven = content.slice(-1) === '0' ? 0 : 1;
-            // draw outline only for special clickable tile
-            const isClose = Math.abs(rowIndex - relativeY) <= 1 && Math.abs(colIndex - relativeX) <= 1 && content.includes('C');
-            tileCtx.fillStyle = isClose ? 'white' : gradientObject.outer[isEven];
-            tileCtx.fill(tileEdgeVector);
-            // draw inner tile
-            tileCtx.fillStyle = gradientObject.inner[isEven];
-            tileCtx.fill(tileVector);
-            if (isClose) drawCursor(tileCtx, 0, 0, '#0000002f', null, null, 0.5);
-            if (!content.includes('F')) break;
-
-            // draw flag
-            tileCtx.restore();
-            tileCtx.save();
-            tileCtx.translate(x + tileSize / 6, y + tileSize / 6);
-            tileCtx.scale(zoom / 4.5, zoom / 4.5);
-
-            /** flag color follows cursor color. */
-            tileCtx.fillStyle = cursorColors[content.slice(1, -1).toLowerCase() as keyof typeof cursorColors];
-            tileCtx.fill(cachedVectorAssets?.flag.flag as Path2D);
-
-            // draw pole
-            tileCtx.fillStyle = gradientObject.flag;
-            tileCtx.fill(cachedVectorAssets?.flag.pole as Path2D);
-            break;
-          }
-          /** Tile has been opend. */
-          case 'O':
-          case '1':
-          case '2':
-          case '3':
-          case '4':
-          case '5':
-          case '6':
-          case '7':
-          case '8':
-          case 'B': {
-            tileCtx.fillStyle = gradientObject.outer[2]; // draw outline of tile
-            tileCtx.fill(tileEdgeVector);
-            tileCtx.fillStyle = gradientObject.inner[2]; // draw inner tile
-            tileCtx.fill(tileVector);
-
-            /** describe ash */
-            if (content === 'B') {
-              tileCtx.scale(zoom / 4, zoom / 4);
-              tileCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-              tileCtx.fill(cachedVectorAssets?.boom.inner as Path2D); // draw inner path
-              tileCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-              tileCtx.fill(cachedVectorAssets?.boom.outer as Path2D); // draw outer path
-            }
-            tileCtx.restore();
-
-            /** describe number of neighbor bombs. */
-            if (parseInt(content) > 0) {
-              const index = parseInt(content) - 1;
-              tileCtx.fillStyle = countColors[index];
-              tileCtx.font = 50 * zoom + 'px LOTTERIACHAB';
-              tileCtx.textAlign = 'center';
-              tileCtx.textBaseline = 'middle';
-              tileCtx.fillText(content, x + tileSize / 2, y + tileSize / 2);
-            }
-            break;
-          }
-          default:
-            break;
-        }
-        tileCtx.restore();
-      });
-    });
-    setRenderedTiles(tiles);
-  };
-
   const renderInteractionCanvas = () => {
     const {
       interactionCanvasRef: { current: interactionCanvas },
@@ -647,8 +504,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   /** Load and Render */
   useEffect(() => {
-    if (!isInitializing && tiles.length > 0 && false) {
-      renderTiles();
+    if (!isInitializing && tiles.length > 0) {
+      // renderTiles();
       return;
     }
     const lotteriaChabFont = new FontFace(
@@ -685,7 +542,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       ) : (
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
           <ChatComponent />
-          <canvas className={S.canvas} id="TileCanvas" ref={canvasRefs.tileCanvasRef} width={windowWidth} height={windowHeight} />
           <Tilemap
             isMoving={paths.length > 0}
             tilePaddingHeight={tilePaddingHeight}
