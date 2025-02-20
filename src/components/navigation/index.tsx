@@ -20,7 +20,7 @@ export default function Navigation() {
           <span>Introduce</span>
           <span>Language</span>
           <Link href="https://github.com/gamultong" prefetch={false}>
-            <span>Github</span>
+            <span>GitHub</span>
           </Link>
         </div>
         <div className={S.side}>

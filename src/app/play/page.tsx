@@ -24,6 +24,7 @@ export default function Play() {
   /** constants */
   const renderRange = 3;
   const originTileSize = 80;
+  const maxTileCount = 530;
   const webSocketUrl = `${process.env.NEXT_PUBLIC_WS_HOST}/session`;
 
   /** stores */
@@ -96,14 +97,8 @@ export default function Play() {
       }
       return newTiles;
     });
-
-    const body = JSON.stringify({
-      event: 'fetch-tiles',
-      payload: {
-        start_p: { x: start_x, y: start_y },
-        end_p: { x: end_x, y: end_y },
-      },
-    });
+    const payload = { start_p: { x: start_x, y: start_y }, end_p: { x: end_x, y: end_y } };
+    const body = JSON.stringify({ event: 'fetch-tiles', payload });
     sendMessage(body);
     return;
   };
@@ -139,13 +134,12 @@ export default function Play() {
   const parseHex = (hex: string) => {
     const hexArray = hex.match(/.{1,2}/g);
     if (!hexArray) return '';
-    // hex to byte
     const byte = hexArray.map(hex => parseInt(hex, 16).toString(2).padStart(8, '0')).join('');
     // byte 0 - IsOpen, 1 - IsMine, 2 - IsFlag, 3 ~ 4 color, 5 ~ 7 number of mines
     const isTileOpened = byte[0] === '1';
     const isMine = byte[1] === '1';
     const isFlag = byte[2] === '1';
-    const color = parseInt(byte.slice(3, 5), 2).toString(); /** 00 red, 01 yellow, 10 blue, 11 purple */
+    const color = parseInt(byte.slice(3, 5), 2); /** 00 red, 01 yellow, 10 blue, 11 purple */
     const number = parseInt(byte.slice(5), 2);
     if (isTileOpened) return isMine ? 'B' : number === 0 ? 'O' : number.toString();
     if (isFlag) return 'F' + color;
@@ -156,12 +150,9 @@ export default function Play() {
     const [rowlength, columnlength] = [Math.abs(end_x - start_x + 1) * 2, Math.abs(start_y - end_y + 1)];
     const sortedTiles: string[][] = [];
     for (let i = 0; i < columnlength; i++) {
-      const tempTilelist = [] as string[];
+      const tempTilelist: string[] = [];
       const sortedlist = unsortedTiles.slice(i * rowlength, (i + 1) * rowlength);
-      for (let j = 0; j < rowlength / 2; j++) {
-        const hex = sortedlist.slice(j * 2, j * 2 + 2);
-        tempTilelist[j] = parseHex(hex);
-      }
+      for (let j = 0; j < rowlength / 2; j++) tempTilelist[j] = parseHex(sortedlist.slice(j * 2, j * 2 + 2));
       sortedTiles[i] = tempTilelist;
     }
     /** The y-axis is reversed.*/
@@ -182,9 +173,7 @@ export default function Play() {
       newTiles[rowIndex] = newTiles[rowIndex] ?? [];
       for (let j = 0; j < rowlength; j++) {
         let tile = sortedTiles[i][j];
-        if (['C', 'F'].some(c => tile?.includes(c))) {
-          tile += (i - end_y + j - start_x) % 2 === 0 ? '0' : '1';
-        }
+        if (['C', 'F'].some(c => tile?.includes(c))) tile += (i - end_y + j - start_x) % 2 === 0 ? '0' : '1';
         if (tile) newTiles[rowIndex][j + start_x - startPoint.x] = tile;
       }
     }
@@ -210,7 +199,13 @@ export default function Play() {
           const { position, is_set, color } = payload;
           const { x, y } = position;
           const newTiles = [...cachingTiles];
-          newTiles[y - startPoint.y][x - startPoint.x] = (is_set ? 'F' + color : 'C') + ((x + y) % 2 === 0 ? '0' : '1');
+          const colorMap: Record<string, string> = {
+            RED: '0',
+            YELLOW: '1',
+            BLUE: '2',
+            PURPLE: '3',
+          };
+          newTiles[y - startPoint.y][x - startPoint.x] = (is_set ? 'F' + (colorMap[color] ?? color) : 'C') + ((x + y) % 2 === 0 ? '0' : '1');
           setCachingTiles(newTiles);
           break;
         }
@@ -366,7 +361,7 @@ export default function Play() {
     });
     setTileSize(newTileSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowWidth, windowHeight, zoom, cursorOriginX, cursorOriginY, cursorX, cursorY, renderRange, isInitialized]);
+  }, [windowWidth, windowHeight, zoom, cursorOriginX, cursorOriginY, cursorX, cursorY, isInitialized]);
 
   /** Handling zoom event */
   useEffect(() => {
@@ -395,16 +390,13 @@ export default function Play() {
       startPoint.y - heightReductionLength,
       'A',
     );
-    const body = JSON.stringify({
-      event: 'set-view-size',
-      payload: {
-        width: Math.floor(Math.floor((windowWidth * renderRange) / newTileSize)),
-        height: Math.floor(Math.floor((windowHeight * renderRange) / newTileSize)),
-      },
-    });
+    const width = Math.floor((windowWidth * renderRange) / newTileSize);
+    const height = Math.floor((windowHeight * renderRange) / newTileSize);
+    const payload = { width, height };
+    const body = JSON.stringify({ event: 'set-view-size', payload });
     sendMessage(body);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowWidth, windowHeight, zoom, renderRange, isInitialized]);
+  }, [windowWidth, windowHeight, zoom, isInitialized]);
 
   /** When cursor position has changed. */
   useEffect(() => {
@@ -443,15 +435,10 @@ export default function Play() {
   /** Send user move event */
   useEffect(() => {
     if (!isInitialized) return;
-    const body = JSON.stringify({
-      event: 'moving',
-      payload: {
-        position: {
-          x: cursorOriginX,
-          y: cursorOriginY,
-        },
-      },
-    });
+    const event = 'moving';
+    const position = { x: cursorOriginX, y: cursorOriginY };
+    const payload = { position };
+    const body = JSON.stringify({ event, payload });
     sendMessage(body);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursorOriginX, cursorOriginY]);
@@ -465,7 +452,7 @@ export default function Play() {
     <div className={S.page}>
       {leftReviveTime > 0 && <Inactive time={leftReviveTime} />}
       <TutorialStep />
-      <CanvasDashboard />
+      <CanvasDashboard tileSize={tileSize} renderRange={renderRange} maxTileCount={maxTileCount} />
       <CanvasRenderComponent
         leftReviveTime={leftReviveTime}
         paddingTiles={renderRange}
