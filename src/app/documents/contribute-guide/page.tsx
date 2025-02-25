@@ -1,11 +1,8 @@
 import Document from '@/components/document';
+import f from '../files.json';
 
 export default function ContributeGuide() {
-  const files = ['overview', 'about_dashboard', 'about_interactions', 'how_to_render', 'kinds_of_websocket_events'];
+  const files = f['contribute-guide'];
 
-  return (
-    <>
-      <Document files={files} endpoint="Contribute Guide" dir={'of_contribute'} />
-    </>
-  );
+  return <Document files={files} endpoint="Contribute Guide" dir={'of_contribute'} />;
 }
