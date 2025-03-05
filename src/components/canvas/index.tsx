@@ -306,10 +306,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     ctx.save();
     const adjustedScale = (zoom / 3.5) * scale;
     ctx.fillStyle = color;
-    /**
-     * What if the cursor is rotating.
-     * Then the cursor will rotate.
-     */
+    // What if the cursor is rotating. Then the cursor will rotate.
     if (rotate !== null) {
       const [rotateX, rotateY] = [Math.cos(rotate - 1 / 4) * 2 * Math.PI, Math.sin(rotate - 1 / 4) * 2 * Math.PI];
       ctx.translate(x - (rotateX * tileSize) / 18 / scale + tileSize / 2, y - (rotateY * tileSize) / 18 / scale + tileSize / 2);
