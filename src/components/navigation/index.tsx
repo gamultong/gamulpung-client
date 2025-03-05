@@ -17,7 +17,7 @@ export default function Navigation() {
           <Link href={`/?lang=${lang}`}>
             <Image src={host + '/icon.png'} alt="Gamulpung" width={50} height={50} />
           </Link>
-          <span>Introduce</span>
+          <span>Documents</span>
           <span>Language</span>
           <Link href="https://github.com/gamultong" prefetch={false}>
             <span>GitHub</span>
