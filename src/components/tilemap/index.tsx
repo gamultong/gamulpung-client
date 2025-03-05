@@ -25,10 +25,10 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
   // Generate textures for tiles, boom, and flags
   const cachesRef = useRef({
-    outerCache: new Map<string, JSX.Element>(),
-    innerCache: new Map<string, JSX.Element>(),
-    boomCache: new Map<string, JSX.Element>(),
-    flagCache: new Map<string, JSX.Element>(),
+    outerCachedSprite: new Map<string, JSX.Element>(),
+    innerCachedSprite: new Map<string, JSX.Element>(),
+    boomCachedSprite: new Map<string, JSX.Element>(),
+    flagCachedSprite: new Map<string, JSX.Element>(),
   });
 
   // Memoize textures creation
@@ -97,7 +97,8 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     }
     setInnerZoom(zoom);
     return newTileTextures;
-  }, [tileSize, tileColors, boomPaths, flagPaths, cursorColors, zoom]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tileSize]);
 
   // Cache text styles for numbers using useMemo
   const cachedTextStyles = useMemo(
@@ -122,7 +123,12 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     const flagSpritesArr: JSX.Element[] = [];
     const textElementsArr: JSX.Element[] = [];
 
-    const { outerCache, innerCache, boomCache, flagCache } = cachesRef.current;
+    const {
+      outerCachedSprite: outerCache,
+      innerCachedSprite: innerCache,
+      boomCachedSprite: boomCache,
+      flagCachedSprite: flagCache,
+    } = cachesRef.current;
 
     for (let ri = 0; ri < tiles.length; ri++) {
       for (let ci = 0; ci < tiles[ri].length; ci++) {
