@@ -11,18 +11,14 @@ export default function Document({ endpoint, files, dir }: { endpoint: string; f
   const url = process.env.NEXT_PUBLIC_HOST;
   const [data, setData] = useState('');
   const lang = useSearchParams().get('lang') || 'ko';
+  const doc = useSearchParams().get('doc') || files[0];
   const asideData: { [key: string]: { link: string; [key: string]: string } } = aside[lang as keyof typeof aside];
   const fetchMarkdownFiles = async () => {
     try {
       const url = process.env.NEXT_PUBLIC_HOST;
-      const promises = files.map(file =>
-        fetch(`${url}/docs/${lang}/${dir}/${file}.md`).then(res => {
-          if (!res.ok) throw new Error(`Failed to fetch ${file}`);
-          return res.text();
-        }),
-      );
-      const values = await Promise.all(promises);
-      const markdownData = values.join('\n');
+      const res = await fetch(`${url}/docs/${lang}/${dir}/${doc}.md`);
+      if (!res.ok) throw new Error(`Failed to fetch ${doc}`);
+      const markdownData = await res.text();
       const markdownConverter = new Converter();
       markdownConverter.setOption('tables', true);
       const htmlData = markdownConverter.makeHtml(markdownData);
@@ -35,7 +31,7 @@ export default function Document({ endpoint, files, dir }: { endpoint: string; f
   useEffect(() => {
     fetchMarkdownFiles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang]);
+  }, [lang, doc]);
 
   return (
     <div className={S.document}>
@@ -47,7 +43,7 @@ export default function Document({ endpoint, files, dir }: { endpoint: string; f
               <ul>
                 {Object.entries(asideData[key as keyof typeof asideData]).map(([value, href]) =>
                   value !== 'link' ? (
-                    <Link href={`${url}/documents/${asideData[key].link.replace(/ /g, '-').toLowerCase()}?lang=${lang}${href}`} key={value}>
+                    <Link href={`${url}/documents/${asideData[key].link.replace(/ /g, '-').toLowerCase()}?lang=${lang}&doc=${href}`} key={value}>
                       <li>{value}</li>
                     </Link>
                   ) : null,

@@ -2,47 +2,47 @@
   "en": {
     "How to Play": {
       "link": "How to Play",
-      "Rules Of Gamulpung": "#rulesofgamulpung"
+      "Rules Of Gamulpung": "rules_of_pung"
     },
     "Release Notes": {
       "link": "Release Notes",
-      "V0.1.2": "#V0.1.2",
-      "V0.1.1": "#V0.1.1"
+      "V0.1.2": "v0-1-2",
+      "V0.1.1": "v0-1-1"
     },
     "Contribute Guide": {
       "link": "Contribute Guide",
-      "Overview": "#overviewofcontributersguide",
-      "About dashboard": "#aboutdashboard",
-      "About interactions": "#aboutinteractions",
-      "How to render tiles": "#howtorendertiles",
-      "Kinds of websocket events": "#kindsofwebsocketevents"
+      "Overview": "overview",
+      "About dashboard": "about_dashboard",
+      "About interactions": "about_interactions",
+      "How to render tiles": "how_to_render",
+      "Kinds of websocket events": "kinds_of_websocket_events"
     },
     "Blog": {
       "link": "Blog",
-      "First Beta Test Statistics": "#firstbetateststatistics"
+      "First Beta Test Statistics": "firstbeta_statistics"
     }
   },
   "ko": {
     "플레이 방법": {
       "link": "How to Play",
-      "가물펑 규칙": "#가물펑규칙"
+      "가물펑 규칙": "rules_of_pung"
     },
     "릴리즈 노트": {
       "link": "Release Notes",
-      "버전 0.1.2": "#V0.1.2",
-      "버전 0.1.1": "#V0.1.1"
+      "V0.1.2": "v0-1-2",
+      "V0.1.1": "v0-1-1"
     },
     "기여 가이드": {
       "link": "Contribute Guide",
-      "개요": "#기여자가이드개요",
-      "대시보드란": "#대시보드에대하여",
-      "상호작용이란": "#상호작용에대하여",
-      "타일을 렌더링하는 법": "#타일렌더링방법",
-      "웹 소켓 이벤트 종류": "#웹소켓이벤트종류"
+      "개요": "overview",
+      "대시보드란": "about_dashboard",
+      "상호작용이란": "about_interactions",
+      "타일을 렌더링하는 법": "how_to_render",
+      "웹 소켓 이벤트 종류": "kinds_of_websocket_events"
     },
     "블로그": {
       "link": "Blog",
-      "첫 베타 테스트 통계": "#첫베타테스트통계"
+      "첫 베타 테스트 통계": "firstbeta_statistics"
     }
   }
 }
