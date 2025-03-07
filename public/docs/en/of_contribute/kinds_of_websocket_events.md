@@ -1,138 +1,181 @@
 # Kinds of Websocket Events
 ## 1. Summary
+The websocket message handler processes various events sent from the server. Each event triggers specific actions based on its type and associated payload. This handles tiles, cursor positions, and user actions, maintaining synchronization between the client and server.
 
-The WebSocket message handler processes various events sent by the server. Each event triggers specific actions based on its type and associated payload. This ensures synchronization between the client and server, handling tiles, cursor positions, and user actions.
+| Request Name        | Description                                                                 |
+|---------------------|-----------------------------------------------------------------------------|
+| `Create Connection` | Creates a websocket connection to the server, including the client's screen size in the URL query string. |
+| `fetch-tiles`       | Requests tile data for a specified range from the server.                   |
+| `set-view-size`     | Sends the client's current screen size to the server to optimize tiles for the visible area. |
+| `pointing`          | Sends the cursor position to the server and performs a click action on a specific tile. |
+| `moving`            | Requests to move to a target location, checking if the move is possible according to the rules. |
 
-| Request Name            | Description                                                            |
-|----------------------|----------------------------------------------------------------------------|
-| `Create Connection`   | Includes the client's screen size in the URL query string when establishing a WebSocket connection to the server. |
-| `fetch-tiles`         | Requests tile data from the server for a specified range.                   |
-| `set-view-size`       | Sends the current screen size of the client to the server for tile optimization based on the visible area. |
-| `pointing`            | Sends the pointer's position to the server and performs the click action on a tile simultaneously. |
-| `moving`              | Requests to move to a target position, validating if the move is allowed based on the rules. |
+| Event Name          | Purpose                                | Key Actions                                           |
+|---------------------|----------------------------------------|-------------------------------------------------------|
+| `tiles`             | Updates the requested tile grid.       | Updates the grid with `replaceTiles`.                 |
+| `flag-set`          | Processes tile flags.                  | Updates cached tile data.                             |
+| `tiles-opened`      | Updates the state of all tiles.        | Modifies the tile grid based on the payload.          |
+| `single-tile-opened`| Updates the state of a single tile.    | Replaces data in the current tile array immediately.  |
+| `my-cursor`         | Sets initial user information.         | Updates cursor position, color, and pointer info.     |
+| `you-died`          | Manages user death countdown.          | Calculates and sets the revival time.                 |
+| `cursors-died`      | Manages other users' death countdown.  | Calculates and displays the revival time.             |
+| `my-cursor`         | Sets the initial client position.      | Loads nearby tile data based on the user's position.  |
+| `cursors`           | Updates other users' cursors.          | Normalizes cursor positions and colors, then updates the state. |
+| `moved`             | Updates cursor movement events.        | Dynamically adjusts cursor positions.                 |
+| `cursor-quit`       | Removes the cursor of a user who quit. | Deletes cursor data from the state.                   |
+| `pointer-set`       | Allows clients to see where others are pointing. | Adjusts the pointer position of non-client cursors.   |
+| `chat`              | Displays chat messages from other users. | Outputs chats on the chat component.                  |
 
-| Event Name      | Purpose                          | Key Actions                                 |
-|----------------------|--------------------------------------|------------------------------------------------|
-| `tiles`             | Handles requested tile grid updates. | Updates grid with `replaceTiles`.              |
-| `flag-set`          | Processes tile flagging.             | Updates cached tile data.                      |
-| `tile-updated`      | Updates tile state dynamically.      | Modifies the tile grid based on the payload.   |
-| `my-cursor`         | Sets initial user information.       | Updates cursor position, color, and pointer.   |
-| `you-died`          | Manages user death countdown.        | Calculates and sets revive time.               |
-| `cursors`           | Updates all other user cursors.      | Normalizes cursor positions and colors.        |
-| `moved`             | Updates cursor movement events.      | Adjusts cursor positions dynamically.          |
-| `cursor-quit`       | Removes users who quit the game.     | Deletes cursor data from the state.            |                                 |
+---
 
+## 2. Request Types and Actions
 
-## 2. Send Requests Types and Behaviors
+### 2.1. `Create Connection` Request
+Creates a websocket connection, adding the screen width and height information to the URL query string.
+Purpose: Allows the server to determine the number of tiles the client browser can render.
 
-### 2.1. Create Connection
-When you try to create a Websocket connection, add Query string of view width and height in url.
-Its purpose is check how many tiles can be rendered in client's browser.
+---
 
 ### 2.2. `fetch-tiles` Request
-The `fetch-tiles` reqeust is used to request tile data from the server. The client sends this event with a specific coordinate range to fetch the tile information within a defined area.
+Sends a `fetch-tiles` request to the server to retrieve tile data for a defined range of coordinates.
 
-The body contains the following:
-| Field     | Type   | Description                                      |
-|-----------|--------|--------------------------------------------------|
-| `start_p` | Object | Defines the starting position of the requested tile range. |
-| `start_p.x` | Number | X-coordinate of the starting point.               |
-| `start_p.y` | Number | Y-coordinate of the starting point.               |
-| `end_p`   | Object | Defines the ending position of the requested tile range.   |
-| `end_p.x` | Number | X-coordinate of the ending point.                 |
-| `end_p.y` | Number | Y-coordinate of the ending point.                 |
+**Request Body Fields**
+| Field Name | Type   | Description                                      |
+|------------|--------|--------------------------------------------------|
+| `start_p`  | Object | Defines the start position of the requested tile range. |
+| `start_p.x`| Number | X-coordinate of the start point.                 |
+| `start_p.y`| Number | Y-coordinate of the start point.                 |
+| `end_p`    | Object | Defines the end position of the requested tile range.   |
+| `end_p.x`  | Number | X-coordinate of the end point.                   |
+| `end_p.y`  | Number | Y-coordinate of the end point.                   |
+
+---
 
 ### 2.3. `set-view-size` Request
-The `set-view-size` request is used to inform the server about the size of the user's current view or display area. This allows the server to optimize the tile data sent to the client based on the visible area.
+Informs the server of the current client screen or display area size, allowing the server to optimize tile data for the visible area.
 
-The body contains the following fields:
-| Field  | Type   | Description                                      |
-|--------|--------|--------------------------------------------------|
-| `width`  | Number | The width of the current view or visible area (in tiles). |
-| `height` | Number | The height of the current view or visible area (in tiles). |
+**Request Body Fields**
+| Field Name | Type   | Description                                      |
+|------------|--------|--------------------------------------------------|
+| `width`    | Number | Width of the current screen or visible area (in tiles). |
+| `height`   | Number | Height of the current screen or visible area (in tiles). |
+
+---
 
 ### 2.4. `pointing` Request
-The `pointing` request is used to send the current cursor position and simultaneously perform a click action on a tile. The server processes the event and responds with updated pointer information or tile status.
+Sends the current cursor position to the server and performs a click action on a specific tile. The server processes this event and responds with updated cursor information or tile status.
 
-The body contains the following fields:
-| Field       | Type     | Description                                              |
-|-------------|----------|----------------------------------------------------------|
-| `position.x`| Integer  | X-coordinate of the pointer's position.                  |
-| `position.y`| Integer  | Y-coordinate of the pointer's position.                  |
-| `click_type`| String   | Type of click interaction (`GENERAL_CLICK` or `SPECIAL_CLICK`). |
+**Request Body Fields**
+| Field Name  | Type   | Description                                      |
+|-------------|--------|--------------------------------------------------|
+| `position.x`| Integer| X-coordinate of the cursor position.             |
+| `position.y`| Integer| Y-coordinate of the cursor position.             |
+| `click_type`| String | Type of click interaction (`GENERAL_CLICK` or `SPECIAL_CLICK`). |
+
+---
 
 ### 2.5. `moving` Request
-The `moving` request is used to send a destination position where the player wants to move. The server processes the event and validates whether the move is allowed based on the rules.
+Sends the target location the player wants to move to the server. The server processes this event and checks if the move is possible according to the rules.
 
-The body contains the following fields:
-| Field       | Type     | Description                          |
-|-------------|----------|--------------------------------------|
-| `position.x`| Integer  | X-coordinate of the target position. |
-| `position.y`| Integer  | Y-coordinate of the target position. |
+**Request Body Fields**
+| Field Name  | Type   | Description                                      |
+|-------------|--------|--------------------------------------------------|
+| `position.x`| Integer| X-coordinate of the target location.             |
+| `position.y`| Integer| Y-coordinate of the target location.             |
 
-## 3. Handle Event Types and Behaviors
+---
+
+## 3. Event Types and Actions
 
 ### 3.1. `tiles` Event
-- Purpose: Handles tiles requested by the user.  
-- Payload: Contains starting and ending positions of the tile grid and unsorted tile data.  
-- Behavior:
-  - Extracts the tile grid (`unsortedTiles`) and boundary positions (`start_p` and `end_p`).  
+- **Purpose**: Processes the tiles requested by the user.
+- **Payload**: Includes tile grid and boundary position data.
+- **Actions**:
+  - Extracts the tile grid (`unsortedTiles`) and boundary positions (`start_p`, `end_p`).
   - Calls `replaceTiles` to update the tile grid.
 
+---
 
-### 3.2. `flag-set` and `tile-updated` Events
-- Purpose: Handles unrequested tile updates or tile flagging.  
-- Payload: Provides details about the tile's position, state, and visual properties.  
-- Behavior:
-  - Updates the caching tiles using `setCachingTiles`.  
-  - Determines the tile's new state:
-    - Opened Tiles:
-      - If the tile contains a mine → Set as `'B'` (Bomb).  
-      - Otherwise → Display the number of neighboring mines (`number`).  
-    - Closed Tiles:
-      - If flagged → Prefix with `'F'` and the tile's color.  
-      - If not flagged → Prefix with `'C'`.  
-      - Tiles alternate visual patterns (`0` or `1`) based on position parity.
-
+### 3.2. `flag-set`, `tiles-opened`, `single-tile-opened` Events
+- **Purpose**: Processes unsolicited tile updates or tile flags.
+- **Payload**: Includes detailed information on tile positions, states, and visual properties.
+- **Actions**:
+  - Updates cached tiles with `setCachingTiles`.
+  - Determines the following based on tile state:
+    - **Opened Tiles**:
+      - Contains a mine → Set to `'B'`.
+      - No mine → Display the number of surrounding mines (`number`).
+    - **Closed Tiles**:
+      - Flag set → Display as `'F'` with tile color.
+      - No flag → Display as `'C'`.
+      - Apply visual changes based on tile position pattern (`0` or `1`).
 
 ### 3.3. `my-cursor` Event
-- Purpose: Fetches the client's cursor and initial game state.  
-- Payload: Contains cursor position, pointer coordinates, and color.  
-- Behavior:
-  - Sets the cursor's initial position using `setOringinPosition` and `setCursorPosition`.  
-  - Sets the cursor's color.  
-  - Updates any pointer click position if available.
+- **Purpose**: Initializes current user information and sets cursor state.
+- **Payload**: Includes initial coordinates and cursor color.
+- **Actions**:
+  1. Sets the user cursor based on coordinates (`x`, `y`) and color data provided by the server.
+  2. Calls `setMyCursor` to update cursor information.
 
+---
 
 ### 3.4. `you-died` Event
-- Purpose: Handles user death and revive countdown.  
-- Payload: Includes the revive time (`revive_at`).  
-- Behavior:
-  - Calculates the time remaining until revival based on the current time.  
-  - Sets the remaining revive time (`setLeftReviveTime`).
+- **Purpose**: Manages the revival waiting time after the user transitions to a "dead" state.
+- **Payload**: Includes the revival waiting time (`revive_time`).
+- **Actions**:
+  1. Calculates the revival time based on the current time.
+  2. Calls `setReviveTime` to set the revival waiting state.
 
+---
 
 ### 3.5. `cursors` Event
-- Purpose: Synchronizes the positions and colors of other users' cursors.  
-- Payload: Contains an array of cursor positions and associated colors.  
-- Behavior:
-  - Processes the cursor array to normalize color values.  
-  - Updates the cursor list using `addCursors`.
+- **Purpose**: Updates the cursor states of other users currently in the game.
+- **Payload**: Includes coordinates and color information of other users' cursors.
+- **Actions**:
+  1. Normalizes user cursor data on the client.
+  2. Calls `setCursors` to synchronize the current cursor state.
 
+---
 
 ### 3.6. `moved` Event
-- Purpose: Handles movement events of other users' cursors.  
-- Payload: Includes the origin and new positions of a cursor, as well as its color.  
-- Behavior:
-  - Searches for the cursor in the current list based on its original position and color.  
-  - Updates the cursor's position if found.  
-  - Updates the state with the new cursor list (`setCursors`).
+- **Purpose**: Processes the movement event of a specific cursor.
+- **Payload**: Includes the final position and state of the moved cursor.
+- **Actions**:
+  1. Identifies the moved user cursor.
+  2. Calls `moveCursor` to update the cursor to the new coordinates.
 
+---
 
 ### 3.7. `cursor-quit` Event
-- Purpose: Removes cursors of users who have quit the game.  
-- Payload: Includes the cursor's position and color.  
-- Behavior:
-  - Searches for the cursor in the current list based on its position and color.  
-  - Removes the cursor if found.  
-  - Updates the state with the new cursor list (`setCursors`).
+- **Purpose**: Removes the cursor of a user who has quit the game or disconnected.
+- **Payload**: Includes the ID information of the disconnected user.
+- **Actions**:
+  1. Removes the cursor corresponding to the specific user ID.
+  2. Calls `setCursors` to update the state on the client.
+
+### 3.8. `pointer-set` Event
+- **Purpose**: Allows clients to see where other users are pointing.
+- **Payload**: Includes the coordinates and user ID of the pointer.
+- **Actions**:
+  1. Extracts the pointer coordinates (`x`, `y`) and user ID.
+  2. Calls `setCursors` to display the pointer at the specified location.
+
+---
+
+### 3.9. `chat` Event
+- **Purpose**: Displays chat messages sent by other users.
+- **Payload**: Includes the chat message and user ID.
+- **Actions**:
+  1. Extracts the chat message and user ID.
+  2. Calls `setCursors` to add the message to the chat component.
+
+---
+
+### 3.10. `cursors-died` Event
+- **Purpose**: Manages the death state of other users.
+- **Payload**: Includes the ID and revival waiting time of the deceased user.
+- **Actions**:
+  1. Extracts the ID and revival waiting time of the deceased user.
+  2. Calls `setCursors` to set the revival waiting state.
+
+---

@@ -8,26 +8,26 @@ This project is an online multiplayer version of Minesweeper, where the map expa
 ### Features
 - **Infinite Map**: The game map expands infinitely as you explore.
 - **Multiplayer**: Play with other people in real-time.
+- **Chat**: Press Enter and Chat with other players.
 - **Real-time Updates**: See the moves of other players instantly.
-- **User-friendly Interface**: Easy to navigate and play.
 
 ### Technologies Used
-- **Frontend**: Next.js
+- **Frontend**: Next.js, Zustand, Scss, Pixi/react
+- **Backend**: FastAPI
 - **WebSocket**: For real-time communication
 
 ### Project Structure
 - **/src**: Contains the source code for the frontend and backend.
 - **/public**: Contains static files and assets.
-
-### Getting Started
-To get started with the project, follow the instructions in the "Contribute" section below to set up your development environment and start contributing.
+- **/putlic/docs**: Contains Documents for Contribute.
 
 ## Play
 Let's play the game [here](https://gamultong.github.io/gamulpung-client/).
 
 ## Contribute
-If you want to contribute this project, Follow these steps.
+Here's more information to contribute this project: https://gamultong.github.io/gamulpung-client/documents/contribute-guide/?lang=en#overviewofcontributersguide
 
+If you want to contribute this project, Follow these steps.
 ### Fork this repository
 
 1. Navigate to the GitHub repository you want to fork.
@@ -52,10 +52,19 @@ git clone https://github.com/your-username/minesweeper-client.git
 node >= 20.10
 npm >= 10.9
 ```
+
+In .env file, There are two environment values.
+```
+NEXT_PUBLIC_WS_HOST = 
+NEXT_PUBLIC_HOST = "http://localhost:3001/gamulpung-client"
+```
+
+Mail me to get websocket host url:
+Email: kkh061101@naver.com
+
 2. Install Dependencies.
 ```bash
-# Because React 19 does not support previous dependencies before version 19.
-npm install --force 
+npm install 
 ```
 
 3. Run Development Server.
