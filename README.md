@@ -25,7 +25,7 @@ This project is an online multiplayer version of Minesweeper, where the map expa
 Let's play the game [here](https://gamultong.github.io/gamulpung-client/).
 
 ## Contribute
-Here's more information to contribute this project: https://gamultong.github.io/gamulpung-client/documents
+Here's more information to contribute this project: https://gamultong.github.io/gamulpung-client/documents/contribute-guide/?lang=en#overviewofcontributersguide
 
 If you want to contribute this project, Follow these steps.
 ### Fork this repository
