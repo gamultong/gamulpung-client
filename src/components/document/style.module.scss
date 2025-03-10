@@ -48,6 +48,7 @@
   .main {
     padding: 0 50px;
     padding-bottom: 100px;
+    width: calc(100vw - #{$aside-width});
     display: flex;
     height: calc(100svh - 55px);
     overflow: auto;
