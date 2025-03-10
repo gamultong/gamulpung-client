@@ -58,6 +58,10 @@
       font-weight: 900;
       border-bottom: 2px solid black;
     }
+    img {
+      width: 80svw;
+      object-fit: contain;
+    }
     ol,
     ul {
       display: flex;
@@ -73,6 +77,17 @@
       background: linear-gradient(#e9f6b9, #f1fad1);
       padding: 5px;
       border-radius: 5px;
+    }
+    pre {
+      background: black;
+      color: white;
+      padding: 20px;
+      border-radius: 10px;
+      overflow-y: visible;
+      code {
+        background: none;
+        color: white;
+      }
     }
     th {
       text-align: left;
