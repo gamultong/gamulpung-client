@@ -43,7 +43,11 @@ export default function Document({ endpoint, files, dir }: { endpoint: string; f
               <ul>
                 {Object.entries(asideData[key as keyof typeof asideData]).map(([value, href]) =>
                   value !== 'link' ? (
-                    <Link href={`${url}/documents/${asideData[key].link.replace(/ /g, '-').toLowerCase()}?lang=${lang}&doc=${href}`} key={value}>
+                    <Link
+                      key={value}
+                      href={`${url}/documents/${asideData[key].link.replace(/ /g, '-').toLowerCase()}?lang=${lang}&doc=${href}`}
+                      prefetch={false}
+                    >
                       <li>{value}</li>
                     </Link>
                   ) : null,
