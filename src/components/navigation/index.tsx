@@ -10,12 +10,13 @@ export default function Navigation() {
   const searchParams = useSearchParams();
   const lang = searchParams.get('lang') || 'ko';
   const host = process.env.NEXT_PUBLIC_HOST;
+  const doc = searchParams.get('doc') !== null ? `&doc=${searchParams.get('doc')}` : '';
   return (
     <nav className={S.nav} onPointerOver={() => setIsMenuOpen(true)} onPointerLeave={() => setIsMenuOpen(false)}>
       <div className={S.navigation}>
         <div className={`${S.side} ${S.gap}`}>
           <Link href={`/?lang=${lang}`}>
-            <Image src={host + '/icon.png'} alt="Gamulpung" width={50} height={50} />
+            <Image src={`${host}/icon.png`} alt="Gamulpung" width={50} height={50} />
           </Link>
           <span>Documents</span>
           <span>Language</span>
@@ -25,10 +26,10 @@ export default function Navigation() {
         </div>
         <div className={S.side}>
           <Link href={`/documents/contribute-guide?lang=${lang}`}>
-            <Image src={host + '/contributeButton.svg'} alt="Contribute" width={158} height={55} />
+            <Image src={`${host}/contributeButton.svg`} alt="Contribute" width={158} height={55} />
           </Link>
           <Link href="/play">
-            <Image src={host + '/playbutton.svg'} alt="Play" width={88} height={55} />
+            <Image src={`${host}/playbutton.svg`} alt="Play" width={88} height={55} />
           </Link>
         </div>
       </div>
@@ -50,10 +51,10 @@ export default function Navigation() {
               </Link>
             </div>
             <div>
-              <Link href="?lang=ko">
+              <Link href={`?lang=ko${doc}`}>
                 <p>한국어</p>
               </Link>
-              <Link href="?lang=en">
+              <Link href={`?lang=en${doc}`}>
                 <p>English</p>
               </Link>
               {/* <Link href="?lang=ja">
