@@ -34,6 +34,4 @@ internal과 __init__.py의 존재 이유는 파이썬에서 자체적으로 제�
     Event 발행에 필요한 Message의 선언, 그리고 EventBroker가 위치함.
 
 ## 컴포넌트 구조 시각화
-
-![](https://cdn.discordapp.com/attachments/1300053843366776862/1347754020986683554/image.png?ex=67cf9c3e&is=67ce4abe&hm=7e8b4741d6c747fa974961d25a6f90989ccb2228a6476f060163078837052e44&)
-    
+![](/gamulpung-client/backend_path.webp)

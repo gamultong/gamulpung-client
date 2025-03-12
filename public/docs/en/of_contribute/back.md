@@ -34,5 +34,4 @@ The reason for the existence of internal and __init__.py is to implement selecti
     Declares the Messages needed for Event publishing and contains the EventBroker.
 
 ## Component Structure Visualization
-
-![](https://cdn.discordapp.com/attachments/1300053843366776862/1347754020986683554/image.png?ex=67cf9c3e&is=67ce4abe&hm=7e8b4741d6c747fa974961d25a6f90989ccb2228a6476f060163078837052e44&)
+![](/gamulpung-client/backend_path.webp)
