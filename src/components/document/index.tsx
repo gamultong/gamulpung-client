@@ -17,6 +17,7 @@ export default function Document({ endpoint, files, dir }: { endpoint: string; f
   const lang = useSearchParams().get('lang') || 'ko';
   const doc = useSearchParams().get('doc') || files[0];
   const asideData: AsideType = aside[lang as keyof typeof aside];
+
   const fetchMarkdownFiles = async () => {
     try {
       const url = process.env.NEXT_PUBLIC_HOST;
@@ -31,6 +32,7 @@ export default function Document({ endpoint, files, dir }: { endpoint: string; f
       console.error('Error fetching markdown files:', error);
     }
   };
+
   useEffect(() => {
     fetchMarkdownFiles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
