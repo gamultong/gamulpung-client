@@ -1,0 +1,112 @@
+{
+  "url": "/",
+  "title": "root",
+  "child": [
+    {
+      "url": "/play",
+      "title": "play"
+    },
+    {
+      "url": "https://github.com/gamultong",
+      "title": "GitHub"
+    },
+    {
+      "url": "/docs",
+      "title": "Documents",
+      "child": [
+        {
+          "url": "/docs?lang=en",
+          "title": "English",
+          "child": [
+            {
+              "url": "/docs/how-to-play/rules-of-pung?lang=en",
+              "title": "Rules Of Gamulpung"
+            },
+            {
+              "url": "/docs/release-notes/v0-1-2?lang=en",
+              "title": "V0.1.2"
+            },
+            {
+              "url": "/docs/release-notes/v0-1-1?lang=en",
+              "title": "V0.1.1"
+            },
+            {
+              "url": "/docs/contribute-guide/overview?lang=en",
+              "title": "Overview"
+            },
+            {
+              "url": "/docs/contribute-guide/back?lang=en",
+              "title": "Backend"
+            },
+            {
+              "url": "/docs/contribute-guide/about-dashboard?lang=en",
+              "title": "About dashboard"
+            },
+            {
+              "url": "/docs/contribute-guide/about-interactions?lang=en",
+              "title": "About interactions"
+            },
+            {
+              "url": "/docs/contribute-guide/how-to-render?lang=en",
+              "title": "How to render tiles"
+            },
+            {
+              "url": "/docs/contribute-guide/kinds-of-websocket-events?lang=en",
+              "title": "Kinds of websocket events"
+            },
+            {
+              "url": "/docs/blog/firstbeta-statistics?lang=en",
+              "title": "First Beta Test Statistics"
+            }
+          ]
+        },
+        {
+          "url": "/docs?lang=ko",
+          "title": "Korean",
+          "child": [
+            {
+              "url": "/docs/how-to-play/rules-of-pung?lang=ko",
+              "title": "가물펑 규칙"
+            },
+            {
+              "url": "/docs/release-notes/v0-1-2?lang=ko",
+              "title": "V0.1.2"
+            },
+            {
+              "url": "/docs/release-notes/v0-1-1?lang=ko",
+              "title": "V0.1.1"
+            },
+            {
+              "url": "/docs/contribute-guide/overview?lang=ko",
+              "title": "개요"
+            },
+            {
+              "url": "/docs/contribute-guide/back?lang=ko",
+              "title": "백엔드"
+            },
+            {
+              "url": "/docs/contribute-guide/about-dashboard?lang=ko",
+              "title": "대시보드란"
+            },
+            {
+              "url": "/docs/contribute-guide/about-interactions?lang=ko",
+              "title": "상호작용이란"
+            },
+            {
+              "url": "/docs/contribute-guide/how-to-render?lang=ko",
+              "title": "타일을 렌더링하는 법"
+            },
+            {
+              "url": "/docs/contribute-guide/kinds-of-websocket-events?lang=ko",
+              "title": "웹 소켓 이벤트 종류"
+            },
+            {
+              "url": "/docs/blog/firstbeta-statistics?lang=ko",
+              "title": "첫 베타 테스트 통계"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

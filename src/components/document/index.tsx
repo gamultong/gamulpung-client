@@ -7,12 +7,17 @@ import { useSearchParams } from 'next/navigation';
 import { Converter } from 'showdown';
 import { useEffect, useState } from 'react';
 
+type AsideType = {
+  [key: string]: { link: string; [key: string]: string };
+};
+
 export default function Document({ endpoint, files, dir }: { endpoint: string; files: string[]; dir: string }) {
   const url = process.env.NEXT_PUBLIC_HOST;
   const [data, setData] = useState('');
   const lang = useSearchParams().get('lang') || 'ko';
   const doc = useSearchParams().get('doc') || files[0];
-  const asideData: { [key: string]: { link: string; [key: string]: string } } = aside[lang as keyof typeof aside];
+  const asideData: AsideType = aside[lang as keyof typeof aside];
+
   const fetchMarkdownFiles = async () => {
     try {
       const url = process.env.NEXT_PUBLIC_HOST;
@@ -25,9 +30,9 @@ export default function Document({ endpoint, files, dir }: { endpoint: string; f
       setData(htmlData);
     } catch (error) {
       console.error('Error fetching markdown files:', error);
-      return '';
     }
   };
+
   useEffect(() => {
     fetchMarkdownFiles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -41,16 +46,17 @@ export default function Document({ endpoint, files, dir }: { endpoint: string; f
             <details key={key} open={endpoint === asideData[key].link}>
               <summary>{key}</summary>
               <ul>
-                {Object.entries(asideData[key as keyof typeof asideData]).map(([value, href]) =>
-                  value !== 'link' ? (
-                    <Link
-                      key={value}
-                      href={`${url}/documents/${asideData[key].link.replace(/ /g, '-').toLowerCase()}?lang=${lang}&doc=${href}`}
-                      prefetch={false}
-                    >
-                      <li>{value}</li>
-                    </Link>
-                  ) : null,
+                {Object.entries(asideData[key as keyof typeof asideData]).map(
+                  ([value, href]) =>
+                    value !== 'link' && (
+                      <Link
+                        key={value}
+                        href={`${url}/documents/${asideData[key].link.replace(/ /g, '-').toLowerCase()}?lang=${lang}&doc=${href}`}
+                        prefetch={false}
+                      >
+                        <li>{value}</li>
+                      </Link>
+                    ),
                 )}
               </ul>
             </details>

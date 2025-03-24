@@ -4,6 +4,7 @@ import StepVideo from '@/components/stepVideo';
 import Image from 'next/image';
 import data from './video.json';
 import MainStatComponent from '@/components/mainStatComponent';
+import SiteMapGraph from '@/components/sitemapComponent';
 
 export default function Home() {
   const host = process.env.NEXT_PUBLIC_HOST;
@@ -16,6 +17,7 @@ export default function Home() {
           <button>PLAY</button>
         </Link>
       </div>
+      <SiteMapGraph />
       <MainStatComponent />
       <div className={S.rules}>
         <h1>How to Play</h1>
