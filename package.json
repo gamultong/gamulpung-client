@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@pixi/react": "^7.1.2",
-    "next": "^14.2.24",
+    "next": "^14.2.25",
     "pixi.js": "^7.4.2",
     "sass": "^1.80.7",
     "showdown": "^2.1.0",
