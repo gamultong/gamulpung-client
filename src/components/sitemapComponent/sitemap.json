@@ -1,9 +1,7 @@
 {
-  "root": [
-    {
-      "url": "/",
-      "title": "root"
-    },
+  "url": "/",
+  "title": "root",
+  "child": [
     {
       "url": "/play",
       "title": "play"
@@ -15,15 +13,15 @@
     {
       "url": "/docs",
       "title": "Documents",
-      "child": {
-        "en": {
-          "how-to-play": [
+      "child": [
+        {
+          "url": "/docs?lang=en",
+          "title": "English",
+          "child": [
             {
               "url": "/docs/how-to-play/rules-of-pung?lang=en",
               "title": "Rules Of Gamulpung"
-            }
-          ],
-          "release-notes": [
+            },
             {
               "url": "/docs/release-notes/v0-1-2?lang=en",
               "title": "V0.1.2"
@@ -31,9 +29,7 @@
             {
               "url": "/docs/release-notes/v0-1-1?lang=en",
               "title": "V0.1.1"
-            }
-          ],
-          "contribute-guide": [
+            },
             {
               "url": "/docs/contribute-guide/overview?lang=en",
               "title": "Overview"
@@ -57,23 +53,21 @@
             {
               "url": "/docs/contribute-guide/kinds-of-websocket-events?lang=en",
               "title": "Kinds of websocket events"
-            }
-          ],
-          "blog": [
+            },
             {
               "url": "/docs/blog/firstbeta-statistics?lang=en",
               "title": "First Beta Test Statistics"
             }
           ]
         },
-        "ko": {
-          "how-to-play": [
+        {
+          "url": "/docs?lang=ko",
+          "title": "Korean",
+          "child": [
             {
               "url": "/docs/how-to-play/rules-of-pung?lang=ko",
               "title": "가물펑 규칙"
-            }
-          ],
-          "release-notes": [
+            },
             {
               "url": "/docs/release-notes/v0-1-2?lang=ko",
               "title": "V0.1.2"
@@ -81,9 +75,7 @@
             {
               "url": "/docs/release-notes/v0-1-1?lang=ko",
               "title": "V0.1.1"
-            }
-          ],
-          "contribute-guide": [
+            },
             {
               "url": "/docs/contribute-guide/overview?lang=ko",
               "title": "개요"
@@ -107,16 +99,14 @@
             {
               "url": "/docs/contribute-guide/kinds-of-websocket-events?lang=ko",
               "title": "웹 소켓 이벤트 종류"
-            }
-          ],
-          "blog": [
+            },
             {
               "url": "/docs/blog/firstbeta-statistics?lang=ko",
               "title": "첫 베타 테스트 통계"
             }
           ]
         }
-      }
+      ]
     }
   ]
 }
