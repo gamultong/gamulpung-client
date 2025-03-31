@@ -1,6 +1,6 @@
 {
   "url": "/",
-  "title": "root",
+  "title": "Main Page",
   "child": [
     {
       "url": "/play",

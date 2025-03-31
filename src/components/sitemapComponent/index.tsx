@@ -31,25 +31,15 @@ export default function SiteMapGraph() {
 
   useEffect(() => {
     const width = windowWidth;
-    const height = windowWidth / 2;
-
+    const height = windowWidth / 3;
     const nodes: Node[] = [];
     const links: Link[] = [];
 
     function traverse(current: DataItem, parent: string | null = null) {
-      const nodeId = current.url;
-      nodes.push({ id: nodeId, name: current.title });
-
-      if (parent) {
-        links.push({ source: parent, target: nodeId });
-      }
-
-      if (current.child) {
-        // Handle child object with language keys
-        Object.values(current.child).forEach(child => {
-          traverse(child, nodeId);
-        });
-      }
+      const id = current.url;
+      nodes.push({ id, name: current.title });
+      if (parent) links.push({ source: parent, target: id });
+      if (current.child) Object.values(current.child).forEach(c => traverse(c, id));
     }
 
     // Initialize with root data
@@ -70,7 +60,22 @@ export default function SiteMapGraph() {
       .force('charge', d3.forceManyBody().strength(-300))
       .force('center', d3.forceCenter(width / 2, height / 2));
 
-    const link = svg.append('g').attr('stroke', '#ccc').selectAll('line').data(links).enter().append('line');
+    // Define arrow marker
+    svg
+      .append('defs')
+      .append('marker')
+      .attr('id', 'arrowhead')
+      .attr('viewBox', '-10 -10 20 20')
+      .attr('refX', 11) // Increased from 15 to 20 to move closer to node
+      .attr('refY', 0)
+      .attr('orient', 'auto')
+      .attr('markerWidth', 20)
+      .attr('markerHeight', 20)
+      .append('path')
+      .attr('d', 'M-6.75,-6.75 L 0,0 L -6.75,6.75')
+      .attr('fill', '#ccc');
+
+    const link = svg.append('g').attr('stroke', '#ccc').selectAll('line').data(links).enter().append('line').attr('marker-end', 'url(#arrowhead)');
 
     const node = svg
       .append('g')
@@ -95,7 +100,8 @@ export default function SiteMapGraph() {
       .text(d => d.name)
       .attr('font-size', 10)
       .attr('dx', 10)
-      .attr('dy', 4);
+      .attr('dy', 4)
+      .call(drag(simulation));
 
     simulation.on('tick', () => {
       link
@@ -105,36 +111,29 @@ export default function SiteMapGraph() {
         .attr('y2', d => (d.target as Node).y ?? 0);
 
       node.attr('cx', d => d.x ?? 0).attr('cy', d => d.y ?? 0);
-
       label.attr('x', d => d.x ?? 0).attr('y', d => d.y ?? 0);
     });
 
-    function drag(simulation: d3.Simulation<Node, undefined>) {
-      function dragstarted(event: d3.D3DragEvent<SVGElement, Node, Node>, d: Node) {
-        if (!event.active) {
-          simulation.alphaTarget(0.3).restart();
-          document.body.style.cursor = 'grabbing';
-        }
+    function drag<T extends SVGElement>(simulation: d3.Simulation<Node, undefined>) {
+      const start = (event: d3.D3DragEvent<T, Node, Node>, d: Node) => {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        document.body.style.cursor = 'grabbing';
         d.fx = d.x;
         d.fy = d.y;
-      }
+      };
 
-      function dragged(event: d3.D3DragEvent<SVGAElement, Node, Node>, d: Node) {
+      const drag = (event: d3.D3DragEvent<T, Node, Node>, d: Node) => {
         document.body.style.cursor = 'grabbing';
         d.fx = event.x;
         d.fy = event.y;
-      }
+      };
 
-      function dragended(event: d3.D3DragEvent<SVGAElement, Node, Node>, d: Node) {
-        if (!event.active) {
-          simulation.alphaTarget(0);
-          document.body.style.cursor = 'grab';
-        }
-        d.fx = null;
-        d.fy = null;
-      }
-
-      return d3.drag<SVGCircleElement, Node>().on('start', dragstarted).on('drag', dragged).on('end', dragended);
+      const end = (event: d3.D3DragEvent<T, Node, Node>, d: Node) => {
+        if (!event.active) simulation.alphaTarget(0);
+        document.body.style.cursor = 'grab';
+        d.fx = d.fy = null;
+      };
+      return d3.drag<T, Node>().on('start', start).on('drag', drag).on('end', end);
     }
 
     function NodeMouseOver(event: MouseEvent) {
@@ -147,20 +146,15 @@ export default function SiteMapGraph() {
       document.body.style.cursor = 'default';
     }
 
-    function NodeClick(event: MouseEvent, d: Node) {
-      // center the node and sort all nodes
+    function NodeClick(e: MouseEvent, d: Node) {
       simulation
         .force('center', d3.forceCenter(width / 2, height / 2))
         .alpha(1) // 다시 시뮬레이션 시작
         .restart();
-
-      // 2. 모든 노드의 고정 좌표 초기화
       simulation.nodes().forEach(node => {
         node.fx = null;
         node.fy = null;
       });
-
-      // 3. 선택 노드를 중심에 고정
       d.fx = width / 2;
       d.fy = height / 2;
     }
@@ -168,7 +162,7 @@ export default function SiteMapGraph() {
 
   return (
     <>
-      <h1>Site Map</h1>
+      <h1>Site Map Graph</h1>
       <svg ref={ref} className="w-full h-full border rounded shadow" />
     </>
   );
