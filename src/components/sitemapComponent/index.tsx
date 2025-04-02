@@ -26,6 +26,13 @@ interface Link extends d3.SimulationLinkDatum<Node> {
 }
 
 export default function SiteMapGraph() {
+  const nodeInfo = {
+    radius: 10,
+    normal: 'steelblue',
+    active: 'red',
+  };
+  const linkColor = '#ccc';
+
   const ref = useRef<SVGSVGElement>(null);
   const { windowWidth } = useScreenSize();
 
@@ -44,7 +51,6 @@ export default function SiteMapGraph() {
 
     // Initialize with root data
     traverse(data);
-
     const svg = d3.select(ref.current).attr('width', width).attr('height', height);
     svg.selectAll('*').remove();
 
@@ -75,7 +81,7 @@ export default function SiteMapGraph() {
       .attr('d', 'M-6.75,-6.75 L 0,0 L -6.75,6.75')
       .attr('fill', '#ccc');
 
-    const link = svg.append('g').attr('stroke', '#ccc').selectAll('line').data(links).enter().append('line').attr('marker-end', 'url(#arrowhead)');
+    const link = svg.append('g').attr('stroke', linkColor).selectAll('line').data(links).enter().append('line').attr('marker-end', 'url(#arrowhead)');
 
     const node = svg
       .append('g')
@@ -85,8 +91,8 @@ export default function SiteMapGraph() {
       .data(nodes)
       .enter()
       .append('circle')
-      .attr('r', 10)
-      .attr('fill', 'steelblue')
+      .attr('r', nodeInfo.radius)
+      .attr('fill', nodeInfo.normal)
       .call(drag(simulation))
       .call(node => node.on('mouseover', NodeMouseOver).on('mouseout', NodeMouseOut))
       .on('click', NodeClick);
@@ -98,7 +104,7 @@ export default function SiteMapGraph() {
       .enter()
       .append('text')
       .text(d => d.name)
-      .attr('font-size', 10)
+      .attr('font-size', (nodeInfo.radius * 4) / 3)
       .attr('dx', 10)
       .attr('dy', 4)
       .call(drag(simulation));
@@ -137,12 +143,12 @@ export default function SiteMapGraph() {
     }
 
     function NodeMouseOver(event: MouseEvent) {
-      d3.select(event.target as SVGCircleElement).attr('fill', 'red');
+      d3.select(event.target as SVGCircleElement).attr('fill', nodeInfo.active);
       document.body.style.cursor = 'grab';
     }
 
     function NodeMouseOut(event: MouseEvent) {
-      d3.select(event.target as SVGCircleElement).attr('fill', 'steelblue');
+      d3.select(event.target as SVGCircleElement).attr('fill', nodeInfo.normal);
       document.body.style.cursor = 'default';
     }
 
@@ -158,6 +164,7 @@ export default function SiteMapGraph() {
       d.fx = width / 2;
       d.fy = height / 2;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowWidth]);
 
   return (
