@@ -19,7 +19,7 @@ This project is an online multiplayer version of Minesweeper, where the map expa
 ### Project Structure
 - **/src**: Contains the source code for the frontend and backend.
 - **/public**: Contains static files and assets.
-- **/putlic/docs**: Contains Documents for Contribute.
+- **/putlic/documents**: Contains Documents for Contribute.
 
 ## Play
 Let's play the game [here](https://gamultong.github.io/gamulpung-client/).
