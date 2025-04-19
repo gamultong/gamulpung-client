@@ -4,7 +4,7 @@
   "child": [
     {
       "url": "/gamulpung-client/play",
-      "title": "play"
+      "title": "Play"
     },
     {
       "url": "https://github.com/gamultong",
@@ -22,31 +22,31 @@
               "url": "/gamulpung-client/documents/release-notes?lang=en",
               "title": "Release Notes",
               "child": [
-                { "url": "/gamulpung-client/documents/release-notes/v0-1-2?lang=en", "title": "V0.1.2" },
-                { "url": "/gamulpung-client/documents/release-notes/v0-1-1?lang=en", "title": "V0.1.1" }
+                { "url": "/gamulpung-client/documents/release-notes/?doc=v0-1-2&lang=en", "title": "V0.1.2" },
+                { "url": "/gamulpung-client/documents/release-notes/?doc=v0-1-1&lang=en", "title": "V0.1.1" }
               ]
             },
             {
               "url": "/gamulpung-client/documents/how-to-play?lang=en",
               "title": "How to Play",
-              "child": [{ "url": "/gamulpung-client/documents/how-to-play/rules-of-pung?lang=en", "title": "Rules Of Gamulpung" }]
+              "child": [{ "url": "/gamulpung-client/documents/how-to-play/?doc=rules_of_pung&lang=en", "title": "Rules Of Gamulpung" }]
             },
             {
               "url": "/gamulpung-client/documents/contribute-guide?lang=en",
               "title": "Contribute Guide",
               "child": [
-                { "url": "/gamulpung-client/documents/contribute-guide/overview?lang=en", "title": "Overview" },
-                { "url": "/gamulpung-client/documents/contribute-guide/back?lang=en", "title": "Backend" },
-                { "url": "/gamulpung-client/documents/contribute-guide/about-dashboard?lang=en", "title": "About dashboard" },
-                { "url": "/gamulpung-client/documents/contribute-guide/about-interactions?lang=en", "title": "About interactions" },
-                { "url": "/gamulpung-client/documents/contribute-guide/how-to-render?lang=en", "title": "How to render tiles" },
-                { "url": "/gamulpung-client/documents/contribute-guide/kinds-of-websocket-events?lang=en", "title": "Kinds of websocket events" }
+                { "url": "/gamulpung-client/documents/contribute-guide/?doc=overview&lang=en", "title": "Overview" },
+                { "url": "/gamulpung-client/documents/contribute-guide/?doc=back&lang=en", "title": "Backend" },
+                { "url": "/gamulpung-client/documents/contribute-guide/?doc=about_dashboard&lang=en", "title": "About dashboard" },
+                { "url": "/gamulpung-client/documents/contribute-guide/?doc=about_interactions&lang=en", "title": "About interactions" },
+                { "url": "/gamulpung-client/documents/contribute-guide/?doc=how_to_render&lang=en", "title": "How to render tiles" },
+                { "url": "/gamulpung-client/documents/contribute-guide/?doc=kinds_of_websocket_events&lang=en", "title": "Kinds of websocket events" }
               ]
             },
             {
               "url": "/gamulpung-client/documents/blog?lang=en",
               "title": "Blog",
-              "child": [{ "url": "/gamulpung-client/documents/blog/firstbeta-statistics?lang=en", "title": "First Beta Test Statistics" }]
+              "child": [{ "url": "/gamulpung-client/documents/blog/?doc=firstbeta_statistics&lang=en", "title": "First Beta Test Statistics" }]
             }
           ]
         },
@@ -58,36 +58,31 @@
               "url": "/gamulpung-client/documents/release-notes?lang=ko",
               "title": "릴리즈 노트",
               "child": [
-                { "url": "/gamulpung-client/documents/release-notes/v0-1-2?lang=ko", "title": "V0.1.2" },
-                { "url": "/gamulpung-client/documents/release-notes/v0-1-1?lang=ko", "title": "V0.1.1" }
+                { "url": "/gamulpung-client/documents/release-notes/?doc=v0-1-2&lang=ko", "title": "V0.1.2" },
+                { "url": "/gamulpung-client/documents/release-notes/?doc=v0-1-1&lang=ko", "title": "V0.1.1" }
               ]
             },
             {
               "url": "/gamulpung-client/documents/how-to-play?lang=ko",
               "title": "플레이 방법",
-              "child": [{ "url": "/gamulpung-client/documents/how-to-play/rules-of-pung?lang=ko", "title": "가물펑 규칙" }]
+              "child": [{ "url": "/gamulpung-client/documents/how-to-play/?doc=rules_of_pung&lang=ko", "title": "가물펑 규칙" }]
             },
             {
               "url": "/gamulpung-client/documents/contribute-guide?lang=ko",
               "title": "기여 가이드",
               "child": [
-                { "url": "/gamulpung-client/documents/contribute-guide/overview?lang=ko", "title": "개요" },
-                { "url": "/gamulpung-client/documents/contribute-guide/back?lang=ko", "title": "백엔드" },
-                { "url": "/gamulpung-client/documents/contribute-guide/about-dashboard?lang=ko", "title": "대시보드란" },
-                { "url": "/gamulpung-client/documents/contribute-guide/about-interactions?lang=ko", "title": "상호작용이란" },
-                { "url": "/gamulpung-client/documents/contribute-guide/how-to-render?lang=ko", "title": "타일을 렌더링하는 법" },
-                { "url": "/gamulpung-client/documents/contribute-guide/kinds-of-websocket-events?lang=ko", "title": "웹 소켓 이벤트 종류" }
+                { "url": "/gamulpung-client/documents/contribute-guide/?doc=overview&lang=ko", "title": "개요" },
+                { "url": "/gamulpung-client/documents/contribute-guide/?doc=back&lang=ko", "title": "백엔드" },
+                { "url": "/gamulpung-client/documents/contribute-guide/?doc=about_dashboard&lang=ko", "title": "대시보드란" },
+                { "url": "/gamulpung-client/documents/contribute-guide/?doc=about_interactions&lang=ko", "title": "상호작용이란" },
+                { "url": "/gamulpung-client/documents/contribute-guide/?doc=how_to_render&lang=ko", "title": "타일을 렌더링하는 법" },
+                { "url": "/gamulpung-client/documents/contribute-guide/?doc=kinds_of_websocket_events&lang=ko", "title": "웹 소켓 이벤트 종류" }
               ]
             },
             {
               "url": "/gamulpung-client/documents/blog?lang=ko",
               "title": "블로그",
-              "child": [{ "url": "/gamulpung-client/documents/blog/firstbeta-statistics?lang=ko", "title": "첫 베타 테스트 통계" }]
-            },
-            {
-              "url": "/gamulpung-client/documents/blog?lang=ko",
-              "title": "블로그",
-              "child": [{ "url": "/gamulpung-client/documents/blog/firstbeta-statistics?lang=ko", "title": "첫 베타 테스트 통계" }]
+              "child": [{ "url": "/gamulpung-client/documents/blog/?doc=firstbeta_statistics&lang=ko", "title": "첫 베타 테스트 통계" }]
             }
           ]
         }
