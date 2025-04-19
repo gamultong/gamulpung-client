@@ -5,6 +5,14 @@
   font-style: normal;
 }
 
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Pretendard-Regular';
+}
+
 .document {
   $aside-width: 200px;
   margin-top: 55px;
@@ -14,8 +22,8 @@
   display: flex;
   .aside {
     min-width: $aside-width;
-    height: calc(100vh - 55px);
     padding: 20px;
+    min-height: 50svh;
     border-right: 2px solid black;
     position: sticky;
     position: -webkit-sticky;
@@ -50,8 +58,6 @@
     padding-bottom: 100px;
     width: calc(100svw - #{$aside-width});
     display: flex;
-    height: calc(100svh - 55px);
-    overflow: auto;
     flex-direction: column;
     gap: 20px;
     h1 {

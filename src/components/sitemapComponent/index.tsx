@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import * as d3 from 'd3';
+import { CSSProperties, useCallback, useEffect } from 'react';
+import ReactFlow, { Node, Edge, Controls, Background, useNodesState, useEdgesState, MarkerType, NodeMouseHandler } from 'react-flow-renderer';
 import data from './sitemap.json';
 import useScreenSize from '@/hooks/useScreenSize';
 
@@ -11,165 +11,120 @@ interface DataItem {
   child?: DataItem[];
 }
 
-interface Node extends d3.SimulationNodeDatum {
-  id: string;
-  name: string;
-  x?: number;
-  y?: number;
-  fx?: number | null;
-  fy?: number | null;
-}
+const normalNodeStyle: CSSProperties = {
+  background: '#6495ED',
+  color: 'white',
+  border: '2px solid white',
+  width: 120,
+  borderRadius: '10px',
+  fontSize: '16px',
+};
 
-interface Link extends d3.SimulationLinkDatum<Node> {
-  source: string | Node;
-  target: string | Node;
-}
+const activeNodeStyle: CSSProperties = {
+  background: '#FF6347',
+  color: 'white',
+  border: '2px solid white',
+  width: 120,
+  borderRadius: '10px',
+  fontSize: '16px',
+};
 
 export default function SiteMapGraph() {
-  const ref = useRef<SVGSVGElement>(null);
   const { windowWidth } = useScreenSize();
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
 
   useEffect(() => {
-    const width = windowWidth;
-    const height = windowWidth / 2;
+    const [initialNodes, initialEdges] = [[], []] as [Node[], Edge[]];
+    const [NODE_WIDTH, HORIZONTAL_GAP] = [150, 50];
 
-    const nodes: Node[] = [];
-    const links: Link[] = [];
+    const calculateSubtreeWidth = (node: DataItem): number => {
+      if (!node.child || node.child.length === 0) return NODE_WIDTH;
+      const childWidths = node.child.map(calculateSubtreeWidth);
+      return childWidths.reduce((a, b) => a + b, 0) + (node.child.length - 1) * HORIZONTAL_GAP;
+    };
 
-    function traverse(current: DataItem, parent: string | null = null) {
-      const nodeId = current.url;
-      nodes.push({ id: nodeId, name: current.title });
+    const traverse = (current: DataItem, parent: string | null = null, level: number = 0, xOffset: number = 0): number => {
+      const id = current.url;
+      let currentX = xOffset;
 
-      if (parent) {
-        links.push({ source: parent, target: nodeId });
-      }
+      if (current.child && current.child.length > 0) {
+        const childXOffsets: number[] = [];
+        let nextX = xOffset;
 
-      if (current.child) {
-        // Handle child object with language keys
-        Object.values(current.child).forEach(child => {
-          traverse(child, nodeId);
+        current.child.forEach(child => {
+          const subtreeWidth = calculateSubtreeWidth(child);
+          const childCenterX = traverse(child, id, level + 1, nextX);
+          childXOffsets.push(childCenterX);
+          nextX += subtreeWidth + HORIZONTAL_GAP;
         });
-      }
-    }
 
-    // Initialize with root data
-    traverse(data);
-
-    const svg = d3.select(ref.current).attr('width', width).attr('height', height);
-    svg.selectAll('*').remove();
-
-    const simulation = d3
-      .forceSimulation<Node>(nodes)
-      .force(
-        'link',
-        d3
-          .forceLink<Node, Link>(links)
-          .id(d => d.id)
-          .distance(100),
-      )
-      .force('charge', d3.forceManyBody().strength(-300))
-      .force('center', d3.forceCenter(width / 2, height / 2));
-
-    const link = svg.append('g').attr('stroke', '#ccc').selectAll('line').data(links).enter().append('line');
-
-    const node = svg
-      .append('g')
-      .attr('stroke', '#fff')
-      .attr('stroke-width', 3)
-      .selectAll('circle')
-      .data(nodes)
-      .enter()
-      .append('circle')
-      .attr('r', 10)
-      .attr('fill', 'steelblue')
-      .call(drag(simulation))
-      .call(node => node.on('mouseover', NodeMouseOver).on('mouseout', NodeMouseOut))
-      .on('click', NodeClick);
-
-    const label = svg
-      .append('g')
-      .selectAll('text')
-      .data(nodes)
-      .enter()
-      .append('text')
-      .text(d => d.name)
-      .attr('font-size', 10)
-      .attr('dx', 10)
-      .attr('dy', 4);
-
-    simulation.on('tick', () => {
-      link
-        .attr('x1', d => (d.source as Node).x ?? 0)
-        .attr('y1', d => (d.source as Node).y ?? 0)
-        .attr('x2', d => (d.target as Node).x ?? 0)
-        .attr('y2', d => (d.target as Node).y ?? 0);
-
-      node.attr('cx', d => d.x ?? 0).attr('cy', d => d.y ?? 0);
-
-      label.attr('x', d => d.x ?? 0).attr('y', d => d.y ?? 0);
-    });
-
-    function drag(simulation: d3.Simulation<Node, undefined>) {
-      function dragstarted(event: d3.D3DragEvent<SVGElement, Node, Node>, d: Node) {
-        if (!event.active) {
-          simulation.alphaTarget(0.3).restart();
-          document.body.style.cursor = 'grabbing';
-        }
-        d.fx = d.x;
-        d.fy = d.y;
+        currentX = childXOffsets.reduce((a, b) => a + b) / childXOffsets.length;
       }
 
-      function dragged(event: d3.D3DragEvent<SVGAElement, Node, Node>, d: Node) {
-        document.body.style.cursor = 'grabbing';
-        d.fx = event.x;
-        d.fy = event.y;
-      }
-
-      function dragended(event: d3.D3DragEvent<SVGAElement, Node, Node>, d: Node) {
-        if (!event.active) {
-          simulation.alphaTarget(0);
-          document.body.style.cursor = 'grab';
-        }
-        d.fx = null;
-        d.fy = null;
-      }
-
-      return d3.drag<SVGCircleElement, Node>().on('start', dragstarted).on('drag', dragged).on('end', dragended);
-    }
-
-    function NodeMouseOver(event: MouseEvent) {
-      d3.select(event.target as SVGCircleElement).attr('fill', 'red');
-      document.body.style.cursor = 'grab';
-    }
-
-    function NodeMouseOut(event: MouseEvent) {
-      d3.select(event.target as SVGCircleElement).attr('fill', 'steelblue');
-      document.body.style.cursor = 'default';
-    }
-
-    function NodeClick(event: MouseEvent, d: Node) {
-      // center the node and sort all nodes
-      simulation
-        .force('center', d3.forceCenter(width / 2, height / 2))
-        .alpha(1) // 다시 시뮬레이션 시작
-        .restart();
-
-      // 2. 모든 노드의 고정 좌표 초기화
-      simulation.nodes().forEach(node => {
-        node.fx = null;
-        node.fy = null;
+      initialNodes.push({
+        id,
+        data: { label: current.title },
+        position: { x: currentX, y: level * 150 },
+        style: normalNodeStyle,
       });
 
-      // 3. 선택 노드를 중심에 고정
-      d.fx = width / 2;
-      d.fy = height / 2;
+      if (parent) {
+        const MarkerEnd = { type: MarkerType.Arrow };
+        initialEdges.push({
+          id: `${parent}-${id}`,
+          source: parent,
+          target: id,
+          markerEnd: MarkerEnd,
+          animated: true,
+        });
+      }
+
+      return currentX;
+    };
+
+    traverse(data); // Start traversal from the root node
+    setNodes(initialNodes);
+    setEdges(initialEdges);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onNodeClick = useCallback<NodeMouseHandler>((ev, node: Node) => (window.location.href = node.id), []);
+
+  const onNodeMouseEnter = useCallback<NodeMouseHandler>((ev, node: Node) => {
+    if (node) {
+      const setToActive = (me: Node) => (me.id === node.id ? { ...me, style: activeNodeStyle } : me);
+      setNodes(n => n.map(no => setToActive(no)));
     }
-  }, [windowWidth]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onNodeMouseLeave = useCallback<NodeMouseHandler>((ev, node: Node) => {
+    if (node) {
+      const setToNormal = (me: Node) => (me.id === node.id ? { ...me, style: normalNodeStyle } : me);
+      setNodes(n => n.map(no => setToNormal(no)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <>
-      <h1>Site Map</h1>
-      <svg ref={ref} className="w-full h-full border rounded shadow" />
-    </>
+    <div style={{ width: '100%', height: '70vh' }}>
+      <h1 style={{ textAlign: 'center' }}>Site Map Graph</h1>
+      <div style={{ width: windowWidth, height: 'calc(100% - 40px)' }}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeMouseEnter={onNodeMouseEnter}
+          onNodeMouseLeave={onNodeMouseLeave}
+          onNodeClick={onNodeClick}
+          fitView
+        >
+          <Background />
+          <Controls />
+        </ReactFlow>
+      </div>
+    </div>
   );
 }
