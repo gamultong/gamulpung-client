@@ -16,7 +16,6 @@ body {
 .document {
   $aside-width: 200px;
   margin-top: 55px;
-  min-height: calc(100svh - 155px);
   background-color: #f7f8f7;
   font-family: 'pretendard-regular';
   color: black;
@@ -24,7 +23,7 @@ body {
   .aside {
     min-width: $aside-width;
     padding: 20px;
-    min-height: calc(100svh - 40px);
+    min-height: 50svh;
     border-right: 2px solid black;
     position: sticky;
     position: -webkit-sticky;
