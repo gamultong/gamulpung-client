@@ -45,6 +45,7 @@ export default function Document({ endpoint, files, dir }: { endpoint: string; f
   return (
     <div className={S.document}>
       <aside className={S.aside}>
+        <h2>Documentation</h2>
         {asideData &&
           Object.keys(asideData).map(key => (
             <details key={key} open={endpoint === asideData[key].link}>
