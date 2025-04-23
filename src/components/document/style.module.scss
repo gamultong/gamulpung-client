@@ -7,16 +7,19 @@
 
 .document {
   $aside-width: 200px;
-  margin-top: 55px;
+  $margin-top: 55px;
+  margin-top: $margin-top;
   background-color: #f7f8f7;
   font-family: 'pretendard-regular';
+  min-height: calc(100svh - 155px);
   color: black;
   display: flex;
   .aside {
     min-width: $aside-width;
-    padding: 20px;
-    min-height: 50svh;
+    padding: 25px;
+    border-bottom: 2px solid black;
     border-right: 2px solid black;
+    width: 300px;
     position: sticky;
     position: -webkit-sticky;
     top: 55px;
