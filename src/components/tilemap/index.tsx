@@ -1,7 +1,7 @@
 'use client';
 import { Container, Sprite, Stage, Text } from '@pixi/react';
 import { cloneElement, useMemo, useRef, useState } from 'react';
-import { Texture, TextStyle, SCALE_MODES } from 'pixi.js';
+import { Texture, TextStyle, SCALE_MODES, MIPMAP_MODES, WRAP_MODES } from 'pixi.js';
 import Paths from '@/assets/paths.json';
 import { useCursorStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
@@ -16,20 +16,30 @@ interface TilemapProps {
 }
 
 export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePaddingHeight, className, isMoving }: TilemapProps) {
+  // constants
   const cursorColors = useMemo(() => ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'], []);
   const { flagPaths, tileColors, countColors, boomPaths } = Paths;
+
+  // stores
   const { zoom } = useCursorStore();
   const { windowHeight, windowWidth } = useScreenSize();
 
+  // states
   const [innerZoom, setInnerZoom] = useState(zoom);
 
   // Generate textures for tiles, boom, and flags
-  const cachesRef = useRef({
+  const cachedSpritesRef = useRef({
     outerCachedSprite: new Map<string, JSX.Element>(),
     innerCachedSprite: new Map<string, JSX.Element>(),
     boomCachedSprite: new Map<string, JSX.Element>(),
     flagCachedSprite: new Map<string, JSX.Element>(),
   });
+
+  const getContext = (canvas: HTMLCanvasElement): CanvasRenderingContext2D =>
+    canvas.getContext('2d', {
+      willReadFrequently: false,
+      desynchronized: true,
+    }) as CanvasRenderingContext2D;
 
   // Memoize textures creation
   const textures = useMemo(() => {
@@ -37,18 +47,25 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
     const createTileTexture = (color1: string, color2: string) => {
       const key = `${color1}-${color2}-${tileSize}`;
-      if (newTileTextures.has(key)) return newTileTextures.get(key)!;
+      if (newTileTextures.has(key)) return newTileTextures.get(key);
 
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = tempCanvas.height = tileSize;
-      const ctx = tempCanvas.getContext('2d');
+      const ctx = getContext(tempCanvas);
       if (!ctx) return;
       const gradient = ctx.createLinearGradient(0, 0, tileSize, tileSize);
       gradient.addColorStop(0, color1);
       gradient.addColorStop(1, color2);
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, tileSize, tileSize);
-      const texture = Texture.from(tempCanvas, { resolution: 0.0001, scaleMode: SCALE_MODES.NEAREST });
+
+      const texture = Texture.from(tempCanvas);
+      texture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
+      texture.baseTexture.mipmap = MIPMAP_MODES.OFF;
+      texture.baseTexture.wrapMode = WRAP_MODES.CLAMP;
+      texture.baseTexture.setSize(tileSize, tileSize);
+      texture.baseTexture.resolution = 0.001;
+
       newTileTextures.set(key, texture);
       return texture;
     };
@@ -62,7 +79,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     // Boom texture
     const boomCanvas = document.createElement('canvas');
     boomCanvas.width = boomCanvas.height = tileSize;
-    const boomCtx = boomCanvas.getContext('2d');
+    const boomCtx = getContext(boomCanvas);
     if (boomCtx) {
       boomCtx.scale(zoom / 4, zoom / 4);
       const inner = new Path2D(boomPaths[0]);
@@ -71,7 +88,13 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       const outer = new Path2D(boomPaths[1]);
       boomCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
       boomCtx.fill(outer);
-      const boomTexture = Texture.from(boomCanvas, { resolution: 0.5, scaleMode: SCALE_MODES.NEAREST });
+
+      const boomTexture = Texture.from(boomCanvas);
+      boomTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
+      boomTexture.baseTexture.mipmap = MIPMAP_MODES.OFF;
+      boomTexture.baseTexture.setSize(tileSize, tileSize);
+      boomTexture.baseTexture.resolution = 0.5;
+
       newTileTextures.set('boom', boomTexture);
     }
 
@@ -79,7 +102,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     for (let i = 0; i < 4; i++) {
       const flagCanvas = document.createElement('canvas');
       flagCanvas.width = flagCanvas.height = tileSize;
-      const flagCtx = flagCanvas.getContext('2d');
+      const flagCtx = getContext(flagCanvas);
       if (!flagCtx) continue;
       const flagGradient = flagCtx.createLinearGradient(36.5, 212.5, 36.5, 259);
       flagGradient.addColorStop(0, '#E8E8E8');
@@ -92,7 +115,13 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       flagCtx.fill(flagPath);
       flagCtx.fillStyle = flagGradient;
       flagCtx.fill(polePath);
-      const flagTexture = Texture.from(flagCanvas, { resolution: 0.5, scaleMode: SCALE_MODES.NEAREST });
+
+      const flagTexture = Texture.from(flagCanvas);
+      flagTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
+      flagTexture.baseTexture.mipmap = MIPMAP_MODES.OFF;
+      flagTexture.baseTexture.setSize(tileSize, tileSize);
+      flagTexture.baseTexture.resolution = 0.5;
+
       newTileTextures.set(`flag-${i}`, flagTexture);
     }
     setInnerZoom(zoom);
@@ -128,7 +157,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       innerCachedSprite: innerCache,
       boomCachedSprite: boomCache,
       flagCachedSprite: flagCache,
-    } = cachesRef.current;
+    } = cachedSpritesRef.current;
 
     for (let ri = 0; ri < tiles.length; ri++) {
       for (let ci = 0; ci < tiles[ri].length; ci++) {
@@ -153,7 +182,15 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           let baseOuter = outerCache.get(outerKey);
           if (!baseOuter) {
             baseOuter = (
-              <Sprite scale={0.1} interactive={false} texture={outerTexture} width={tileSize} height={tileSize} cacheAsBitmapResolution={0.1} />
+              <Sprite
+                cullable={true}
+                scale={0.1}
+                interactive={false}
+                texture={outerTexture}
+                width={tileSize}
+                height={tileSize}
+                cacheAsBitmapResolution={0.1}
+              />
             );
             outerCache.set(outerKey, baseOuter);
           }
@@ -166,7 +203,17 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           let baseInner = innerCache.get(innerKey);
           if (!baseInner) {
             const size = tileSize - 10 * zoom;
-            baseInner = <Sprite scale={0.1} interactive={false} texture={innerTexture} width={size} height={size} cacheAsBitmapResolution={0.1} />;
+            baseInner = (
+              <Sprite
+                cullable={true}
+                scale={0.1}
+                interactive={false}
+                texture={innerTexture}
+                width={size}
+                height={size}
+                cacheAsBitmapResolution={0.1}
+              />
+            );
             innerCache.set(innerKey, baseInner);
           }
           innerSpritesArr.push(cloneElement(baseInner, { key: `inner-${tileKey}`, x: x + 5 * zoom, y: y + 5 * zoom }));
@@ -179,6 +226,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           if (!baseBoom) {
             baseBoom = (
               <Sprite
+                cullable={true}
                 scale={0.1}
                 interactive={false}
                 texture={textures.get('boom')}
@@ -200,7 +248,9 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           if (!baseFlag) {
             baseFlag = (
               <Sprite
+                cullable={true}
                 interactive={false}
+                interactiveChildren
                 texture={textures.get(`flag-${flagIndex}`)}
                 anchor={0.5}
                 scale={0.1}
@@ -250,7 +300,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       height={windowHeight}
       options={{
         backgroundColor: 0x808080,
-        resolution: isMoving ? 0.4 : 0.8,
+        resolution: isMoving ? 0.3 : 0.8,
         antialias: false,
         powerPreference: 'high-performance',
         autoDensity: true,
