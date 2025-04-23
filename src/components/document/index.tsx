@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import S from './style.module.scss';
 import aside from './docsPath.json';
+import './global.css';
 
 import { useSearchParams } from 'next/navigation';
 import { Converter } from 'showdown';

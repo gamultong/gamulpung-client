@@ -2,7 +2,7 @@ import Link from 'next/link';
 import S from './style.module.scss';
 import StepVideo from '@/components/stepVideo';
 import Image from 'next/image';
-import data from './video.json';
+import video from './video.json';
 import MainStatComponent from '@/components/mainStatComponent';
 import SiteMapGraph from '@/components/sitemapComponent';
 
@@ -21,7 +21,7 @@ export default function Home() {
       <MainStatComponent />
       <div className={S.rules}>
         <h1>How to Play</h1>
-        {data?.data.map(step => (
+        {video?.data.map(step => (
           <StepVideo key={step.id} num={step.id} text={step.description} source={step.gif} />
         ))}
       </div>
