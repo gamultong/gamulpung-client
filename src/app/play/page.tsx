@@ -14,6 +14,7 @@ import useWebSocketStore from '@/store/websocketStore';
 import Inactive from '@/components/inactive';
 import CanvasDashboard from '@/components/canvasDashboard';
 import TutorialStep from '@/components/tutorialstep';
+import ScoreBoard from '@/components/scoreboard';
 
 interface Point {
   x: number;
@@ -452,6 +453,7 @@ export default function Play() {
     <div className={S.page}>
       {leftReviveTime > 0 && <Inactive time={leftReviveTime} />}
       <TutorialStep />
+      <ScoreBoard />
       <CanvasDashboard tileSize={tileSize} renderRange={renderRange} maxTileCount={maxTileCount} />
       <CanvasRenderComponent
         leftReviveTime={leftReviveTime}
