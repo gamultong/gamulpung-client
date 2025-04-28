@@ -26,6 +26,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
   // states
   const [innerZoom, setInnerZoom] = useState(zoom);
+  const [cachedTextures, setCachedTextures] = useState(new Map<string, Texture>());
 
   // Generate textures for tiles, boom, and flags
   const cachedSpritesRef = useRef({
@@ -43,31 +44,31 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
   // Memoize textures creation
   const textures = useMemo(() => {
-    const newTileTextures = new Map<string, Texture>();
+    const newTileTextures = new Map(Array.from(cachedTextures.entries()).map(([key, t]) => [key, Texture.from(t.baseTexture)]));
 
     const createTileTexture = (color1: string, color2: string) => {
       const key = `${color1}-${color2}-${tileSize}`;
       if (newTileTextures.has(key)) return newTileTextures.get(key);
 
       const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = tempCanvas.height = tileSize;
+      const tileMinializedSize = Math.sqrt(tileSize / 5);
+      tempCanvas.width = tempCanvas.height = tileMinializedSize;
       const ctx = getContext(tempCanvas);
       if (!ctx) return;
-      const gradient = ctx.createLinearGradient(0, 0, tileSize, tileSize);
+      const gradient = ctx.createLinearGradient(0, 0, tileMinializedSize, tileMinializedSize);
       gradient.addColorStop(0, color1);
       gradient.addColorStop(1, color2);
       ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, tileSize, tileSize);
+      ctx.fillRect(0, 0, tileMinializedSize, tileMinializedSize);
 
       const texture = Texture.from(tempCanvas);
       texture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
       texture.baseTexture.mipmap = MIPMAP_MODES.OFF;
       texture.baseTexture.wrapMode = WRAP_MODES.CLAMP;
-      texture.baseTexture.setSize(tileSize, tileSize);
-      texture.baseTexture.resolution = 0.001;
+      texture.baseTexture.setSize(tileMinializedSize, tileMinializedSize);
+      texture.baseTexture.resolution = 0;
 
       newTileTextures.set(key, texture);
-      return texture;
     };
 
     // Textures for outer and inner tiles
@@ -78,10 +79,11 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
     // Boom texture
     const boomCanvas = document.createElement('canvas');
-    boomCanvas.width = boomCanvas.height = tileSize;
+    const boomMinimalized = 3;
+    boomCanvas.width = boomCanvas.height = tileSize / boomMinimalized;
     const boomCtx = getContext(boomCanvas);
     if (boomCtx) {
-      boomCtx.scale(zoom / 4, zoom / 4);
+      boomCtx.scale(zoom / boomMinimalized / 4, zoom / boomMinimalized / 4);
       const inner = new Path2D(boomPaths[0]);
       boomCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
       boomCtx.fill(inner);
@@ -92,23 +94,24 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       const boomTexture = Texture.from(boomCanvas);
       boomTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
       boomTexture.baseTexture.mipmap = MIPMAP_MODES.OFF;
-      boomTexture.baseTexture.setSize(tileSize, tileSize);
-      boomTexture.baseTexture.resolution = 0.5;
+      boomTexture.baseTexture.setSize(tileSize / boomMinimalized, tileSize / boomMinimalized);
+      boomTexture.baseTexture.resolution = 0.1;
 
       newTileTextures.set('boom', boomTexture);
     }
 
     // Flag textures
+    const flagMinimalized = 3;
     for (let i = 0; i < 4; i++) {
       const flagCanvas = document.createElement('canvas');
-      flagCanvas.width = flagCanvas.height = tileSize;
+      flagCanvas.width = flagCanvas.height = tileSize / flagMinimalized;
       const flagCtx = getContext(flagCanvas);
       if (!flagCtx) continue;
       const flagGradient = flagCtx.createLinearGradient(36.5, 212.5, 36.5, 259);
       flagGradient.addColorStop(0, '#E8E8E8');
       flagGradient.addColorStop(1, 'transparent');
-      flagCtx.translate(tileSize / 6, tileSize / 6);
-      flagCtx.scale(zoom / 4.5, zoom / 4.5);
+      flagCtx.translate(tileSize / flagMinimalized / 6, tileSize / flagMinimalized / 6);
+      flagCtx.scale(zoom / flagMinimalized / 4.5, zoom / flagMinimalized / 4.5);
       const flagPath = new Path2D(flagPaths[0]);
       const polePath = new Path2D(flagPaths[1]);
       flagCtx.fillStyle = cursorColors[i];
@@ -125,6 +128,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       newTileTextures.set(`flag-${i}`, flagTexture);
     }
     setInnerZoom(zoom);
+    setCachedTextures(newTileTextures);
     return newTileTextures;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileSize]);
@@ -141,7 +145,8 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
             fill: countColors[i],
           }),
       ),
-    [zoom, countColors],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [zoom],
   );
 
   // Memoize sprites creation using cached base sprites from useRef
@@ -189,7 +194,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
                 texture={outerTexture}
                 width={tileSize}
                 height={tileSize}
-                cacheAsBitmapResolution={0.1}
+                cacheAsBitmapResolution={0.0001}
               />
             );
             outerCache.set(outerKey, baseOuter);
@@ -204,7 +209,15 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           if (!baseInner) {
             const size = tileSize - 10 * zoom;
             baseInner = (
-              <Sprite cullable={true} scale={0.1} eventMode="none" texture={innerTexture} width={size} height={size} cacheAsBitmapResolution={0.1} />
+              <Sprite
+                cullable={true}
+                scale={0.1}
+                eventMode="none"
+                texture={innerTexture}
+                width={size}
+                height={size}
+                cacheAsBitmapResolution={0.001}
+              />
             );
             innerCache.set(innerKey, baseInner);
           }
@@ -264,9 +277,10 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
               text={content}
               x={x + tileSize / 2}
               y={y + tileSize / 2}
-              resolution={0.7}
+              resolution={0.5}
               anchor={0.5}
               style={cachedTextStyles[num - 1]}
+              cacheAsBitmapResolution={0.001}
             />,
           );
         }
@@ -294,10 +308,10 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         resolution: isMoving ? 0.3 : 0.8,
         antialias: false,
         powerPreference: 'high-performance',
-        autoDensity: true,
+        autoDensity: false,
       }}
     >
-      <Container sortableChildren={false} eventMode="none" cacheAsBitmap={!isMoving && zoom !== innerZoom}>
+      <Container name={'container'} sortableChildren={false} eventMode="none" cacheAsBitmap={!isMoving && zoom !== innerZoom}>
         {outerSprites}
         {innerSprites}
         {boomSprites}

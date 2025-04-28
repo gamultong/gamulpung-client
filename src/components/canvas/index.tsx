@@ -363,8 +363,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   };
 
   // Check if the other cursor is on the tile
-  const checkIsOtherCursorOnTile = (tileArrayX: number, tileArrayY: number) =>
-    cursors.some(c => c.x === tileArrayX + startPoint.x && c.y === tileArrayY + startPoint.y);
+  const checkIsOtherCursorOnTile = (tileX: number, tileY: number) => cursors.some(c => c.x === tileX + startPoint.x && c.y === tileY + startPoint.y);
 
   /**
    * Find path using A* algorithm avoiding flags and move cursor in 8 directions
@@ -391,13 +390,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const grid = tiles.map((row, i) => row.map((tile, j) => (checkTileHasOpened(tile) ? new TileNode(j, i) : null))) as (TileNode | null)[][];
 
     /** initialize open and close list */
-    let openList = [start];
+    let openNodeList = [start];
     const closedList = [];
     start.g = 0;
     start.f = start.g + start.h;
 
-    while (openList.length > 0) {
-      const current = openList.reduce((a, b) => (a.f < b.f ? a : b));
+    while (openNodeList.length > 0) {
+      const current = openNodeList.reduce((a, b) => (a.f < b.f ? a : b));
       if (current.x === target.x && current.y === target.y) {
         const path = [];
         let temp = current;
@@ -410,7 +409,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         }
         return path;
       }
-      openList = openList.filter(node => node !== current);
+      openNodeList = openNodeList.filter(node => node !== current);
       closedList.push(current);
 
       /** Find neighbor nodes from current node. */
@@ -420,7 +419,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         // Apply different cost for diagonal movement
         const tempG = current.g + (isDiagonal ? 1.5 : 1);
         if (tempG >= neighbor.g) continue;
-        if (!openList.includes(neighbor)) openList.push(neighbor);
+        if (!openNodeList.includes(neighbor)) openNodeList.push(neighbor);
         neighbor.parent = current;
         neighbor.g = tempG;
         neighbor.h = Math.abs(neighbor.x - target.x) + Math.abs(neighbor.y - target.y);
@@ -498,13 +497,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     );
     Promise.all([lotteriaChabFont.load()]).then(() => {
       // Set vector images
+      document.fonts.add(lotteriaChabFont);
       const cursor = new Path2D(cursorPaths);
       const stun = [new Path2D(stunPaths[0]), new Path2D(stunPaths[1]), new Path2D(stunPaths[2])];
       const flag = { flag: new Path2D(flagPaths[0]), pole: new Path2D(flagPaths[1]) };
       const boom = { inner: new Path2D(boomPaths[0]), outer: new Path2D(boomPaths[1]) };
       setCachedVectorAssets({ cursor, stun, flag, boom });
       setIsInitializing(false);
-      document.fonts.add(lotteriaChabFont);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles, isInitializing, tileSize, zoom]);
@@ -520,7 +519,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     <>
       {isInitializing ? (
         <div className={S.loading}>
-          <h1>Loading...</h1>
+          <h1>Assets Loading...</h1>
           <div className={`${tiles.length < 1 ? S.loadingBar : S.loadComplete}`} />
         </div>
       ) : (
