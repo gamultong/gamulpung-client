@@ -185,7 +185,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
               <Sprite
                 cullable={true}
                 scale={0.1}
-                interactive={false}
+                eventMode="none"
                 texture={outerTexture}
                 width={tileSize}
                 height={tileSize}
@@ -204,15 +204,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           if (!baseInner) {
             const size = tileSize - 10 * zoom;
             baseInner = (
-              <Sprite
-                cullable={true}
-                scale={0.1}
-                interactive={false}
-                texture={innerTexture}
-                width={size}
-                height={size}
-                cacheAsBitmapResolution={0.1}
-              />
+              <Sprite cullable={true} scale={0.1} eventMode="none" texture={innerTexture} width={size} height={size} cacheAsBitmapResolution={0.1} />
             );
             innerCache.set(innerKey, baseInner);
           }
@@ -228,7 +220,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
               <Sprite
                 cullable={true}
                 scale={0.1}
-                interactive={false}
+                eventMode="none"
                 texture={textures.get('boom')}
                 width={tileSize}
                 height={tileSize}
@@ -249,8 +241,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
             baseFlag = (
               <Sprite
                 cullable={true}
-                interactive={false}
-                interactiveChildren
+                eventMode="none"
                 texture={textures.get(`flag-${flagIndex}`)}
                 anchor={0.5}
                 scale={0.1}
@@ -273,7 +264,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
               text={content}
               x={x + tileSize / 2}
               y={y + tileSize / 2}
-              resolution={0.8}
+              resolution={0.7}
               anchor={0.5}
               style={cachedTextStyles[num - 1]}
             />,
@@ -306,7 +297,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         autoDensity: true,
       }}
     >
-      <Container sortableChildren={false} interactiveChildren={false} cacheAsBitmap={!isMoving && zoom !== innerZoom}>
+      <Container sortableChildren={false} eventMode="none" cacheAsBitmap={!isMoving && zoom !== innerZoom}>
         {outerSprites}
         {innerSprites}
         {boomSprites}
