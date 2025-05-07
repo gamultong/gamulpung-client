@@ -1,6 +1,6 @@
 'use client';
 import S from './style.module.scss';
-import React, { useRef, useEffect, useState, Dispatch, SetStateAction } from 'react';
+import React, { useRef, useEffect, useState, Dispatch, SetStateAction, useLayoutEffect } from 'react';
 import Paths from '@/assets/paths.json';
 
 import useScreenSize from '@/hooks/useScreenSize';
@@ -69,7 +69,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   setCachingTiles,
 }) => {
   /** constants */
-  const movingSpeed = 200; // milliseconds
+  const MOVE_SPEED = 200; // ms
+  const ZOOM_MIN = 0.4; // min zoom level
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
   const { boomPaths, cursorPaths, flagPaths, stunPaths } = Paths;
@@ -183,7 +184,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const start = performance.now();
       const animate = (now: number) => {
         const elapsed = now - start;
-        const progress = Math.min(elapsed / movingSpeed, 1);
+        const progress = Math.min(elapsed / MOVE_SPEED, 1);
         const translate = tileSize * (1 - progress);
         const [translateX, translateY] = [translate * dx, translate * dy];
         currentRefs.forEach(c => (c.style.transform = `translate(${translateX}px, ${translateY}px)`));
@@ -215,20 +216,20 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       // }
 
       if (dx === 1 && dy === 1) goDownRight();
-      else if (dx === 1 && dy === -1) goUpRight();
-      else if (dx === 1 && dy === 0) goright();
-      else if (dx === -1 && dy === 1) goDownLeft();
-      else if (dx === -1 && dy === -1) goUpLeft();
-      else if (dx === -1 && dy === 0) goleft();
-      else if (dx === 0 && dy === 1) godown();
-      else if (dx === 0 && dy === -1) goup();
+      if (dx === 1 && dy === -1) goUpRight();
+      if (dx === 1 && dy === 0) goright();
+      if (dx === -1 && dy === 1) goDownLeft();
+      if (dx === -1 && dy === -1) goUpLeft();
+      if (dx === -1 && dy === 0) goleft();
+      if (dx === 0 && dy === 1) godown();
+      if (dx === 0 && dy === -1) goup();
 
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       currentPath = path;
       setPaths(paths.slice(index));
-      if (zoom < 0.4) return;
+      if (zoom < ZOOM_MIN) return;
       animationOfMoving(dx, dy);
-    }, movingSpeed);
+    }, MOVE_SPEED);
   };
 
   const clickEvent = (x: number, y: number, click_type: 'GENERAL_CLICK' | 'SPECIAL_CLICK') => {
@@ -363,8 +364,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   };
 
   // Check if the other cursor is on the tile
-  const checkIsOtherCursorOnTile = (tileArrayX: number, tileArrayY: number) =>
-    cursors.some(c => c.x === tileArrayX + startPoint.x && c.y === tileArrayY + startPoint.y);
+  const checkIsOtherCursorOnTile = (tileX: number, tileY: number) => cursors.some(c => c.x === tileX + startPoint.x && c.y === tileY + startPoint.y);
 
   /**
    * Find path using A* algorithm avoiding flags and move cursor in 8 directions
@@ -391,13 +391,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const grid = tiles.map((row, i) => row.map((tile, j) => (checkTileHasOpened(tile) ? new TileNode(j, i) : null))) as (TileNode | null)[][];
 
     /** initialize open and close list */
-    let openList = [start];
+    let openNodeList = [start];
     const closedList = [];
     start.g = 0;
     start.f = start.g + start.h;
 
-    while (openList.length > 0) {
-      const current = openList.reduce((a, b) => (a.f < b.f ? a : b));
+    while (openNodeList.length > 0) {
+      const current = openNodeList.reduce((a, b) => (a.f < b.f ? a : b));
       if (current.x === target.x && current.y === target.y) {
         const path = [];
         let temp = current;
@@ -410,7 +410,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         }
         return path;
       }
-      openList = openList.filter(node => node !== current);
+      openNodeList = openNodeList.filter(node => node !== current);
       closedList.push(current);
 
       /** Find neighbor nodes from current node. */
@@ -420,7 +420,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         // Apply different cost for diagonal movement
         const tempG = current.g + (isDiagonal ? 1.5 : 1);
         if (tempG >= neighbor.g) continue;
-        if (!openList.includes(neighbor)) openList.push(neighbor);
+        if (!openNodeList.includes(neighbor)) openNodeList.push(neighbor);
         neighbor.parent = current;
         neighbor.g = tempG;
         neighbor.h = Math.abs(neighbor.x - target.x) + Math.abs(neighbor.y - target.y);
@@ -482,15 +482,15 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       interactionCtx.lineWidth = tileSize / 6;
       interactionCtx.moveTo(x * tileSize, y * tileSize); // start point
       paths.forEach(vector => {
-        const [vX, vY] = [vector.x + compensation.x + 0.5, vector.y + compensation.y + 0.5];
-        interactionCtx.lineTo(vX * tileSize, vY * tileSize);
+        const [vx, vy] = [vector.x + compensation.x + 0.5, vector.y + compensation.y + 0.5];
+        interactionCtx.lineTo(vx * tileSize, vy * tileSize);
       });
       interactionCtx.stroke();
     }
   };
 
   /** Load and Render */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isInitializing && tiles.length > 0) return;
     const lotteriaChabFont = new FontFace(
       'LOTTERIACHAB',
@@ -498,21 +498,20 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     );
     Promise.all([lotteriaChabFont.load()]).then(() => {
       // Set vector images
+      document.fonts.add(lotteriaChabFont);
       const cursor = new Path2D(cursorPaths);
       const stun = [new Path2D(stunPaths[0]), new Path2D(stunPaths[1]), new Path2D(stunPaths[2])];
       const flag = { flag: new Path2D(flagPaths[0]), pole: new Path2D(flagPaths[1]) };
       const boom = { inner: new Path2D(boomPaths[0]), outer: new Path2D(boomPaths[1]) };
       setCachedVectorAssets({ cursor, stun, flag, boom });
       setIsInitializing(false);
-      document.fonts.add(lotteriaChabFont);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles, isInitializing, tileSize, zoom]);
 
   // Render Intreraction Objects
   useEffect(() => {
-    if (isInitializing) return;
-    renderInteractionCanvas();
+    if (!isInitializing) renderInteractionCanvas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursorOriginX, cursorOriginY, startPoint, clickX, clickY, color, cursors]);
 
@@ -520,7 +519,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     <>
       {isInitializing ? (
         <div className={S.loading}>
-          <h1>Loading...</h1>
+          <h1>Assets Loading...</h1>
           <div className={`${tiles.length < 1 ? S.loadingBar : S.loadComplete}`} />
         </div>
       ) : (
