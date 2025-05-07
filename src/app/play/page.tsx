@@ -23,10 +23,10 @@ interface Point {
 
 export default function Play() {
   /** constants */
-  const renderRange = 3;
-  const originTileSize = 80;
-  const maxTileCount = 530;
-  const webSocketUrl = `${process.env.NEXT_PUBLIC_WS_HOST}/session`;
+  const RENDER_RANGE = 3;
+  const ORIGIN_TILE_SIZE = 80;
+  const MAX_TILE_COUNT = 530;
+  const WS_URL = `${process.env.NEXT_PUBLIC_WS_HOST}/session`;
 
   /** stores */
   const { isOpen, message, sendMessage, connect, disconnect } = useWebSocketStore();
@@ -119,7 +119,7 @@ export default function Play() {
     if (!isOpen && startPoint.x !== endPoint.x && endPoint.y !== startPoint.y) {
       setLeftReviveTime(-1);
       const [view_width, view_height] = [endPoint.x - startPoint.x + 1, endPoint.y - startPoint.y + 1];
-      connect(webSocketUrl + `?view_width=${view_width}&view_height=${view_height}`);
+      connect(WS_URL + `?view_width=${view_width}&view_height=${view_height}`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, startPoint, endPoint]);
@@ -337,10 +337,10 @@ export default function Play() {
 
   /** Reset screen range when cursor position or screen size changes */
   useLayoutEffect(() => {
-    const newTileSize = originTileSize * zoom;
+    const newTileSize = ORIGIN_TILE_SIZE * zoom;
     const [tilePaddingWidth, tilePaddingHeight] = [
-      Math.floor((windowWidth * renderRange) / newTileSize / 2),
-      Math.floor((windowHeight * renderRange) / newTileSize / 2),
+      Math.floor((windowWidth * RENDER_RANGE) / newTileSize / 2),
+      Math.floor((windowHeight * RENDER_RANGE) / newTileSize / 2),
     ];
 
     if (tilePaddingHeight < 1 || tilePaddingWidth < 1) return;
@@ -364,9 +364,9 @@ export default function Play() {
   /** Handling zoom event */
   useLayoutEffect(() => {
     if (!isInitialized) return;
-    const newTileSize = originTileSize * zoom;
-    const tileVisibleWidth = Math.floor((windowWidth * renderRange) / newTileSize);
-    const tileVisibleHeight = Math.floor((windowHeight * renderRange) / newTileSize);
+    const newTileSize = ORIGIN_TILE_SIZE * zoom;
+    const tileVisibleWidth = Math.floor((windowWidth * RENDER_RANGE) / newTileSize);
+    const tileVisibleHeight = Math.floor((windowHeight * RENDER_RANGE) / newTileSize);
     const [tilePaddingWidth, tilePaddingHeight] = [Math.floor(tileVisibleWidth / 2), Math.floor(tileVisibleHeight / 2)];
     let [heightReductionLength, widthReductionLength] = [0, 0];
 
@@ -387,8 +387,8 @@ export default function Play() {
       'A',
     );
     // setting view size
-    const width = Math.floor((windowWidth * renderRange) / newTileSize);
-    const height = Math.floor((windowHeight * renderRange) / newTileSize);
+    const width = Math.floor((windowWidth * RENDER_RANGE) / newTileSize);
+    const height = Math.floor((windowHeight * RENDER_RANGE) / newTileSize);
     const payload = { width, height };
     const body = JSON.stringify({ event: 'set-view-size', payload });
     sendMessage(body);
@@ -450,10 +450,10 @@ export default function Play() {
       {leftReviveTime > 0 && <Inactive time={leftReviveTime} />}
       <TutorialStep />
       <ScoreBoard />
-      <CanvasDashboard tileSize={tileSize} renderRange={renderRange} maxTileCount={maxTileCount} />
+      <CanvasDashboard tileSize={tileSize} renderRange={RENDER_RANGE} maxTileCount={MAX_TILE_COUNT} />
       <CanvasRenderComponent
         leftReviveTime={leftReviveTime}
-        paddingTiles={renderRange}
+        paddingTiles={RENDER_RANGE}
         tiles={renderTiles}
         setCachingTiles={setCachingTiles}
         tileSize={tileSize}
