@@ -3,7 +3,7 @@
 import S from './page.module.scss';
 
 /** hooks */
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import useScreenSize from '@/hooks/useScreenSize';
 import { OtherUserSingleCursorState, useCursorStore, useOtherUserCursorsStore } from '../../store/cursorStore';
 
@@ -75,25 +75,20 @@ export default function Play() {
     setCachingTiles(tiles => {
       let newTiles = [...tiles];
       switch (type) {
-        case 'U':
-          for (let i = 0; i < columnlength; i++) {
-            newTiles.unshift([...Array(rowlength).fill('??')]);
-            newTiles.pop();
-          }
+        case 'U': // Upper tiles
+          newTiles = [...Array.from({ length: columnlength }, () => Array(rowlength).fill('??')), ...newTiles.slice(0, -columnlength)];
           break;
-        case 'D':
-          for (let i = 0; i < columnlength; i++) {
-            newTiles.push([...Array(rowlength).fill('??')]);
-            newTiles.shift();
-          }
+        case 'D': // Down tiles
+          newTiles = [...newTiles.slice(columnlength), ...Array.from({ length: columnlength }, () => Array(rowlength).fill('??'))];
           break;
-        case 'L':
-          for (let i = 0; i < columnlength; i++) newTiles[i] = [...Array(rowlength).fill('??'), ...newTiles[i].slice(0, -1)];
+        case 'L': // Left tiles
+          for (let i = 0; i < columnlength; i++)
+            newTiles[i] = [...Array(rowlength).fill('??'), ...newTiles[i].slice(0, newTiles[0].length - rowlength)];
           break;
-        case 'R':
-          for (let i = 0; i < columnlength; i++) newTiles[i] = [...newTiles[i].slice(rowlength, newTiles[0].length), ...Array(rowlength).fill('??')];
+        case 'R': // Right tiles
+          for (let i = 0; i < columnlength; i++) newTiles[i] = [...newTiles[i].slice(rowlength), ...Array(rowlength).fill('??')];
           break;
-        case 'A':
+        case 'A': // All tiles
           newTiles = Array.from({ length: columnlength }, () => Array.from({ length: rowlength }, () => '??'));
       }
       return newTiles;
@@ -105,7 +100,7 @@ export default function Play() {
   };
 
   /** Disconnect websocket when Component has been unmounted */
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.style.overflow = 'hidden';
     setIsInitialized(false);
     setZoom(1);
@@ -151,10 +146,10 @@ export default function Play() {
     const [rowlength, columnlength] = [Math.abs(end_x - start_x + 1) * 2, Math.abs(start_y - end_y + 1)];
     const sortedTiles: string[][] = [];
     for (let i = 0; i < columnlength; i++) {
-      const tempTilelist: string[] = [];
-      const sortedlist = unsortedTiles.slice(i * rowlength, (i + 1) * rowlength);
-      for (let j = 0; j < rowlength / 2; j++) tempTilelist[j] = parseHex(sortedlist.slice(j * 2, j * 2 + 2));
-      sortedTiles[i] = tempTilelist;
+      const newRow = new Array(rowlength / 2);
+      const rowOffset = i * rowlength;
+      for (let j = 0; j < rowlength; j += 2) newRow[j / 2] = parseHex(unsortedTiles.slice(rowOffset + j, rowOffset + j + 2));
+      sortedTiles[i] = newRow;
     }
     /** The y-axis is reversed.*/
     sortedTiles.reverse();
@@ -166,23 +161,29 @@ export default function Play() {
     const { rowlength, columnlength, sortedTiles } = sortTiles(end_x, end_y, start_x, start_y, unsortedTiles);
     /** Replace dummy data according to coordinates */
     const newTiles = [...cachingTiles];
+    const yOffset = type === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - columnlength + 1 : 0) : end_y - startPoint.y;
+    const xOffset = start_x - startPoint.x;
+
     for (let i = 0; i < columnlength; i++) {
-      let rowIndex = i;
-      /** Move down only when receiving tiles from below. */
-      if (type === 'All' && cursorY < end_y) rowIndex += endPoint.y - startPoint.y - columnlength + 1;
-      if (type === 'PART') rowIndex += end_y - startPoint.y;
-      newTiles[rowIndex] = newTiles[rowIndex] ?? [];
+      const rowIndex = i + yOffset;
+      const row = newTiles[rowIndex] || (newTiles[rowIndex] = []);
+      const sortedRow = sortedTiles[i];
+      const baseOffset = i - end_y - start_x;
+
       for (let j = 0; j < rowlength; j++) {
-        let tile = sortedTiles[i][j];
-        if (['C', 'F'].some(c => tile?.includes(c))) tile += (i - end_y + j - start_x) % 2 === 0 ? '0' : '1';
-        if (tile) newTiles[rowIndex][j + start_x - startPoint.x] = tile;
+        const tile = sortedRow[j];
+        if (!tile) continue;
+        const colIndex = j + xOffset;
+        const isAlternatingPosition = (baseOffset + j) % 2 === 1;
+        if (tile[0] === 'C' || tile[0] === 'F') row[colIndex] = `${tile}${isAlternatingPosition ? '1' : '0'}`;
+        else row[colIndex] = tile;
       }
     }
     setCachingTiles(newTiles);
   };
 
   /** Handling Websocket Message */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!message) return;
     try {
       const { event, payload } = JSON.parse(message);
@@ -271,9 +272,8 @@ export default function Play() {
           const { cursors: deadCursors, revive_at } = payload;
           const revive_time = new Date(revive_at)?.getTime();
           const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => {
-            for (const deadCursor of deadCursors as OtherUserSingleCursorState[]) {
+            for (const deadCursor of deadCursors as OtherUserSingleCursorState[])
               if (cursor.id === deadCursor.id) return { ...cursor, revive_at: revive_time };
-            }
             return cursor;
           });
           setCursors(newCursors);
@@ -283,10 +283,7 @@ export default function Play() {
         case 'moved': {
           const { id, new_position } = payload;
           const { x, y } = new_position;
-          const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => {
-            if (id === cursor.id) return { ...cursor, x, y };
-            return cursor;
-          });
+          const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => (id === cursor.id ? { ...cursor, x, y } : cursor));
           setCursors(newCursors);
           break;
         }
@@ -324,22 +321,22 @@ export default function Play() {
   }, [message]);
 
   /** Detect changes in cached tile content and position */
-  useEffect(() => {
+  useLayoutEffect(() => {
     const newTiles = [...cachingTiles.map(row => [...row.map(() => '??')])];
-    for (let i = 0; i < cachingTiles.length; i++) {
-      const rowIndex = i + cursorOriginY - cursorY;
-      for (let j = 0; j < cachingTiles[i].length; j++) {
-        const columnIndex = j + cursorOriginX - cursorX;
-        if (!cachingTiles[rowIndex]?.[columnIndex]) continue;
-        newTiles[i][j] = cachingTiles[rowIndex]?.[columnIndex] || '??';
-      }
+    const [offsetX, offsetY] = [cursorOriginX - cursorX, cursorOriginY - cursorY];
+    for (let row = 0; row < cachingTiles.length; row++) {
+      if (row + offsetY >= 0 && row + offsetY < cachingTiles.length)
+        for (let col = 0; col < cachingTiles[row].length; col++) {
+          const targetCol = col + offsetX;
+          if (targetCol >= 0 && targetCol < cachingTiles[row + offsetY].length) newTiles[row][col] = cachingTiles[row + offsetY][targetCol] || '??';
+        }
     }
     setRenderTiles(newTiles);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cachingTiles, cursorOriginX, cursorOriginY]);
 
   /** Reset screen range when cursor position or screen size changes */
-  useEffect(() => {
+  useLayoutEffect(() => {
     const newTileSize = originTileSize * zoom;
     const [tilePaddingWidth, tilePaddingHeight] = [
       Math.floor((windowWidth * renderRange) / newTileSize / 2),
@@ -365,18 +362,16 @@ export default function Play() {
   }, [windowWidth, windowHeight, zoom, cursorOriginX, cursorOriginY, cursorX, cursorY, isInitialized]);
 
   /** Handling zoom event */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isInitialized) return;
     const newTileSize = originTileSize * zoom;
-    const [tileVisibleWidth, tileVisibleHeight] = [
-      Math.floor((windowWidth * renderRange) / newTileSize),
-      Math.floor((windowHeight * renderRange) / newTileSize),
-    ];
-
+    const tileVisibleWidth = Math.floor((windowWidth * renderRange) / newTileSize);
+    const tileVisibleHeight = Math.floor((windowHeight * renderRange) / newTileSize);
     const [tilePaddingWidth, tilePaddingHeight] = [Math.floor(tileVisibleWidth / 2), Math.floor(tileVisibleHeight / 2)];
     let [heightReductionLength, widthReductionLength] = [0, 0];
+
+    /** For Extending */
     if (tileVisibleWidth > endPoint.x - startPoint.x + 1 || tileVisibleHeight > endPoint.y - startPoint.y + 1) {
-      /** For Extending */
       heightReductionLength = Math.floor(tilePaddingHeight - (endPoint.y - startPoint.y) / 2);
       widthReductionLength = Math.round(tilePaddingWidth - (endPoint.x - startPoint.x) / 2);
     } else {
@@ -391,6 +386,7 @@ export default function Play() {
       startPoint.y - heightReductionLength,
       'A',
     );
+    // setting view size
     const width = Math.floor((windowWidth * renderRange) / newTileSize);
     const height = Math.floor((windowHeight * renderRange) / newTileSize);
     const payload = { width, height };
