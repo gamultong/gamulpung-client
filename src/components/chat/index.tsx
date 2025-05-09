@@ -8,7 +8,9 @@ import useScreenSize from '@/hooks/useScreenSize';
 
 export default function ChatComponent() {
   /** constants */
-  const seconds = 8;
+  const REMAIN_TIME = 8 * 1000; // 8 seconds
+  const MAX_MESSAGE_LENGTH = 40;
+  const SET_NOW_INTERVAL = 1000;
 
   /** states */
   const [message, setMessage] = useState('');
@@ -26,12 +28,8 @@ export default function ChatComponent() {
   const inputRef = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLParagraphElement>(null);
 
-  const getOpacity = (messageTime: number | null) => {
-    if (!messageTime) {
-      return 0;
-    }
-    return messageTime - now > (1000 * seconds) / 2 ? 1 : (messageTime - now) / ((1000 * seconds) / 2);
-  };
+  const getOpacity = (messageTime: number | null) =>
+    messageTime ? (messageTime - now > REMAIN_TIME / 2 ? 1 : (messageTime - now) / (REMAIN_TIME / 2)) : 0;
 
   /** styles */
   const clientStyle: CSSProperties = {
@@ -42,14 +40,13 @@ export default function ChatComponent() {
   };
 
   useEffect(() => {
-    if (messageRef.current) setMessageWidth(messageRef?.current.getBoundingClientRect().width);
+    if (!messageRef.current) return;
+    setMessageWidth(messageRef?.current.getBoundingClientRect().width);
   }, [message]);
 
   const handleKeyEvent = (event: KeyboardEvent) => {
     /** Start Chat */
-    if (event.key === 'Enter') {
-      inputRef.current?.focus();
-    }
+    if (event.key === 'Enter') inputRef.current?.focus();
     /** End Chat */
     if (event.key === 'Escape') {
       setMessage('');
@@ -60,14 +57,13 @@ export default function ChatComponent() {
   /** Send chat message to server */
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setStartChatTime(Date.now() + 1000 * seconds);
+    setStartChatTime(Date.now() + REMAIN_TIME);
     if (message === '' || (startChatTime as number) < now) return;
     /** Send message using websocket. */
+    const payload = { message };
     const body = JSON.stringify({
       event: 'send-chat',
-      payload: {
-        message: message,
-      },
+      payload,
     });
     sendMessage(body);
     setMessage('');
@@ -75,7 +71,7 @@ export default function ChatComponent() {
 
   const ChangingMessage = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMessage(e.target.value);
-    setStartChatTime(Date.now() + 1000 * seconds);
+    setStartChatTime(Date.now() + REMAIN_TIME);
   };
 
   useEffect(() => {
@@ -85,7 +81,7 @@ export default function ChatComponent() {
   }, []);
 
   useEffect(() => {
-    setTimeout(() => setNow(Date.now()), 1000);
+    setTimeout(() => setNow(Date.now()), SET_NOW_INTERVAL);
   }, [now]);
 
   return (
@@ -96,7 +92,7 @@ export default function ChatComponent() {
           ref={inputRef}
           className={S.message}
           value={message}
-          maxLength={40}
+          maxLength={MAX_MESSAGE_LENGTH}
           onChange={ChangingMessage}
           style={{ width: `${messageWidth + 5}px`, color: color === 'yellow' ? 'black' : 'white' }}
         />

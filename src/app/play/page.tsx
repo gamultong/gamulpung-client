@@ -26,6 +26,7 @@ export default function Play() {
   const RENDER_RANGE = 3;
   const ORIGIN_TILE_SIZE = 80;
   const MAX_TILE_COUNT = 530;
+  const MESSAGE_REMAIN_TIME = 1000 * 8; // 8 seconds
   const WS_URL = `${process.env.NEXT_PUBLIC_WS_HOST}/session`;
 
   /** stores */
@@ -89,7 +90,7 @@ export default function Play() {
           for (let i = 0; i < columnlength; i++) newTiles[i] = [...newTiles[i].slice(rowlength), ...Array(rowlength).fill('??')];
           break;
         case 'A': // All tiles
-          newTiles = Array.from({ length: columnlength }, () => Array.from({ length: rowlength }, () => '??'));
+          newTiles = Array.from({ length: columnlength }, () => Array(rowlength).fill('??'));
       }
       return newTiles;
     });
@@ -245,8 +246,7 @@ export default function Play() {
         }
         /** Fetches information of other users. */
         case 'you-died': {
-          const { revive_at } = payload;
-          const leftTime = Math.floor((new Date(revive_at)?.getTime() - Date.now()) / 1000);
+          const leftTime = Math.floor((new Date(payload.revive_at)?.getTime() - Date.now()) / 1000);
           setLeftReviveTime(leftTime);
           break;
         }
@@ -289,19 +289,17 @@ export default function Play() {
         }
         /** Receives other user's quit */
         case 'cursor-quit': {
-          const { id } = payload;
           const newCursors = [...cursors];
-          const index = newCursors.findIndex((cursor: OtherUserSingleCursorState) => cursor.id === id);
+          const index = newCursors.findIndex((cursor: OtherUserSingleCursorState) => cursor.id === payload.id);
           if (index !== -1) newCursors.splice(index, 1);
           setCursors(newCursors);
           break;
         }
         case 'chat': {
           const { cursor_id, message } = payload;
-          const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => {
-            if (cursor.id === cursor_id) return { ...cursor, message, messageTime: Date.now() + 1000 * 8 };
-            return cursor;
-          });
+          const newCursors = cursors.map((cursor: OtherUserSingleCursorState) =>
+            cursor.id === cursor_id ? { ...cursor, message, messageTime: Date.now() + MESSAGE_REMAIN_TIME } : cursor,
+          );
           setCursors(newCursors);
           break;
         }
@@ -310,9 +308,8 @@ export default function Play() {
           console.error(msg);
           break;
         }
-        default: {
-          break;
-        }
+        default:
+          console.log('Unknown event:', event);
       }
     } catch (e) {
       console.error(e);
@@ -324,13 +321,13 @@ export default function Play() {
   useLayoutEffect(() => {
     const newTiles = [...cachingTiles.map(row => [...row.map(() => '??')])];
     const [offsetX, offsetY] = [cursorOriginX - cursorX, cursorOriginY - cursorY];
-    for (let row = 0; row < cachingTiles.length; row++) {
-      if (row + offsetY >= 0 && row + offsetY < cachingTiles.length)
-        for (let col = 0; col < cachingTiles[row].length; col++) {
-          const targetCol = col + offsetX;
-          if (targetCol >= 0 && targetCol < cachingTiles[row + offsetY].length) newTiles[row][col] = cachingTiles[row + offsetY][targetCol] || '??';
-        }
-    }
+    newTiles.forEach((row, ri) => {
+      if (!(ri + offsetY >= 0 && ri + offsetY < cachingTiles.length)) return;
+      row.forEach((_, ci) => {
+        const targetCol = ci + offsetX;
+        if (targetCol >= 0 && targetCol < cachingTiles[ri + offsetY].length) newTiles[ri][ci] = cachingTiles[ri + offsetY][targetCol] || '??';
+      });
+    });
     setRenderTiles(newTiles);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cachingTiles, cursorOriginX, cursorOriginY]);
@@ -338,25 +335,18 @@ export default function Play() {
   /** Reset screen range when cursor position or screen size changes */
   useLayoutEffect(() => {
     const newTileSize = ORIGIN_TILE_SIZE * zoom;
-    const [tilePaddingWidth, tilePaddingHeight] = [
-      Math.floor((windowWidth * RENDER_RANGE) / newTileSize / 2),
-      Math.floor((windowHeight * RENDER_RANGE) / newTileSize / 2),
-    ];
+    const tilePaddingWidth = Math.floor((windowWidth * RENDER_RANGE) / newTileSize / 2);
+    const tilePaddingHeight = Math.floor((windowHeight * RENDER_RANGE) / newTileSize / 2);
 
     if (tilePaddingHeight < 1 || tilePaddingWidth < 1) return;
-    setStartPoint({
-      x: cursorX - tilePaddingWidth,
-      y: cursorY - tilePaddingHeight,
-    });
-    setEndPoint({
-      x: cursorX + tilePaddingWidth,
-      y: cursorY + tilePaddingHeight,
+    const createPoint = (baseX: number, baseY: number, type: 'START' | 'END') => ({
+      x: type === 'START' ? baseX - tilePaddingWidth : baseX + tilePaddingWidth,
+      y: type === 'START' ? baseY - tilePaddingHeight : baseY + tilePaddingHeight,
     });
 
-    setRenderStartPoint({
-      x: cursorOriginX - tilePaddingWidth,
-      y: cursorOriginY - tilePaddingHeight,
-    });
+    setStartPoint(createPoint(cursorX, cursorY, 'START'));
+    setEndPoint(createPoint(cursorX, cursorY, 'END'));
+    setRenderStartPoint(createPoint(cursorOriginX, cursorOriginY, 'START'));
     setTileSize(newTileSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowWidth, windowHeight, zoom, cursorOriginX, cursorOriginY, cursorX, cursorY, isInitialized]);
@@ -393,7 +383,7 @@ export default function Play() {
     const body = JSON.stringify({ event: 'set-view-size', payload });
     sendMessage(body);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowWidth, windowHeight, zoom, isInitialized]);
+  }, [windowWidth, windowHeight, zoom, isInitialized, isOpen]);
 
   /** When cursor position has changed. */
   useEffect(() => {
@@ -410,22 +400,33 @@ export default function Play() {
       rightfrom: endPoint.x + 1,
       rightto: endPoint.x + widthExtendLength,
     };
-    if (isRight && isDown) {
-      requestTiles(rightfrom, downfrom, rightto, upto, 'R');
-      requestTiles(leftfrom, downfrom, rightto, downto, 'D');
-    } else if (isLeft && isDown) {
-      requestTiles(leftfrom, downfrom, leftto, upto, 'L');
-      requestTiles(leftfrom, downfrom, rightto, downto, 'D');
-    } else if (isRight && isUp) {
-      requestTiles(rightfrom, downfrom, rightto, upto, 'R');
-      requestTiles(leftfrom, upfrom, rightto, upto, 'U');
-    } else if (isLeft && isUp) {
-      requestTiles(leftfrom, downfrom, leftto, upto, 'L');
-      requestTiles(leftfrom, upfrom, rightto, upto, 'U');
-    } else if (isRight) requestTiles(rightfrom, endPoint.y, rightto, startPoint.y, 'R');
-    else if (isLeft) requestTiles(leftfrom, endPoint.y, leftto, startPoint.y, 'L');
-    else if (isDown) requestTiles(startPoint.x, downfrom, endPoint.x, downto, 'D');
-    else if (isUp) requestTiles(startPoint.x, upfrom, endPoint.x, upto, 'U');
+
+    const handleDiagonalMovement = () => {
+      if (isRight && isDown) {
+        requestTiles(rightfrom, downfrom, rightto, upto, 'R');
+        requestTiles(leftfrom, downfrom, rightto, downto, 'D');
+      } else if (isLeft && isDown) {
+        requestTiles(leftfrom, downfrom, leftto, upto, 'L');
+        requestTiles(leftfrom, downfrom, rightto, downto, 'D');
+      } else if (isRight && isUp) {
+        requestTiles(rightfrom, downfrom, rightto, upto, 'R');
+        requestTiles(leftfrom, upfrom, rightto, upto, 'U');
+      } else if (isLeft && isUp) {
+        requestTiles(leftfrom, downfrom, leftto, upto, 'L');
+        requestTiles(leftfrom, upfrom, rightto, upto, 'U');
+      }
+    };
+
+    const handleStraightMovement = () => {
+      if (isRight) requestTiles(rightfrom, endPoint.y, rightto, startPoint.y, 'R');
+      if (isLeft) requestTiles(leftfrom, endPoint.y, leftto, startPoint.y, 'L');
+      if (isDown) requestTiles(startPoint.x, downfrom, endPoint.x, downto, 'D');
+      if (isUp) requestTiles(startPoint.x, upfrom, endPoint.x, upto, 'U');
+    };
+
+    if (!(isRight || isLeft || isUp || isDown)) return;
+    if ((isRight || isLeft) && (isUp || isDown)) handleDiagonalMovement();
+    else handleStraightMovement();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursorX, cursorY]);
 

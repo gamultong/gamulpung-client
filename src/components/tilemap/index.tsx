@@ -17,7 +17,7 @@ interface TilemapProps {
 
 export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePaddingHeight, className, isMoving }: TilemapProps) {
   // constants
-  const cursorColors = useMemo(() => ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'], []);
+  const CURSOR_COLORS = useMemo(() => ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'], []);
   const { flagPaths, tileColors, countColors, boomPaths } = Paths;
 
   // stores
@@ -114,7 +114,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       flagCtx.scale(zoom / flagMinimalized / 4.5, zoom / flagMinimalized / 4.5);
       const flagPath = new Path2D(flagPaths[0]);
       const polePath = new Path2D(flagPaths[1]);
-      flagCtx.fillStyle = cursorColors[i];
+      flagCtx.fillStyle = CURSOR_COLORS[i];
       flagCtx.fill(flagPath);
       flagCtx.fillStyle = flagGradient;
       flagCtx.fill(polePath);
@@ -175,7 +175,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         // Select textures based on tile content
         let outerTexture = textures.get(`${tileColors.outer[2][0]}-${tileColors.outer[2][1]}-${tileSize}`);
         let innerTexture = textures.get(`${tileColors.inner[2][0]}-${tileColors.inner[2][1]}-${tileSize}`);
-        if (['C', 'F'].includes(content[0])) {
+        if (content[0] === 'C' || content[0] === 'F') {
           const isEven = content.slice(-1) === '0' ? 0 : 1;
           outerTexture = textures.get(`${tileColors.outer[isEven][0]}-${tileColors.outer[isEven][1]}-${tileSize}`);
           innerTexture = textures.get(`${tileColors.inner[isEven][0]}-${tileColors.inner[isEven][1]}-${tileSize}`);

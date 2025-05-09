@@ -276,11 +276,11 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
    */
   const isAlreadyCursorNeighbor = (x: number, y: number) => directions.some(([dx, dy]) => cursorOriginX + dx === x && cursorOriginY + dy === y);
 
-  const findOpenedNeighbors = (x: number, y: number) => {
+  const findOpenedNeighbors = (currentX: number, currentY: number) => {
     const directionsWithCenter = [[0, 0], ...directions];
     for (const [dx, dy] of directionsWithCenter) {
-      const [nx, ny] = [x + dx, y + dy];
-      if (tiles[ny]?.[nx] && checkTileHasOpened(tiles[ny][nx])) return { x: nx, y: ny };
+      const [x, y] = [currentX + dx, currentY + dy];
+      if (tiles[y]?.[x] && checkTileHasOpened(tiles[y][x])) return { x, y };
     }
     return { x: Infinity, y: Infinity };
   };
