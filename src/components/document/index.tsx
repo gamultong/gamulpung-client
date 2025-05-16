@@ -7,10 +7,7 @@ import './global.css';
 import { useSearchParams } from 'next/navigation';
 import { Converter } from 'showdown';
 import { useEffect, useState } from 'react';
-
-type AsideType = {
-  [key: string]: { link: string; [key: string]: string };
-};
+import { AsideType } from '@/types';
 
 export default function Document({ endpoint, files, dir }: { endpoint: string; files: string[]; dir: string }) {
   const url = process.env.NEXT_PUBLIC_HOST;
@@ -37,9 +34,7 @@ export default function Document({ endpoint, files, dir }: { endpoint: string; f
   };
 
   useEffect(() => {
-    if (nowUrl !== `${url}/docs/${lang}/${dir}/${doc}.md`) {
-      fetchMarkdownFiles();
-    }
+    if (nowUrl !== `${url}/docs/${lang}/${dir}/${doc}.md`) fetchMarkdownFiles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang, doc]);
 

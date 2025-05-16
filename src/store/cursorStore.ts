@@ -1,12 +1,11 @@
+import { CursorColor } from '@/types/canvas';
 import { create } from 'zustand';
-
-type Color = 'red' | 'blue' | 'yellow' | 'purple';
 
 interface CursorState {
   id: string;
   x: number;
   y: number;
-  color: Color;
+  color: CursorColor;
   revive_at?: number;
 }
 
@@ -15,7 +14,7 @@ interface ClientCursorState extends CursorState {
   originX: number;
   originY: number;
   setId: (id: string) => void;
-  setColor: (newColor: Color) => void;
+  setColor: (newColor: CursorColor) => void;
   setPosition: (x: number, y: number) => void;
   setX: (x: number) => void;
   setY: (y: number) => void;

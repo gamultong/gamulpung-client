@@ -7,8 +7,9 @@ import useScreenSize from '@/hooks/useScreenSize';
 import useClickStore from '@/store/clickStore';
 import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
-import ChatComponent from '../chat';
-import Tilemap from '../tilemap';
+import ChatComponent from '@/components/chat';
+import Tilemap from '@/components/tilemap';
+import { XYType, VectorImagesType } from '@/types';
 
 class TileNode {
   x: number;
@@ -38,24 +39,6 @@ interface CanvasRenderComponentProps {
   startPoint: { x: number; y: number };
   leftReviveTime: number;
   setCachingTiles: Dispatch<SetStateAction<string[][]>>;
-}
-
-interface Path {
-  x: number;
-  y: number;
-}
-
-interface VectorImages {
-  cursor: Path2D;
-  stun: Path2D[];
-  flag: {
-    pole: Path2D;
-    flag: Path2D;
-  };
-  boom: {
-    inner: Path2D;
-    outer: Path2D;
-  };
 }
 
 const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
@@ -136,10 +119,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   /** States */
   const [isInitializing, setIsInitializing] = useState<boolean>(true);
-  const [paths, setPaths] = useState<Path[]>([]);
-  const [leftPaths, setLeftPaths] = useState<Path>({ x: 0, y: 0 });
-  const [forwardPath, setForwardPath] = useState<Path>();
-  const [cachedVectorAssets, setCachedVectorAssets] = useState<VectorImages>();
+  const [paths, setPaths] = useState<XYType[]>([]);
+  const [leftPaths, setLeftPaths] = useState<XYType>({ x: 0, y: 0 });
+  const [forwardPath, setForwardPath] = useState<XYType>();
+  const [cachedVectorAssets, setCachedVectorAssets] = useState<VectorImagesType>();
 
   /** Cancel interval function for animation. */
   const cancelCurrentMovement = () => {

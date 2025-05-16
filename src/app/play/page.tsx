@@ -7,19 +7,27 @@ import { useEffect, useLayoutEffect, useState } from 'react';
 import useScreenSize from '@/hooks/useScreenSize';
 import { OtherUserSingleCursorState, useCursorStore, useOtherUserCursorsStore } from '../../store/cursorStore';
 
-/** components */
-import CanvasRenderComponent from '@/components/canvas';
+/** stores */
 import useClickStore from '@/store/clickStore';
 import useWebSocketStore from '@/store/websocketStore';
+
+/** components */
+import CanvasRenderComponent from '@/components/canvas';
 import Inactive from '@/components/inactive';
 import CanvasDashboard from '@/components/canvasDashboard';
 import TutorialStep from '@/components/tutorialstep';
 import ScoreBoard from '@/components/scoreboard';
-
-interface Point {
-  x: number;
-  y: number;
-}
+import {
+  FlagSetMessageType,
+  GetMyCusorMessageType,
+  PointerSetMessageType,
+  ReviveTimeMessageType,
+  SingleTileOpenedMessageType,
+  TileMessageType,
+  TilesOpenedMessageType,
+  XYType,
+} from '@/types';
+import { CursorColor } from '@/types/canvas';
 
 export default function Play() {
   /** constants */
@@ -51,9 +59,9 @@ export default function Play() {
 
   /** states */
   const [tileSize, setTileSize] = useState<number>(0); //px
-  const [startPoint, setStartPoint] = useState<Point>({ x: 0, y: 0 });
-  const [endPoint, setEndPoint] = useState<Point>({ x: 0, y: 0 });
-  const [renderStartPoint, setRenderStartPoint] = useState<Point>({ x: 0, y: 0 });
+  const [startPoint, setStartPoint] = useState<XYType>({ x: 0, y: 0 });
+  const [endPoint, setEndPoint] = useState<XYType>({ x: 0, y: 0 });
+  const [renderStartPoint, setRenderStartPoint] = useState<XYType>({ x: 0, y: 0 });
   const [cachingTiles, setCachingTiles] = useState<string[][]>([]);
   const [renderTiles, setRenderTiles] = useState<string[][]>([...cachingTiles.map(row => [...row])]);
   const [leftReviveTime, setLeftReviveTime] = useState<number>(-1);
@@ -191,7 +199,7 @@ export default function Play() {
       switch (event) {
         /** When receiving requested tiles */
         case 'tiles': {
-          const { tiles, start_p, end_p } = payload;
+          const { tiles, start_p, end_p } = payload as TileMessageType;
           const { x: start_x, y: start_y } = start_p;
           const { x: end_x, y: end_y } = end_p;
           replaceTiles(end_x, end_y, start_x, start_y, tiles, 'All');
@@ -199,7 +207,7 @@ export default function Play() {
         }
         /** When receiving unrequested tiles when sending tile open event */
         case 'flag-set': {
-          const { position, is_set, color } = payload;
+          const { position, is_set, color } = payload as FlagSetMessageType;
           const { x, y } = position;
           const newTiles = [...cachingTiles];
           const colorMap: Record<string, string> = {
@@ -213,12 +221,12 @@ export default function Play() {
           break;
         }
         case 'pointer-set': {
-          const { id, pointer } = payload;
+          const { id, pointer } = payload as PointerSetMessageType;
           const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => (id === cursor.id ? { ...cursor, pointer } : cursor));
           setCursors(newCursors);
         }
         case 'single-tile-opened': {
-          const { position, tile } = payload;
+          const { position, tile } = payload as SingleTileOpenedMessageType;
           if (!position || !tile) return;
           const { x, y } = position;
           const newTiles = [...cachingTiles];
@@ -227,7 +235,7 @@ export default function Play() {
           break;
         }
         case 'tiles-opened': {
-          const { tiles, start_p, end_p } = payload;
+          const { tiles, start_p, end_p } = payload as TilesOpenedMessageType;
           const { x: start_x, y: start_y } = start_p;
           const { x: end_x, y: end_y } = end_p;
           replaceTiles(end_x, end_y, start_x, start_y, tiles, 'PART');
@@ -235,18 +243,19 @@ export default function Play() {
         }
         /** Fetches own information only once when connected. */
         case 'my-cursor': {
-          const { position, pointer, color, id } = payload;
+          const { position, pointer, color, id } = payload as GetMyCusorMessageType;
           setId(id);
           setOringinPosition(position.x, position.y);
           setCursorPosition(position.x, position.y);
-          setColor(color.toLowerCase());
+          setColor(color.toLowerCase() as CursorColor);
           if (pointer) setClickPosition(pointer.x, pointer.y, '');
           setTimeout(() => setIsInitialized(true), 0);
           break;
         }
         /** Fetches information of other users. */
         case 'you-died': {
-          const leftTime = Math.floor((new Date(payload.revive_at)?.getTime() - Date.now()) / 1000);
+          const { revive_at } = payload as ReviveTimeMessageType;
+          const leftTime = Math.floor((new Date(revive_at)?.getTime() - Date.now()) / 1000);
           setLeftReviveTime(leftTime);
           break;
         }
