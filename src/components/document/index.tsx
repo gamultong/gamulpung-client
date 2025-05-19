@@ -11,11 +11,11 @@ import { AsideItem, AsideType } from '@/types';
 
 export default function Document({ endpoint, files, dir }: { endpoint: string; files: string[]; dir: string }) {
   const url = process.env.NEXT_PUBLIC_HOST;
-  const [data, setData] = useState('');
   const lang = useSearchParams().get('lang') || 'ko';
   const doc = useSearchParams().get('doc') || files[0];
   const asideData: AsideType = aside[lang as keyof typeof aside];
   const asideKeys = Object.keys(asideData);
+  const [data, setData] = useState('');
   const [nowUrl, setNowUrl] = useState<string | null>(null);
 
   const fetchMarkdownFiles = async () => {

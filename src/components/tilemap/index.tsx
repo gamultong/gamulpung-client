@@ -151,11 +151,11 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
   // Memoize sprites creation using cached base sprites from useRef
   const { outerSprites, innerSprites, boomSprites, flagSprites, textElements } = useMemo(() => {
-    const outerSpritesArr: JSX.Element[] = [];
-    const innerSpritesArr: JSX.Element[] = [];
-    const boomSpritesArr: JSX.Element[] = [];
-    const flagSpritesArr: JSX.Element[] = [];
-    const textElementsArr: JSX.Element[] = [];
+    const outerSprites: JSX.Element[] = [];
+    const innerSprites: JSX.Element[] = [];
+    const boomSprites: JSX.Element[] = [];
+    const flagSprites: JSX.Element[] = [];
+    const textElements: JSX.Element[] = [];
 
     const {
       outerCachedSprite: outerCache,
@@ -199,7 +199,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
             );
             outerCache.set(outerKey, baseOuter);
           }
-          outerSpritesArr.push(cloneElement(baseOuter, { key: `outer-${tileKey}`, x, y }));
+          outerSprites.push(cloneElement(baseOuter, { key: `outer-${tileKey}`, x, y }));
         }
 
         // Inner sprite
@@ -221,7 +221,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
             );
             innerCache.set(innerKey, baseInner);
           }
-          innerSpritesArr.push(cloneElement(baseInner, { key: `inner-${tileKey}`, x: x + 5 * zoom, y: y + 5 * zoom }));
+          innerSprites.push(cloneElement(baseInner, { key: `inner-${tileKey}`, x: x + 5 * zoom, y: y + 5 * zoom }));
         }
 
         // Boom sprite
@@ -242,7 +242,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
             );
             boomCache.set(boomKey, baseBoom);
           }
-          boomSpritesArr.push(cloneElement(baseBoom, { key: `boom-${tileKey}`, x, y }));
+          boomSprites.push(cloneElement(baseBoom, { key: `boom-${tileKey}`, x, y }));
         }
 
         // Flag sprite
@@ -265,13 +265,13 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
             );
             flagCache.set(flagKey, baseFlag);
           }
-          flagSpritesArr.push(cloneElement(baseFlag, { key: `flag-${tileKey}`, x: x + tileSize / 2, y: y + tileSize / 2 }));
+          flagSprites.push(cloneElement(baseFlag, { key: `flag-${tileKey}`, x: x + tileSize / 2, y: y + tileSize / 2 }));
         }
 
         // Text elements
         const num = parseInt(content);
         if (num > 0) {
-          textElementsArr.push(
+          textElements.push(
             <Text
               key={`text-${tileKey}`}
               text={content}
@@ -287,11 +287,11 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       }
     }
     return {
-      outerSprites: outerSpritesArr,
-      innerSprites: innerSpritesArr,
-      boomSprites: boomSpritesArr,
-      flagSprites: flagSpritesArr,
-      textElements: textElementsArr,
+      outerSprites,
+      innerSprites,
+      boomSprites,
+      flagSprites,
+      textElements,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles]);
