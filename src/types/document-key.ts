@@ -7,6 +7,6 @@ export type AsideItem = {
   [key: string]: string;
 };
 
-export type langType = {
+export type LangType = {
   [key: string]: string;
 };
