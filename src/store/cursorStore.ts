@@ -1,3 +1,4 @@
+import { XYType } from '@/types';
 import { CursorColor } from '@/types/canvas';
 import { create } from 'zustand';
 
@@ -32,7 +33,7 @@ interface ClientCursorState extends CursorState {
 }
 
 export interface OtherUserSingleCursorState extends CursorState {
-  pointer: { x: number; y: number };
+  pointer: XYType;
   message: string;
   messageTime: number;
 }

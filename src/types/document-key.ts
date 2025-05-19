@@ -1,3 +1,12 @@
 export type AsideType = {
-  [key: string]: { link: string; [key: string]: string };
+  [key: string]: AsideItem;
+};
+
+export type AsideItem = {
+  link: string;
+  [key: string]: string;
+};
+
+export type langType = {
+  [key: string]: string;
 };
