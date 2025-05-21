@@ -135,33 +135,38 @@ export default function Play() {
 
   /** Parse Hex using two charactors
    * @param hex {string} - Hex string
+   * byte: 0 = IsOpen, 1 = IsMine, 2 = IsFlag, 3 ~ 4 = color, 5 ~ 7 = count of mines
    */
   const parseHex = (hex: string) => {
     const hexArray = hex.match(/.{1,2}/g);
     if (!hexArray) return '';
     const byte = hexArray.map(hex => parseInt(hex, 16).toString(2).padStart(8, '0')).join('');
-    // byte 0 - IsOpen, 1 - IsMine, 2 - IsFlag, 3 ~ 4 color, 5 ~ 7 number of mines
     const isTileOpened = byte[0] === '1';
     const isMine = byte[1] === '1';
     const isFlag = byte[2] === '1';
     const color = parseInt(byte.slice(3, 5), 2); /** 00 red, 01 yellow, 10 blue, 11 purple */
-    const number = parseInt(byte.slice(5), 2);
-    if (isTileOpened) return isMine ? 'B' : number === 0 ? 'O' : number.toString();
+    const count = parseInt(byte.slice(5), 2);
+    if (isTileOpened) return isMine ? 'B' : count === 0 ? 'O' : count.toString();
     if (isFlag) return 'F' + color;
     return 'C';
   };
 
+  /**
+   * @param end_x
+   * @param end_y
+   * @param start_x
+   * @param start_y
+   * @param unsortedTiles
+   * @returns {rowlength, columnlength, sortedTiles}
+   */
   const sortTiles = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string) => {
     const [rowlength, columnlength] = [Math.abs(end_x - start_x + 1) * 2, Math.abs(start_y - end_y + 1)];
     const sortedTiles: string[][] = [];
     for (let i = 0; i < columnlength; i++) {
       const newRow = new Array(rowlength / 2);
-      const rowOffset = i * rowlength;
-      for (let j = 0; j < rowlength; j += 2) newRow[j / 2] = parseHex(unsortedTiles.slice(rowOffset + j, rowOffset + j + 2));
-      sortedTiles[i] = newRow;
+      for (let j = 0, k = 0; j < rowlength; j += 2, k++) newRow[k] = parseHex(unsortedTiles.substring(i * rowlength + j, i * rowlength + j + 2));
+      sortedTiles.unshift(newRow);
     }
-    /** The y-axis is reversed.*/
-    sortedTiles.reverse();
     return { rowlength, columnlength, sortedTiles };
   };
 
@@ -176,14 +181,11 @@ export default function Play() {
     for (let i = 0; i < columnlength; i++) {
       const rowIndex = i + yOffset;
       const row = newTiles[rowIndex] || (newTiles[rowIndex] = []);
-      const sortedRow = sortedTiles[i];
-      const baseOffset = i - end_y - start_x;
-
       for (let j = 0; j < rowlength; j++) {
-        const tile = sortedRow[j];
+        const tile = sortedTiles[i][j];
         if (!tile) continue;
         const colIndex = j + xOffset;
-        const isAlternatingPosition = (baseOffset + j) % 2 === 1;
+        const isAlternatingPosition = (i - end_y - start_x + j) % 2 === 1;
         if (tile[0] === 'C' || tile[0] === 'F') row[colIndex] = `${tile}${isAlternatingPosition ? '1' : '0'}`;
         else row[colIndex] = tile;
       }
@@ -281,8 +283,7 @@ export default function Play() {
           const { cursors: deadCursors, revive_at } = payload;
           const revive_time = new Date(revive_at)?.getTime();
           const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => {
-            for (const deadCursor of deadCursors as OtherUserSingleCursorState[])
-              if (cursor.id === deadCursor.id) return { ...cursor, revive_at: revive_time };
+            for (const dc of deadCursors as OtherUserSingleCursorState[]) if (cursor.id === dc.id) return { ...cursor, revive_at: revive_time };
             return cursor;
           });
           setCursors(newCursors);
