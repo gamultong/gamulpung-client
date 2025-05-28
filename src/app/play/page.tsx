@@ -263,19 +263,11 @@ export default function Play() {
         }
         case 'cursors': {
           const { cursors } = payload;
-          type newCursorType = {
-            position: { x: number; y: number };
-            id: string;
-            color: string;
-            pointer: { x: number; y: number };
-          };
-          const newCursors = cursors.map(({ position: { x, y }, color, id, pointer }: newCursorType) => ({
-            id,
-            pointer,
-            x,
-            y,
-            color: color.toLowerCase(),
-          }));
+          type newCursorType = { position: XYType; id: string; color: string; pointer: XYType };
+          const newCursors = cursors.map(({ position: { x, y }, color, id, pointer }: newCursorType) => {
+            color = color.toLowerCase();
+            return { id, pointer, x, y, color };
+          });
           addCursors(newCursors);
           break;
         }
@@ -307,8 +299,9 @@ export default function Play() {
         }
         case 'chat': {
           const { cursor_id, message } = payload;
+          const messageTime = Date.now() + MESSAGE_REMAIN_TIME;
           const newCursors = cursors.map((cursor: OtherUserSingleCursorState) =>
-            cursor.id === cursor_id ? { ...cursor, message, messageTime: Date.now() + MESSAGE_REMAIN_TIME } : cursor,
+            cursor.id === cursor_id ? { ...cursor, message, messageTime } : cursor,
           );
           setCursors(newCursors);
           break;
