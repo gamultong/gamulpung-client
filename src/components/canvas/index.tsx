@@ -10,6 +10,7 @@ import useWebSocketStore from '@/store/websocketStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
 import { XYType, VectorImagesType } from '@/types';
+import { CursorColors, CursorDirections, OtherCursorColors } from '@/constants';
 
 class TileNode {
   x: number;
@@ -57,36 +58,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
   const { boomPaths, cursorPaths, flagPaths, stunPaths } = Paths;
-  const directions = [
-    [-1, 0], // left
-    [0, -1], // up
-    [0, 1], // down
-    [1, 0], // right
-    [-1, -1], // left-up
-    [-1, 1], // left-down
-    [1, -1], // right-up
-    [1, 1], // right-down
-  ];
-  const cursorColors: { [key: string]: string } = {
-    red: '#FF4D00',
-    blue: '#0094FF',
-    yellow: '#F0C800',
-    purple: '#BC3FDC',
-    '0': '#FF4D00',
-    '1': '#F0C800',
-    '2': '#0094FF',
-    '3': '#BC3FDC',
-  };
-  const otherCursorColors: { [key: string]: string } = {
-    red: '#FBCBB6',
-    blue: '#A8DBFF',
-    yellow: '#FFEE99',
-    purple: '#E8BEF3',
-    '0': '#FBCBB6',
-    '1': '#A8DBFF',
-    '2': '#FFEE99',
-    '3': '#E8BEF3',
-  };
   /** stores */
   const { windowHeight, windowWidth } = useScreenSize();
   const {
@@ -153,17 +124,17 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const moveCursor = (relativeTileX: number, relativetileY: number, clickedX: number, clickedY: number, type: 'GENERAL_CLICK' | 'SPECIAL_CLICK') => {
     if (movementInterval.current) return;
     let index = 0;
-    const paths = findPathUsingAStar(relativeX, relativeY, relativeTileX, relativetileY);
-    let currentPath = paths[index];
+    const foundPaths = findPathUsingAStar(relativeX, relativeY, relativeTileX, relativetileY);
+    let currentPath = foundPaths[index];
     if (currentPath?.x === undefined || currentPath?.y === undefined) return;
     let [innerCursorX, innerCursorY] = [cursorOriginX, cursorOriginY];
-    setMovecost(paths.length - 1);
+    setMovecost(foundPaths.length - 1);
     setCusorPosition(relativeTileX + startPoint.x, relativetileY + startPoint.y);
 
-    const animationOfMoving = (dx: number, dy: number) => {
-      const { interactionCanvasRef: I_ref, otherCursorsRef: C_ref, otherPointerRef: P_ref } = canvasRefs;
+    const moveAnimation = (dx: number, dy: number) => {
+      const { interactionCanvasRef: I_canvas, otherCursorsRef: C_canvas, otherPointerRef: P_canvas } = canvasRefs;
       const tilemap = document.getElementById('Tilemap') as HTMLCanvasElement;
-      const currentRefs = [I_ref.current, C_ref.current, P_ref.current, tilemap].filter(Boolean) as HTMLCanvasElement[];
+      const currentRefs = [I_canvas.current, C_canvas.current, P_canvas.current, tilemap].filter(Boolean) as HTMLCanvasElement[];
       const start = performance.now();
       const animate = (now: number) => {
         const elapsed = now - start;
@@ -172,20 +143,19 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         const [translateX, translateY] = [translate * dx, translate * dy];
         currentRefs.forEach(c => (c.style.transform = `translate(${translateX}px, ${translateY}px)`));
         if (progress < 1) requestAnimationFrame(animate);
-        // Ensure the transform resets at the end
         else currentRefs.forEach(c => (c.style.transform = 'translate(0, 0)'));
       };
       requestAnimationFrame(animate);
     };
 
     movementInterval.current = setInterval(() => {
-      if (++index >= paths.length) {
+      if (++index >= foundPaths.length) {
         clickEvent(clickedX, clickedY, type);
         setPaths([]);
         cancelCurrentMovement();
         return;
       }
-      const path = paths[index];
+      const path = foundPaths[index];
       if (!path) return;
       const [dx, dy] = [Math.sign(path.x - currentPath.x), Math.sign(path.y - currentPath.y)];
       setForwardPath({ x: dx, y: dy });
@@ -209,9 +179,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       currentPath = path;
-      setPaths(paths.slice(index));
+      setPaths(foundPaths.slice(index));
       if (zoom < ZOOM_MIN) return;
-      animationOfMoving(dx, dy);
+      moveAnimation(dx, dy);
     }, MOVE_SPEED);
   };
 
@@ -232,9 +202,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     // Transform canvas coordinate to relative and absolute coordinate
     const [tileArrayX, tileArrayY] = [Math.floor(clickX / tileSize + tilePaddingWidth), Math.floor(clickY / tileSize + tilePaddingHeight)];
     const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
-    // Getting content of clicked tile
+    // Setting content of clicked tile
     const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
-    // Set click position
     setClickPosition(tileX, tileY, clickedTileContent);
 
     const clickType = event.buttons === 2 ? 'SPECIAL_CLICK' : 'GENERAL_CLICK';
@@ -257,11 +226,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
    * @param y number
    * @returns boolean
    */
-  const isAlreadyCursorNeighbor = (x: number, y: number) => directions.some(([dx, dy]) => cursorOriginX + dx === x && cursorOriginY + dy === y);
+  const isAlreadyCursorNeighbor = (x: number, y: number) => CursorDirections.some(([dx, dy]) => cursorOriginX + dx === x && cursorOriginY + dy === y);
 
   const findOpenedNeighbors = (currentX: number, currentY: number) => {
-    const directionsWithCenter = [[0, 0], ...directions];
-    for (const [dx, dy] of directionsWithCenter) {
+    for (const [dx, dy] of [[0, 0], ...CursorDirections]) {
       const [x, y] = [currentX + dx, currentY + dy];
       if (tiles[y]?.[x] && checkTileHasOpened(tiles[y][x])) return { x, y };
     }
@@ -323,7 +291,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const [distanceX, distanceY] = [cursor.x - (cursor.pointer?.x ?? cursor.x), cursor.y - (cursor.pointer?.y ?? cursor.y)];
       let rotate = null;
       if (distanceX !== 0 || distanceY !== 0) rotate = Math.atan2(distanceY, distanceX);
-      drawCursor(otherCursorsCtx, x * tileSize, y * tileSize, cursorColors[cursor.color], cursor.revive_at || null, rotate);
+      drawCursor(otherCursorsCtx, x * tileSize, y * tileSize, CursorColors[cursor.color], cursor.revive_at || null, rotate);
     });
   };
 
@@ -342,7 +310,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
     cursors.forEach(cursor => {
       const [x, y] = [cursor.pointer?.x - cursorOriginX + tilePaddingWidth / 2, cursor.pointer?.y - cursorOriginY + tilePaddingHeight / 2];
-      drawPointer(otherPointerCtx, x * tileSize, y * tileSize, otherCursorColors[cursor.color], borderPixel);
+      drawPointer(otherPointerCtx, x * tileSize, y * tileSize, OtherCursorColors[cursor.color], borderPixel);
     });
   };
 
@@ -360,11 +328,12 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     // Function to get neighbors of a node
     function getNeighbors(grid: (TileNode | null)[][], node: TileNode) {
       const neighbors = [];
-      for (const [dx, dy] of directions) {
+      // Make sure the neighbor is within bounds and not an obstacle
+      for (const [dx, dy] of CursorDirections) {
         const [x, y] = [node.x + dx, node.y + dy];
-        // Make sure the neighbor is within bounds and not an obstacle
-        if (y >= 0 && y < grid.length && x >= 0 && x < grid[y].length && grid[y][x] !== null && !checkIsOtherCursorOnTile(x, y))
-          neighbors.push({ node: grid[y][x], isDiagonal: dx !== 0 && dy !== 0 });
+        if (y < 0 || y >= grid.length || x < 0 || x >= grid[y].length) continue;
+        if (grid[y][x] === null || checkIsOtherCursorOnTile(x, y)) continue;
+        neighbors.push({ node: grid[y][x], isDiagonal: dx !== 0 && dy !== 0 });
       }
       return neighbors;
     }
@@ -388,9 +357,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         const newLeftPaths = { x: temp.x - startX, y: temp.y - startY };
         setLeftPaths(newLeftPaths);
         while (temp) {
-          path.unshift(temp);
+          path.unshift({ x: temp.x - startX, y: temp.y - startY });
           temp = temp.parent as TileNode;
         }
+        console.log(path);
         return path;
       }
       openNodeList = openNodeList.filter(node => node !== current);
@@ -430,7 +400,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     interactionCtx.clearRect(0, 0, windowWidth, windowHeight);
 
     // setting cursor color
-    const cursorColor = cursorColors[color];
+    const cursorColor = CursorColors[color];
     const borderPixel = 5 * zoom;
 
     const cursorPosition = {
@@ -443,29 +413,25 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     };
     // Setting compensation value for cursor positions
     const compensation = {
-      x: cursorX - cursorOriginX - tilePaddingWidth - leftPaths.x,
-      y: cursorY - cursorOriginY - tilePaddingHeight - leftPaths.y,
+      x: cursorX - cursorOriginX - tilePaddingWidth - leftPaths.x + relativeX + 0.5,
+      y: cursorY - cursorOriginY - tilePaddingHeight - leftPaths.y + relativeY + 0.5,
     };
 
     // If both distanceX and distanceY are 0, the cursor will not rotate.
     const rotate = (cursorOriginX !== clickX || cursorOriginY !== clickY) && forwardPath ? Math.atan2(-forwardPath.y, -forwardPath.x) : null;
-    // Draw my cursor
     drawCursor(myCursorCtx, cursorPosition.x, cursorPosition.y, cursorColor, null, rotate);
-    // Describe my clicked tile border
     drawPointer(interactionCtx, clickCanvasPosition.x, clickCanvasPosition.y, cursorColor, borderPixel);
-    // Draw other users' cursor
     drawOtherUserCursors();
-    // Draw other users' clicked tile border
     drawOtherUserPointers(borderPixel);
-    // Draw path
+
     if (paths.length > 0) {
-      const [x, y] = [paths[0].x + compensation.x + 0.5, paths[0].y + compensation.y + 0.5];
+      const [x, y] = [paths[0].x + compensation.x, paths[0].y + compensation.y];
       interactionCtx.beginPath();
       interactionCtx.strokeStyle = 'black';
       interactionCtx.lineWidth = tileSize / 6;
       interactionCtx.moveTo(x * tileSize, y * tileSize); // start point
       paths.forEach(vector => {
-        const [vx, vy] = [vector.x + compensation.x + 0.5, vector.y + compensation.y + 0.5];
+        const [vx, vy] = [vector.x + compensation.x, vector.y + compensation.y];
         interactionCtx.lineTo(vx * tileSize, vy * tileSize);
       });
       interactionCtx.stroke();
@@ -500,12 +466,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   return (
     <>
-      {isInitializing ? (
+      {isInitializing && (
         <div className={S.loading}>
           <h1>Assets Loading...</h1>
           <div className={`${tiles.length < 1 ? S.loadingBar : S.loadComplete}`} />
         </div>
-      ) : (
+      )}
+      {!isInitializing && (
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
           <ChatComponent />
           <Tilemap
