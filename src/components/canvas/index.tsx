@@ -9,8 +9,8 @@ import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
-import { XYType, VectorImagesType, ClickType } from '@/types';
-import { CursorColors, CursorDirections, OtherCursorColors } from '@/constants';
+import { XYType, VectorImagesType } from '@/types';
+import { Click, ClickType, CursorColors, CursorDirections, OtherCursorColors } from '@/constants';
 
 class TileNode {
   x: number;
@@ -193,14 +193,14 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
     setClickPosition(tileX, tileY, clickedTileContent);
 
-    const clickType = event.buttons === 2 ? 'SPECIAL_CLICK' : 'GENERAL_CLICK';
+    const clickType: ClickType = event.buttons === 2 ? Click.SPECIAL_CLICK : Click.GENERAL_CLICK;
     if (movementInterval.current) {
       cancelCurrentMovement();
       setCachingTiles(tiles);
     }
     clickEvent(tileX, tileY, clickType);
 
-    if (clickType === 'SPECIAL_CLICK' && !clickedTileContent.includes('C')) return;
+    if (clickType === Click.SPECIAL_CLICK && !clickedTileContent.includes('C')) return;
     let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
     if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];
     moveCursor(targetTileX, targetTileY, tileX, tileY, clickType);
