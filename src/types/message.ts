@@ -39,3 +39,5 @@ export type GetMyCusorMessageType = {
 export type ReviveTimeMessageType = {
   revive_at: number | string | Date;
 };
+
+export type ClickType = 'GENERAL_CLICK' | 'SPECIAL_CLICK';

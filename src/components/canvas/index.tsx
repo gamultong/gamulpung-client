@@ -9,7 +9,7 @@ import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
-import { XYType, VectorImagesType } from '@/types';
+import { XYType, VectorImagesType, ClickType } from '@/types';
 import { CursorColors, CursorDirections, OtherCursorColors } from '@/constants';
 
 class TileNode {
@@ -60,22 +60,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const { boomPaths, cursorPaths, flagPaths, stunPaths } = Paths;
   /** stores */
   const { windowHeight, windowWidth } = useScreenSize();
-  const {
-    x: cursorX,
-    y: cursorY,
-    godown,
-    goleft,
-    goright,
-    goup,
-    goDownLeft,
-    goDownRight,
-    goUpLeft,
-    goUpRight,
-    zoom,
-    color,
-    setPosition: setCusorPosition,
-  } = useCursorStore();
   const { setPosition: setClickPosition, x: clickX, y: clickY, setMovecost } = useClickStore();
+  const { x: cursorX, y: cursorY, zoom, color, setPosition: setCursorPosition } = useCursorStore();
+  const { godown, goleft, goright, goup, goDownLeft, goDownRight, goUpLeft, goUpRight } = useCursorStore();
   const { cursors } = useOtherUserCursorsStore();
   const { sendMessage } = useWebSocketStore();
 
@@ -121,7 +108,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
    * @param relativetileY y position of clicked tile
    * @returns void
    * */
-  const moveCursor = (relativeTileX: number, relativetileY: number, clickedX: number, clickedY: number, type: 'GENERAL_CLICK' | 'SPECIAL_CLICK') => {
+  const moveCursor = (relativeTileX: number, relativetileY: number, clickedX: number, clickedY: number, type: ClickType) => {
     if (movementInterval.current) return;
     let index = 0;
     const foundPaths = findPathUsingAStar(relativeX, relativeY, relativeTileX, relativetileY);
@@ -129,7 +116,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     if (currentPath?.x === undefined || currentPath?.y === undefined) return;
     let [innerCursorX, innerCursorY] = [cursorOriginX, cursorOriginY];
     setMovecost(foundPaths.length - 1);
-    setCusorPosition(relativeTileX + startPoint.x, relativetileY + startPoint.y);
+    setCursorPosition(relativeTileX + startPoint.x, relativetileY + startPoint.y);
 
     const moveAnimation = (dx: number, dy: number) => {
       const { interactionCanvasRef: I_canvas, otherCursorsRef: C_canvas, otherPointerRef: P_canvas } = canvasRefs;
@@ -185,7 +172,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     }, MOVE_SPEED);
   };
 
-  const clickEvent = (x: number, y: number, click_type: 'GENERAL_CLICK' | 'SPECIAL_CLICK') => {
+  const clickEvent = (x: number, y: number, click_type: ClickType) => {
     const position = { x, y };
     const payload = { position, click_type };
     const body = JSON.stringify({ event: 'pointing', payload });
@@ -431,8 +418,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       interactionCtx.lineWidth = tileSize / 6;
       interactionCtx.moveTo(x * tileSize, y * tileSize); // start point
       paths.forEach(vector => {
-        const [vx, vy] = [vector.x + compensation.x, vector.y + compensation.y];
-        interactionCtx.lineTo(vx * tileSize, vy * tileSize);
+        const [lineX, lineY] = [(vector.x + compensation.x) * tileSize, (vector.y + compensation.y) * tileSize];
+        interactionCtx.lineTo(lineX, lineY);
       });
       interactionCtx.stroke();
     }
