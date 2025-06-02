@@ -206,13 +206,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     moveCursor(targetTileX, targetTileY, tileX, tileY, clickType);
   };
 
-  /**
-   * Check if the clicked tile is already a neighbor of the cursor,
-   * which means the cursor should not move to the clicked tile.
-   * @param x number
-   * @param y number
-   * @returns boolean
-   */
+  /** Check if the clicked tile is already a neighbor of the cursor */
   const isAlreadyCursorNeighbor = (x: number, y: number) => CursorDirections.some(([dx, dy]) => cursorOriginX + dx === x && cursorOriginY + dy === y);
 
   const findOpenedNeighbors = (currentX: number, currentY: number) => {
@@ -223,30 +217,21 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     return { x: Infinity, y: Infinity };
   };
 
-  /**
-   * Draw cursor on canvas
-   * @param ctx CanvasRenderingContext2D
-   * @param x x position
-   * @param y y position
-   * @param color cursor color
-   * @param revive_at revive time
-   * @param rotate rotate of cursor
-   * @param scale scale of cursor
-   */
+  /** Draw cursor on canvas */
   const drawCursor = (
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
     color: string,
-    revive_at: number | null,
-    rotate: number | null,
+    revive_at: number = 0,
+    rotate: number = 0,
     scale: number = 1,
   ) => {
-    ctx.save();
     const adjustedScale = (zoom / 3.5) * scale;
+    ctx.save();
     ctx.fillStyle = color;
     // What if the cursor is rotating. Then the cursor will rotate.
-    if (rotate !== null) {
+    if (rotate !== 0) {
       const [rotateX, rotateY] = [Math.cos(rotate - 1 / 4) * 2 * Math.PI, Math.sin(rotate - 1 / 4) * 2 * Math.PI];
       ctx.translate(x - (rotateX * tileSize) / 18 / scale + tileSize / 2, y - (rotateY * tileSize) / 18 / scale + tileSize / 2);
       ctx.rotate(rotate - (Math.PI / 24) * 8);
@@ -254,16 +239,16 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     ctx.scale(adjustedScale, adjustedScale);
     ctx.fill(cachedVectorAssets?.cursor as Path2D);
     ctx.restore();
-    if (revive_at && Date.now() < revive_at && cachedVectorAssets?.stun) {
+    if (revive_at > 0 && Date.now() < revive_at && cachedVectorAssets?.stun) {
       const stunScale = (zoom / 2) * scale;
       ctx.save();
       ctx.translate(x - tileSize / 2 / scale, y - tileSize / 2 / scale);
       ctx.fillStyle = 'white';
       ctx.strokeStyle = 'black';
       ctx.scale(stunScale, stunScale);
-      for (let i = 0; i < cachedVectorAssets?.stun.length; i++) {
-        ctx.fill(cachedVectorAssets.stun[i]);
-        ctx.stroke(cachedVectorAssets.stun[i]);
+      for (const stunPath of cachedVectorAssets.stun) {
+        ctx.fill(stunPath);
+        ctx.stroke(stunPath);
       }
     }
     ctx.restore();
@@ -274,11 +259,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     if (!otherCursorsCtx) return;
     otherCursorsCtx.clearRect(0, 0, windowWidth, windowHeight);
     cursors.forEach(cursor => {
-      const [x, y] = [cursor.x - cursorOriginX + tilePaddingWidth / 2, cursor.y - cursorOriginY + tilePaddingHeight / 2];
+      const [drawX, drawY] = [cursor.x - cursorOriginX + tilePaddingWidth / 2, cursor.y - cursorOriginY + tilePaddingHeight / 2];
       const [distanceX, distanceY] = [cursor.x - (cursor.pointer?.x ?? cursor.x), cursor.y - (cursor.pointer?.y ?? cursor.y)];
-      let rotate = null;
-      if (distanceX !== 0 || distanceY !== 0) rotate = Math.atan2(distanceY, distanceX);
-      drawCursor(otherCursorsCtx, x * tileSize, y * tileSize, CursorColors[cursor.color], cursor.revive_at || null, rotate);
+      const rotate = distanceX !== 0 || distanceY !== 0 ? Math.atan2(distanceY, distanceX) : 0;
+      drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CursorColors[cursor.color], cursor.revive_at, rotate);
     });
   };
 
@@ -336,10 +320,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     start.fTotal = start.gScore + start.heuristic;
 
     while (openNodeList.length > 0) {
-      const current = openNodeList.reduce((a, b) => (a.fTotal < b.fTotal ? a : b));
-      if (current.x === target.x && current.y === target.y) {
+      const now = openNodeList.reduce((a, b) => (a.fTotal < b.fTotal ? a : b));
+      if (now.x === target.x && now.y === target.y) {
         const path = [];
-        let temp = current;
+        let temp = now;
         /** calculate distance from target */
         const newLeftPaths = { x: temp.x - startX, y: temp.y - startY };
         setLeftPaths(newLeftPaths);
@@ -349,18 +333,18 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         }
         return path;
       }
-      openNodeList = openNodeList.filter(node => node !== current);
-      closedList.push(current);
+      openNodeList = openNodeList.filter(node => node !== now);
+      closedList.push(now);
 
       /** Find neighbor nodes from current node. */
-      const neighbors = getNeighbors(grid, current);
+      const neighbors = getNeighbors(grid, now);
       for (const { node: neighbor, isDiagonal } of neighbors) {
         if (closedList.includes(neighbor)) continue;
         // Apply different cost for diagonal movement
-        const tempG = current.gScore + (isDiagonal ? Math.sqrt(2) : 1);
+        const tempG = now.gScore + (isDiagonal ? Math.sqrt(2) : 1);
         if (tempG >= neighbor.gScore) continue;
         if (!openNodeList.includes(neighbor)) openNodeList.push(neighbor);
-        neighbor.parent = current;
+        neighbor.parent = now;
         neighbor.gScore = tempG;
         neighbor.heuristic = Math.abs(neighbor.x - target.x) + Math.abs(neighbor.y - target.y);
         neighbor.fTotal = neighbor.gScore + neighbor.heuristic;
@@ -404,8 +388,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     };
 
     // If both distanceX and distanceY are 0, the cursor will not rotate.
-    const rotate = (cursorOriginX !== clickX || cursorOriginY !== clickY) && forwardPath ? Math.atan2(-forwardPath.y, -forwardPath.x) : null;
-    drawCursor(myCursorCtx, cursorPosition.x, cursorPosition.y, cursorColor, null, rotate);
+    const rotate = (cursorOriginX !== clickX || cursorOriginY !== clickY) && forwardPath ? Math.atan2(-forwardPath.y, -forwardPath.x) : 0;
+    drawCursor(myCursorCtx, cursorPosition.x, cursorPosition.y, cursorColor, 0, rotate);
     drawPointer(interactionCtx, clickCanvasPosition.x, clickCanvasPosition.y, cursorColor, borderPixel);
     drawOtherUserCursors();
     drawOtherUserPointers(borderPixel);
