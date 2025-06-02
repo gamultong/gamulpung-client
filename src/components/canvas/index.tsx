@@ -15,17 +15,17 @@ import { Click, ClickType, CursorColors, CursorDirections, OtherCursorColors } f
 class TileNode {
   x: number;
   y: number;
-  g: number;
-  h: number;
-  f: number;
+  gScore: number;
+  heuristic: number;
+  fTotal: number;
   parent: TileNode | null;
 
   constructor(x: number, y: number) {
     this.x = x;
     this.y = y;
-    this.g = Infinity; // Cost from start node
-    this.h = 0; // Heuristic (estimated cost to goal)
-    this.f = Infinity; // Total cost f = g + h
+    this.gScore = Infinity; // Cost from start node
+    this.heuristic = 0; // Heuristic (estimated cost to goal)
+    this.fTotal = Infinity; // Total cost f = g + h
     this.parent = null; // For path reconstruction
   }
 }
@@ -332,11 +332,11 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     /** initialize open and close list */
     let openNodeList = [start];
     const closedList = [];
-    start.g = 0;
-    start.f = start.g + start.h;
+    start.gScore = 0;
+    start.fTotal = start.gScore + start.heuristic;
 
     while (openNodeList.length > 0) {
-      const current = openNodeList.reduce((a, b) => (a.f < b.f ? a : b));
+      const current = openNodeList.reduce((a, b) => (a.fTotal < b.fTotal ? a : b));
       if (current.x === target.x && current.y === target.y) {
         const path = [];
         let temp = current;
@@ -347,7 +347,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
           path.unshift({ x: temp.x - startX, y: temp.y - startY });
           temp = temp.parent as TileNode;
         }
-        console.log(path);
         return path;
       }
       openNodeList = openNodeList.filter(node => node !== current);
@@ -358,13 +357,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       for (const { node: neighbor, isDiagonal } of neighbors) {
         if (closedList.includes(neighbor)) continue;
         // Apply different cost for diagonal movement
-        const tempG = current.g + (isDiagonal ? 1.5 : 1);
-        if (tempG >= neighbor.g) continue;
+        const tempG = current.gScore + (isDiagonal ? Math.sqrt(2) : 1);
+        if (tempG >= neighbor.gScore) continue;
         if (!openNodeList.includes(neighbor)) openNodeList.push(neighbor);
         neighbor.parent = current;
-        neighbor.g = tempG;
-        neighbor.h = Math.abs(neighbor.x - target.x) + Math.abs(neighbor.y - target.y);
-        neighbor.f = neighbor.g + neighbor.h;
+        neighbor.gScore = tempG;
+        neighbor.heuristic = Math.abs(neighbor.x - target.x) + Math.abs(neighbor.y - target.y);
+        neighbor.fTotal = neighbor.gScore + neighbor.heuristic;
       }
     }
     return [];
