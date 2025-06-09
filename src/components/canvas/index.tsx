@@ -354,12 +354,12 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   };
 
   const renderInteractionCanvas = () => {
-    const {
-      interactionCanvasRef: { current: interactionCanvas },
-      myCursorRef: { current: myCursorCanvas },
-      otherCursorsRef: { current: otherCursorsCanvas },
-      otherPointerRef: { current: otherPointerCanvas },
-    } = canvasRefs;
+    const { interactionCanvasRef, myCursorRef, otherCursorsRef, otherPointerRef } = canvasRefs;
+    const { current: interactionCanvas } = interactionCanvasRef;
+    const { current: myCursorCanvas } = myCursorRef;
+    const { current: otherCursorsCanvas } = otherCursorsRef;
+    const { current: otherPointerCanvas } = otherPointerRef;
+
     if (!interactionCanvas || !myCursorCanvas || !otherCursorsCanvas || !otherPointerCanvas) return;
 
     const [interactionCtx, myCursorCtx] = [interactionCanvas.getContext('2d'), myCursorCanvas.getContext('2d')];
