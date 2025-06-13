@@ -61,8 +61,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   /** stores */
   const { windowHeight, windowWidth } = useScreenSize();
   const { setPosition: setClickPosition, x: clickX, y: clickY, setMovecost } = useClickStore();
-  const { x: cursorX, y: cursorY, zoom, color, setPosition: setCursorPosition } = useCursorStore();
-  const { godown, goleft, goright, goup, goDownLeft, goDownRight, goUpLeft, goUpRight } = useCursorStore();
+  const { x: cursorX, y: cursorY, zoom, color, setPosition: setCursorPosition, goOriginTo } = useCursorStore();
   const { cursors } = useOtherUserCursorsStore();
   const { sendMessage } = useWebSocketStore();
 
@@ -154,15 +153,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       //   moveCursor(relativeTileX, relativetileY, clickedX, clickedY, type);
       //   return;
       // }
-
-      if (dx === 1 && dy === 1) goDownRight();
-      if (dx === 1 && dy === -1) goUpRight();
-      if (dx === 1 && dy === 0) goright();
-      if (dx === -1 && dy === 1) goDownLeft();
-      if (dx === -1 && dy === -1) goUpLeft();
-      if (dx === -1 && dy === 0) goleft();
-      if (dx === 0 && dy === 1) godown();
-      if (dx === 0 && dy === -1) goup();
+      goOriginTo(dx, dy);
 
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       currentPath = path;
@@ -297,9 +288,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
    * */
   const findPathUsingAStar = (startX: number, startY: number, targetX: number, targetY: number) => {
     // Function to get neighbors of a node
-    function getNeighbors(grid: (TileNode | null)[][], node: TileNode) {
+    const getNeighbors = (grid: (TileNode | null)[][], node: TileNode) => {
       const neighbors = [];
-      // Make sure the neighbor is within bounds and not an obstacle
       for (const [dx, dy] of CursorDirections) {
         const [x, y] = [node.x + dx, node.y + dy];
         if (y < 0 || y >= grid.length || x < 0 || x >= grid[y].length) continue;
@@ -307,7 +297,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         neighbors.push({ node: grid[y][x], isDiagonal: dx !== 0 && dy !== 0 });
       }
       return neighbors;
-    }
+    };
+
+    const getLeftPaths = (temp: TileNode, x: number, y: number): XYType => ({ x: temp.x - x, y: temp.y - y });
 
     /** initialize tiles */
     const [start, target] = [new TileNode(startX, startY), new TileNode(targetX, targetY)];
@@ -325,10 +317,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         const path = [];
         let temp = now;
         /** calculate distance from target */
-        const newLeftPaths = { x: temp.x - startX, y: temp.y - startY };
-        setLeftPaths(newLeftPaths);
+        setLeftPaths(getLeftPaths(temp, startX, startY));
         while (temp) {
-          path.unshift({ x: temp.x - startX, y: temp.y - startY });
+          path.unshift(getLeftPaths(temp, startX, startY));
           temp = temp.parent as TileNode;
         }
         return path;
@@ -400,10 +391,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       interactionCtx.strokeStyle = 'black';
       interactionCtx.lineWidth = tileSize / 6;
       interactionCtx.moveTo(x * tileSize, y * tileSize); // start point
-      paths.forEach(vector => {
+      for (const vector of paths) {
         const [lineX, lineY] = [(vector.x + compensation.x) * tileSize, (vector.y + compensation.y) * tileSize];
         interactionCtx.lineTo(lineX, lineY);
-      });
+      }
       interactionCtx.stroke();
     }
   };
@@ -447,11 +438,11 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
           <ChatComponent />
           <Tilemap
             isMoving={paths.length > 0}
+            className={S.canvas}
             tilePaddingHeight={tilePaddingHeight}
             tilePaddingWidth={tilePaddingWidth}
             tileSize={tileSize}
             tiles={tiles}
-            className={S.canvas}
           />
           <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />

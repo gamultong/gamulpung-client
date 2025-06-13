@@ -19,14 +19,7 @@ interface ClientCursorState extends CursorState {
   setPosition: (x: number, y: number) => void;
   setX: (x: number) => void;
   setY: (y: number) => void;
-  goup: () => void;
-  godown: () => void;
-  goleft: () => void;
-  goright: () => void;
-  goUpLeft: () => void;
-  goUpRight: () => void;
-  goDownLeft: () => void;
-  goDownRight: () => void;
+  goOriginTo: (x: number, y: number) => void;
   setOringinPosition: (x: number, y: number) => void;
   zoom: number;
   setZoom: (zoom: number) => void;
@@ -58,15 +51,8 @@ export const useCursorStore = create<ClientCursorState>(set => ({
   setX: x => set({ x }),
   setY: y => set({ y }),
   setZoom: zoom => set({ zoom }),
-  goup: () => set(state => ({ originY: state.originY - 1 })),
-  godown: () => set(state => ({ originY: state.originY + 1 })),
-  goleft: () => set(state => ({ originX: state.originX - 1 })),
-  goright: () => set(state => ({ originX: state.originX + 1 })),
-  goUpLeft: () => set(state => ({ originX: state.originX - 1, originY: state.originY - 1 })),
-  goUpRight: () => set(state => ({ originX: state.originX + 1, originY: state.originY - 1 })),
-  goDownLeft: () => set(state => ({ originX: state.originX - 1, originY: state.originY + 1 })),
-  goDownRight: () => set(state => ({ originX: state.originX + 1, originY: state.originY + 1 })),
   setOringinPosition: (x, y) => set({ originX: x, originY: y }),
+  goOriginTo: (x, y) => set(s => ({ originX: x + s.originX, originY: y + s.originY })),
   setPosition: (x, y) => set({ x, y }),
 }));
 
