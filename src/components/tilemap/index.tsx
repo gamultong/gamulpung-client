@@ -27,20 +27,18 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
   // states
   const [innerZoom, setInnerZoom] = useState(zoom);
   const [cachedTextures, setCachedTextures] = useState(new Map<string, Texture>());
+  const makeSpriteMap = () => new Map<string, JSX.Element>();
 
   // Generate textures for tiles, boom, and flags
   const cachedSpritesRef = useRef({
-    outerCachedSprite: new Map<string, JSX.Element>(),
-    innerCachedSprite: new Map<string, JSX.Element>(),
-    boomCachedSprite: new Map<string, JSX.Element>(),
-    flagCachedSprite: new Map<string, JSX.Element>(),
+    outerCachedSprite: makeSpriteMap(),
+    innerCachedSprite: makeSpriteMap(),
+    boomCachedSprite: makeSpriteMap(),
+    flagCachedSprite: makeSpriteMap(),
   });
 
   const getContext = (canvas: HTMLCanvasElement): CanvasRenderingContext2D =>
-    canvas.getContext('2d', {
-      willReadFrequently: false,
-      desynchronized: true,
-    }) as CanvasRenderingContext2D;
+    canvas.getContext('2d', { willReadFrequently: false, desynchronized: true })!;
 
   // Memoize textures creation
   const textures = useMemo(() => {
@@ -307,7 +305,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         backgroundColor: 0x808080,
         resolution: isMoving ? 0.3 : 0.8,
         antialias: false,
-        powerPreference: 'high-performance',
+        powerPreference: 'low-power',
         autoDensity: false,
       }}
     >

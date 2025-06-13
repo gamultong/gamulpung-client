@@ -299,6 +299,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       return neighbors;
     };
 
+    /** calculate distance from target */
     const getLeftPaths = (temp: TileNode, x: number, y: number): XYType => ({ x: temp.x - x, y: temp.y - y });
 
     /** initialize tiles */
@@ -316,7 +317,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       if (now.x === target.x && now.y === target.y) {
         const path = [];
         let temp = now;
-        /** calculate distance from target */
         setLeftPaths(getLeftPaths(temp, startX, startY));
         while (temp) {
           path.unshift(getLeftPaths(temp, startX, startY));
