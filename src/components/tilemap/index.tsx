@@ -1,7 +1,7 @@
 'use client';
 import { Container, Sprite, Stage, Text } from '@pixi/react';
 import { cloneElement, useMemo, useRef, useState } from 'react';
-import { Texture, TextStyle, SCALE_MODES, MIPMAP_MODES, WRAP_MODES } from 'pixi.js';
+import { Texture, TextStyle, SCALE_MODES, MIPMAP_MODES, WRAP_MODES, TextStyleFill } from 'pixi.js';
 import Paths from '@/assets/paths.json';
 import { useCursorStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
@@ -132,20 +132,13 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
   }, [tileSize]);
 
   // Cache text styles for numbers using useMemo
-  const cachedTextStyles = useMemo(
-    () =>
-      Array.from(
-        { length: 8 },
-        (_, i) =>
-          new TextStyle({
-            fontFamily: 'LOTTERIACHAB',
-            fontSize: 50 * zoom,
-            fill: countColors[i],
-          }),
-      ),
+  const cachedTextStyles = useMemo(() => {
+    const fontFamily = 'LOTTERIACHAB';
+    const fontSize = 50 * zoom;
+    const makeTextStyle = (fill: TextStyleFill) => new TextStyle({ fontFamily, fontSize, fill });
+    return Array.from({ length: 8 }, (_, i) => makeTextStyle(countColors[i % countColors.length]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [zoom],
-  );
+  }, [zoom]);
 
   // Memoize sprites creation using cached base sprites from useRef
   const { outerSprites, innerSprites, boomSprites, flagSprites, textElements } = useMemo(() => {
