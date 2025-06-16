@@ -175,64 +175,48 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         // Outer sprite
         if (outerTexture) {
           const outerKey = `${outerTexture.textureCacheIds || outerTexture}-${tileSize}`;
-          let baseOuter = outerCache.get(outerKey);
-          if (!baseOuter) {
-            baseOuter = (
-              <Sprite
-                cullable={true}
-                scale={0.1}
-                eventMode="none"
-                texture={outerTexture}
-                width={tileSize}
-                height={tileSize}
-                cacheAsBitmapResolution={0.0001}
-              />
-            );
-            outerCache.set(outerKey, baseOuter);
-          }
+          const baseOuter = outerCache.get(outerKey) ?? (
+            <Sprite
+              cullable={true}
+              scale={0.1}
+              eventMode="none"
+              texture={outerTexture}
+              width={tileSize}
+              height={tileSize}
+              cacheAsBitmapResolution={0.0001}
+            />
+          );
+
+          outerCache.set(outerKey, baseOuter);
           outerSprites.push(cloneElement(baseOuter, { key: `outer-${tileKey}`, x, y }));
         }
 
         // Inner sprite
         if (innerTexture) {
           const innerKey = `${innerTexture.textureCacheIds || innerTexture}-${tileSize}`;
-          let baseInner = innerCache.get(innerKey);
-          if (!baseInner) {
-            const size = tileSize - 10 * zoom;
-            baseInner = (
-              <Sprite
-                cullable={true}
-                scale={0.1}
-                eventMode="none"
-                texture={innerTexture}
-                width={size}
-                height={size}
-                cacheAsBitmapResolution={0.001}
-              />
-            );
-            innerCache.set(innerKey, baseInner);
-          }
+          const size = tileSize - 10 * zoom;
+          const baseInner = innerCache.get(innerKey) ?? (
+            <Sprite cullable={true} scale={0.1} eventMode="none" texture={innerTexture} width={size} height={size} cacheAsBitmapResolution={0.001} />
+          );
+          innerCache.set(innerKey, baseInner);
           innerSprites.push(cloneElement(baseInner, { key: `inner-${tileKey}`, x: x + 5 * zoom, y: y + 5 * zoom }));
         }
 
         // Boom sprite
         if (content === 'B') {
           const boomKey = `boom-${tileSize}`;
-          let baseBoom = boomCache.get(boomKey);
-          if (!baseBoom) {
-            baseBoom = (
-              <Sprite
-                cullable={true}
-                scale={0.1}
-                eventMode="none"
-                texture={textures.get('boom')}
-                width={tileSize}
-                height={tileSize}
-                cacheAsBitmapResolution={0.1}
-              />
-            );
-            boomCache.set(boomKey, baseBoom);
-          }
+          const baseBoom = boomCache.get(boomKey) ?? (
+            <Sprite
+              cullable={true}
+              scale={0.1}
+              eventMode="none"
+              texture={textures.get('boom')}
+              width={tileSize}
+              height={tileSize}
+              cacheAsBitmapResolution={0.1}
+            />
+          );
+          boomCache.set(boomKey, baseBoom);
           boomSprites.push(cloneElement(baseBoom, { key: `boom-${tileKey}`, x, y }));
         }
 
@@ -240,22 +224,19 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         if (content[0] === 'F') {
           const flagIndex = content[1];
           const flagKey = `flag-${flagIndex}-${tileSize}`;
-          let baseFlag = flagCache.get(flagKey);
-          if (!baseFlag) {
-            baseFlag = (
-              <Sprite
-                cullable={true}
-                eventMode="none"
-                texture={textures.get(`flag-${flagIndex}`)}
-                anchor={0.5}
-                scale={0.1}
-                width={tileSize}
-                height={tileSize}
-                cacheAsBitmapResolution={0.1}
-              />
-            );
-            flagCache.set(flagKey, baseFlag);
-          }
+          const baseFlag = flagCache.get(flagKey) ?? (
+            <Sprite
+              cullable={true}
+              eventMode="none"
+              texture={textures.get(`flag-${flagIndex}`)}
+              anchor={0.5}
+              scale={0.1}
+              width={tileSize}
+              height={tileSize}
+              cacheAsBitmapResolution={0.1}
+            />
+          );
+          flagCache.set(flagKey, baseFlag);
           flagSprites.push(cloneElement(baseFlag, { key: `flag-${tileKey}`, x: x + tileSize / 2, y: y + tileSize / 2 }));
         }
 
