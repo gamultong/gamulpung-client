@@ -19,6 +19,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
   // constants
   const CURSOR_COLORS = useMemo(() => ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'], []);
   const { flagPaths, tileColors, countColors, boomPaths } = Paths;
+  const { outer, inner } = tileColors;
 
   // stores
   const { zoom } = useCursorStore();
@@ -71,8 +72,8 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
     // Textures for outer and inner tiles
     for (let i = 0; i < 3; i++) {
-      createTileTexture(tileColors.outer[i][0], tileColors.outer[i][1]);
-      createTileTexture(tileColors.inner[i][0], tileColors.inner[i][1]);
+      createTileTexture(outer[i][0], outer[i][1]);
+      createTileTexture(inner[i][0], inner[i][1]);
     }
 
     // Boom texture
@@ -157,19 +158,19 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
     for (let ri = 0; ri < tiles.length; ri++) {
       for (let ci = 0; ci < tiles[ri].length; ci++) {
-        const content = tiles[ri][ci];
         const x = (ci - tilePaddingWidth) * tileSize;
         const y = (ri - tilePaddingHeight) * tileSize;
         if (x < -tileSize || y < -tileSize || x > windowWidth + tileSize || y > windowHeight + tileSize) continue;
+        const content = tiles[ri][ci];
         const tileKey = `${ri}-${ci}-${tileSize}`;
 
         // Select textures based on tile content
-        let outerTexture = textures.get(`${tileColors.outer[2][0]}-${tileColors.outer[2][1]}-${tileSize}`);
-        let innerTexture = textures.get(`${tileColors.inner[2][0]}-${tileColors.inner[2][1]}-${tileSize}`);
+        let outerTexture = textures.get(`${outer[2][0]}-${outer[2][1]}-${tileSize}`);
+        let innerTexture = textures.get(`${inner[2][0]}-${inner[2][1]}-${tileSize}`);
         if (content[0] === 'C' || content[0] === 'F') {
           const isEven = content.slice(-1) === '0' ? 0 : 1;
-          outerTexture = textures.get(`${tileColors.outer[isEven][0]}-${tileColors.outer[isEven][1]}-${tileSize}`);
-          innerTexture = textures.get(`${tileColors.inner[isEven][0]}-${tileColors.inner[isEven][1]}-${tileSize}`);
+          outerTexture = textures.get(`${outer[isEven][0]}-${outer[isEven][1]}-${tileSize}`);
+          innerTexture = textures.get(`${inner[isEven][0]}-${inner[isEven][1]}-${tileSize}`);
         }
 
         // Outer sprite
@@ -281,6 +282,9 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         antialias: false,
         powerPreference: 'low-power',
         autoDensity: false,
+        preserveDrawingBuffer: true,
+        clearBeforeRender: true,
+        sharedTicker: true,
       }}
     >
       <Container name={'container'} sortableChildren={false} eventMode="none" cacheAsBitmap={!isMoving && zoom !== innerZoom}>
