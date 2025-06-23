@@ -18,6 +18,8 @@ import CanvasDashboard from '@/components/canvasDashboard';
 import TutorialStep from '@/components/tutorialstep';
 import ScoreBoard from '@/components/scoreboard';
 import {
+  Direction,
+  DirectionType,
   FlagSetMessageType,
   GetMyCusorMessageType,
   PointerSetMessageType,
@@ -58,12 +60,12 @@ export default function Play() {
   const { windowWidth, windowHeight } = useScreenSize();
 
   /** states */
-  const [tileSize, setTileSize] = useState<number>(0); //px
+  const [tileSize, setTileSize] = useState<number>(0); // px
   const [startPoint, setStartPoint] = useState<XYType>({ x: 0, y: 0 });
   const [endPoint, setEndPoint] = useState<XYType>({ x: 0, y: 0 });
   const [renderStartPoint, setRenderStartPoint] = useState<XYType>({ x: 0, y: 0 });
   const [cachingTiles, setCachingTiles] = useState<string[][]>([]);
-  const [renderTiles, setRenderTiles] = useState<string[][]>([...cachingTiles.map(row => [...row])]);
+  const [renderTiles, setRenderTiles] = useState<string[][]>([...cachingTiles.map(r => [...r])]);
   const [leftReviveTime, setLeftReviveTime] = useState<number>(-1);
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
@@ -76,30 +78,18 @@ export default function Play() {
    * @param end_y {number} - end y position
    * @param type {string} - Request type (R: Right tiles, L: Left tiles, U: Up tiles, D: Down tiles, A: All tiles)
    *  */
-  const requestTiles = (start_x: number, start_y: number, end_x: number, end_y: number, type: 'R' | 'L' | 'U' | 'D' | 'A') => {
+  const requestTiles = (start_x: number, start_y: number, end_x: number, end_y: number, type: DirectionType) => {
     if (!isOpen || !isInitialized) return;
-    /** add Dummy data to originTiles */
-    const [rowlength, columnlength] = [Math.abs(end_x - start_x) + 1, Math.abs(start_y - end_y) + 1];
+    const [rl, cl] = [Math.abs(end_x - start_x) + 1, Math.abs(start_y - end_y) + 1]; // row length, column length
 
+    /** add Dummy data to originTiles */
     setCachingTiles(tiles => {
       let newTiles = [...tiles];
-      switch (type) {
-        case 'U': // Upper tiles
-          newTiles = [...Array.from({ length: columnlength }, () => Array(rowlength).fill('??')), ...newTiles.slice(0, -columnlength)];
-          break;
-        case 'D': // Down tiles
-          newTiles = [...newTiles.slice(columnlength), ...Array.from({ length: columnlength }, () => Array(rowlength).fill('??'))];
-          break;
-        case 'L': // Left tiles
-          for (let i = 0; i < columnlength; i++)
-            newTiles[i] = [...Array(rowlength).fill('??'), ...newTiles[i].slice(0, newTiles[0].length - rowlength)];
-          break;
-        case 'R': // Right tiles
-          for (let i = 0; i < columnlength; i++) newTiles[i] = [...newTiles[i].slice(rowlength), ...Array(rowlength).fill('??')];
-          break;
-        case 'A': // All tiles
-          newTiles = Array.from({ length: columnlength }, () => Array(rowlength).fill('??'));
-      }
+      if (type === Direction.UP) newTiles = [...Array.from({ length: cl }, () => Array(rl).fill('??')), ...tiles.slice(0, -cl)];
+      if (type === Direction.DOWN) newTiles = [...tiles.slice(cl), ...Array.from({ length: cl }, () => Array(rl).fill('??'))];
+      if (type === Direction.LEFT) for (let i = 0; i < cl; i++) newTiles[i] = [...Array(rl).fill('??'), ...tiles[i].slice(0, tiles[0].length - rl)];
+      if (type === Direction.RIGHT) for (let i = 0; i < cl; i++) newTiles[i] = [...tiles[i].slice(rl), ...Array(rl).fill('??')];
+      if (type === Direction.ALL) newTiles = Array.from({ length: cl }, () => Array(rl).fill('??'));
       return newTiles;
     });
     const payload = { start_p: { x: start_x, y: start_y }, end_p: { x: end_x, y: end_y } };
@@ -120,16 +110,29 @@ export default function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /**
-   * Initialize
-   * Re-connect websocket when websocket is closed state.
-   * */
-  useEffect(() => {
-    if (!isOpen && startPoint.x !== endPoint.x && endPoint.y !== startPoint.y) {
-      setLeftReviveTime(-1);
-      const [view_width, view_height] = [endPoint.x - startPoint.x + 1, endPoint.y - startPoint.y + 1];
-      connect(WS_URL + `?view_width=${view_width}&view_height=${view_height}`);
-    }
+  // initialization
+  const play = () => {
+    if (!(!isOpen && startPoint.x !== endPoint.x && endPoint.y !== startPoint.y)) return;
+    setLeftReviveTime(-1);
+    setCachingTiles([]);
+    setRenderTiles([]);
+    setIsInitialized(false);
+    setCursorPosition(cursorOriginX, cursorOriginY);
+    setClickPosition(cursorOriginX, cursorOriginY, '');
+    setCursors([]);
+    setRenderStartPoint({ x: 0, y: 0 });
+    setStartPoint({ x: cursorX, y: cursorY });
+    setEndPoint({ x: cursorX, y: cursorY });
+    setTileSize(ORIGIN_TILE_SIZE * zoom);
+    setColor('blue');
+    setOringinPosition(cursorX, cursorY);
+    setZoom(1);
+    const [view_width, view_height] = [endPoint.x - startPoint.x + 1, endPoint.y - startPoint.y + 1];
+    connect(WS_URL + `?view_width=${view_width}&view_height=${view_height}`);
+  };
+
+  useLayoutEffect(() => {
+    play();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, startPoint, endPoint]);
 
@@ -179,15 +182,14 @@ export default function Play() {
     const xOffset = start_x - startPoint.x;
 
     for (let i = 0; i < columnlength; i++) {
-      const rowIndex = i + yOffset;
-      const row = newTiles[rowIndex] || (newTiles[rowIndex] = []);
+      const row = newTiles[i + yOffset];
       for (let j = 0; j < rowlength; j++) {
         const tile = sortedTiles[i][j];
         if (!tile) continue;
         const colIndex = j + xOffset;
-        const isAlternatingPosition = (i - end_y - start_x + j) % 2 === 1;
-        if (tile[0] === 'C' || tile[0] === 'F') row[colIndex] = `${tile}${isAlternatingPosition ? '1' : '0'}`;
-        else row[colIndex] = tile;
+        const isAlternatingPosition = (i - end_y - start_x + j) % 2 === 1 ? '1' : '0';
+        if (tile[0] !== 'C' && tile[0] !== 'F') row[colIndex] = tile;
+        else row[colIndex] = `${tile}${isAlternatingPosition}`;
       }
     }
     setCachingTiles(newTiles);
@@ -406,25 +408,25 @@ export default function Play() {
 
     const handleDiagonalMovement = () => {
       if (isRight && isDown) {
-        requestTiles(rightfrom, downfrom, rightto, upto, 'R');
-        requestTiles(leftfrom, downfrom, rightto, downto, 'D');
+        requestTiles(rightfrom, downfrom, rightto, upto, Direction.RIGHT);
+        requestTiles(leftfrom, downfrom, rightto, downto, Direction.DOWN);
       } else if (isLeft && isDown) {
-        requestTiles(leftfrom, downfrom, leftto, upto, 'L');
-        requestTiles(leftfrom, downfrom, rightto, downto, 'D');
+        requestTiles(leftfrom, downfrom, leftto, upto, Direction.LEFT);
+        requestTiles(leftfrom, downfrom, rightto, downto, Direction.DOWN);
       } else if (isRight && isUp) {
-        requestTiles(rightfrom, downfrom, rightto, upto, 'R');
-        requestTiles(leftfrom, upfrom, rightto, upto, 'U');
+        requestTiles(rightfrom, downfrom, rightto, upto, Direction.RIGHT);
+        requestTiles(leftfrom, upfrom, rightto, upto, Direction.UP);
       } else if (isLeft && isUp) {
-        requestTiles(leftfrom, downfrom, leftto, upto, 'L');
-        requestTiles(leftfrom, upfrom, rightto, upto, 'U');
+        requestTiles(leftfrom, downfrom, leftto, upto, Direction.LEFT);
+        requestTiles(leftfrom, upfrom, rightto, upto, Direction.UP);
       }
     };
 
     const handleStraightMovement = () => {
-      if (isRight) requestTiles(rightfrom, endPoint.y, rightto, startPoint.y, 'R');
-      if (isLeft) requestTiles(leftfrom, endPoint.y, leftto, startPoint.y, 'L');
-      if (isDown) requestTiles(startPoint.x, downfrom, endPoint.x, downto, 'D');
-      if (isUp) requestTiles(startPoint.x, upfrom, endPoint.x, upto, 'U');
+      if (isRight) requestTiles(rightfrom, endPoint.y, rightto, startPoint.y, Direction.RIGHT);
+      if (isLeft) requestTiles(leftfrom, endPoint.y, leftto, startPoint.y, Direction.LEFT);
+      if (isDown) requestTiles(startPoint.x, downfrom, endPoint.x, downto, Direction.DOWN);
+      if (isUp) requestTiles(startPoint.x, upfrom, endPoint.x, upto, Direction.UP);
     };
 
     if (!(isRight || isLeft || isUp || isDown)) return;
