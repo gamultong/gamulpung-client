@@ -26,7 +26,6 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
   const { windowHeight, windowWidth } = useScreenSize();
 
   // states
-  const [innerZoom, setInnerZoom] = useState(zoom);
   const [cachedTextures, setCachedTextures] = useState(new Map<string, Texture>());
   const makeSpriteMap = () => new Map<string, JSX.Element>();
 
@@ -50,7 +49,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       if (newTileTextures.has(key)) return newTileTextures.get(key);
 
       const tempCanvas = document.createElement('canvas');
-      const tileMinializedSize = Math.sqrt(tileSize / 5);
+      const tileMinializedSize = Math.sqrt(tileSize / 8);
       tempCanvas.width = tempCanvas.height = tileMinializedSize;
       const ctx = getContext(tempCanvas);
       if (!ctx) return;
@@ -78,7 +77,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
     // Boom texture
     const boomCanvas = document.createElement('canvas');
-    const boomMinimalized = 3;
+    const boomMinimalized = 4;
     boomCanvas.width = boomCanvas.height = tileSize / boomMinimalized;
     const boomCtx = getContext(boomCanvas);
     if (boomCtx) {
@@ -86,6 +85,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       const inner = new Path2D(boomPaths[0]);
       boomCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
       boomCtx.fill(inner);
+
       const outer = new Path2D(boomPaths[1]);
       boomCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
       boomCtx.fill(outer);
@@ -100,7 +100,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     }
 
     // Flag textures
-    const flagMinimalized = 3;
+    const flagMinimalized = 4;
     for (let i = 0; i < 4; i++) {
       const flagCanvas = document.createElement('canvas');
       flagCanvas.width = flagCanvas.height = tileSize / flagMinimalized;
@@ -126,7 +126,6 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
       newTileTextures.set(`flag-${i}`, flagTexture);
     }
-    setInnerZoom(zoom);
     setCachedTextures(newTileTextures);
     return newTileTextures;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -214,7 +213,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
               texture={textures.get('boom')}
               width={tileSize}
               height={tileSize}
-              cacheAsBitmapResolution={0.1}
+              cacheAsBitmapResolution={0.01}
             />
           );
           boomCache.set(boomKey, baseBoom);
@@ -282,12 +281,18 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         antialias: false,
         powerPreference: 'low-power',
         autoDensity: false,
-        preserveDrawingBuffer: true,
+        preserveDrawingBuffer: false, // true에서 false로 변경
         clearBeforeRender: true,
         sharedTicker: true,
       }}
     >
-      <Container name={'container'} sortableChildren={false} eventMode="none" cacheAsBitmap={!isMoving && zoom !== innerZoom}>
+      <Container
+        name={'container'}
+        sortableChildren={false}
+        eventMode="none"
+        cacheAsBitmap={false} // 조건부 캐싱에서 완전 비활성화로 변경
+        cullable={true}
+      >
         {outerSprites}
         {innerSprites}
         {boomSprites}
