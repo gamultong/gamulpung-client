@@ -163,27 +163,27 @@ export default function Play() {
    * @returns {rowlength, columnlength, sortedTiles}
    */
   const sortTiles = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string) => {
-    const [rowlength, columnlength] = [Math.abs(end_x - start_x + 1) * 2, Math.abs(start_y - end_y + 1)];
+    const [rowlen, colLen] = [Math.abs(end_x - start_x + 1) * 2, Math.abs(start_y - end_y + 1)];
     const sortedTiles: string[][] = [];
-    for (let i = 0; i < columnlength; i++) {
-      const newRow = new Array(rowlength / 2);
-      for (let j = 0, k = 0; j < rowlength; j += 2, k++) newRow[k] = parseHex(unsortedTiles.substring(i * rowlength + j, i * rowlength + j + 2));
+    for (let i = 0; i < colLen; i++) {
+      const newRow = new Array(rowlen / 2);
+      for (let j = 0, k = 0; j < rowlen; j += 2, k++) newRow[k] = parseHex(unsortedTiles.substring(i * rowlen + j, i * rowlen + j + 2));
       sortedTiles.unshift(newRow);
     }
-    return { rowlength, columnlength, sortedTiles };
+    return { rowlen, colLen, sortedTiles };
   };
 
-  const replaceTiles = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
+  const replaceTiles = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, replaceType: 'All' | 'PART') => {
     if (unsortedTiles.length === 0) return;
-    const { rowlength, columnlength, sortedTiles } = sortTiles(end_x, end_y, start_x, start_y, unsortedTiles);
+    const { rowlen, colLen, sortedTiles } = sortTiles(end_x, end_y, start_x, start_y, unsortedTiles);
     /** Replace dummy data according to coordinates */
     const newTiles = [...cachingTiles];
-    const yOffset = type === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - columnlength + 1 : 0) : end_y - startPoint.y;
+    const yOffset = replaceType === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - colLen + 1 : 0) : end_y - startPoint.y;
     const xOffset = start_x - startPoint.x;
 
-    for (let i = 0; i < columnlength; i++) {
+    for (let i = 0; i < colLen; i++) {
       const row = newTiles[i + yOffset];
-      for (let j = 0; j < rowlength; j++) {
+      for (let j = 0; j < rowlen; j++) {
         const tile = sortedTiles[i][j];
         if (!tile) continue;
         const colIndex = j + xOffset;
@@ -379,7 +379,7 @@ export default function Play() {
       endPoint.y + heightReductionLength,
       endPoint.x + widthReductionLength,
       startPoint.y - heightReductionLength,
-      'A',
+      Direction.ALL,
     );
     // setting view size
     const width = Math.floor((windowWidth * RENDER_RANGE) / newTileSize);

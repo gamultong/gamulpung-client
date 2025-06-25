@@ -320,7 +320,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         setLeftPaths(getLeftPaths(temp, startX, startY));
         while (temp) {
           path.unshift(getLeftPaths(temp, startX, startY));
-          temp = temp.parent as TileNode;
+          temp = temp.parent!;
         }
         return path;
       }
@@ -352,7 +352,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const { current: otherPointerCanvas } = otherPointerRef;
 
     if (!interactionCanvas || !myCursorCanvas || !otherCursorsCanvas || !otherPointerCanvas) return;
-
     const [interactionCtx, myCursorCtx] = [interactionCanvas.getContext('2d'), myCursorCanvas.getContext('2d')];
     if (!interactionCtx || !myCursorCtx) return;
 
