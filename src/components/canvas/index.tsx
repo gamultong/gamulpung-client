@@ -9,7 +9,7 @@ import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
-import { XYType, VectorImagesType } from '@/types';
+import { XYType, VectorImagesType, TileContent } from '@/types';
 import { Click, ClickType, CursorColors, CursorDirections, OtherCursorColors } from '@/constants';
 
 class TileNode {
@@ -58,6 +58,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
   const { boomPaths, cursorPaths, flagPaths, stunPaths } = Paths;
+
   /** stores */
   const { windowHeight, windowWidth } = useScreenSize();
   const { setPosition: setClickPosition, x: clickX, y: clickY, setMovecost } = useClickStore();
@@ -99,7 +100,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   }, []);
 
   /** Check if the tile has been opened */
-  const checkTileHasOpened = (tile: string) => !['F', 'C'].some(c => tile.includes(c));
+  const checkTileHasOpened = (tile: string) => ![TileContent.CLOSED, TileContent.FLAGGED].some(c => tile.includes(c));
 
   /**
    * General Click Event Handler
@@ -191,7 +192,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     }
     clickEvent(tileX, tileY, clickType);
 
-    if (clickType === Click.SPECIAL_CLICK && !clickedTileContent.includes('C')) return;
+    if (clickType === Click.SPECIAL_CLICK && !clickedTileContent.includes(TileContent.CLOSED)) return;
     let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
     if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];
     moveCursor(targetTileX, targetTileY, tileX, tileY, clickType);

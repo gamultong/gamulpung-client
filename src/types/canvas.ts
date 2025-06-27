@@ -12,3 +12,12 @@ export interface VectorImagesType {
 }
 
 export type CursorColor = 'red' | 'blue' | 'yellow' | 'purple';
+
+export const TileContent = {
+  CLOSED: 'C',
+  FLAGGED: 'F',
+  BOOM: 'B',
+  OPEN: 'O',
+  NULL: '',
+};
+export type TileContent = `${(typeof TileContent)[keyof typeof TileContent]}${number}` | number;

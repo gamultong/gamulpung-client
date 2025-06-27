@@ -29,7 +29,7 @@ import {
   TilesOpenedMessageType,
   XYType,
 } from '@/types';
-import { CursorColor } from '@/types/canvas';
+import { CursorColor, TileContent } from '@/types/canvas';
 
 export default function Play() {
   /** constants */
@@ -118,7 +118,7 @@ export default function Play() {
     setRenderTiles([]);
     setIsInitialized(false);
     setCursorPosition(cursorOriginX, cursorOriginY);
-    setClickPosition(cursorOriginX, cursorOriginY, '');
+    setClickPosition(cursorOriginX, cursorOriginY, TileContent.NULL);
     setCursors([]);
     setRenderStartPoint({ x: 0, y: 0 });
     setStartPoint({ x: cursorX, y: cursorY });
@@ -142,16 +142,16 @@ export default function Play() {
    */
   const parseHex = (hex: string) => {
     const hexArray = hex.match(/.{1,2}/g);
-    if (!hexArray) return '';
+    if (!hexArray) return TileContent.NULL;
     const byte = hexArray.map(hex => parseInt(hex, 16).toString(2).padStart(8, '0')).join('');
     const isTileOpened = byte[0] === '1';
     const isMine = byte[1] === '1';
     const isFlag = byte[2] === '1';
     const color = parseInt(byte.slice(3, 5), 2); /** 00 red, 01 yellow, 10 blue, 11 purple */
     const count = parseInt(byte.slice(5), 2);
-    if (isTileOpened) return isMine ? 'B' : count === 0 ? 'O' : count.toString();
-    if (isFlag) return 'F' + color;
-    return 'C';
+    if (isTileOpened) return isMine ? TileContent.BOOM : count === 0 ? TileContent.OPEN : count.toString();
+    if (isFlag) return TileContent.FLAGGED + color;
+    return TileContent.CLOSED;
   };
 
   /**
@@ -188,7 +188,7 @@ export default function Play() {
         if (!tile) continue;
         const colIndex = j + xOffset;
         const isAlternatingPosition = (i - end_y - start_x + j) % 2 === 1 ? '1' : '0';
-        if (tile[0] !== 'C' && tile[0] !== 'F') row[colIndex] = tile;
+        if (tile[0] !== TileContent.CLOSED && tile[0] !== TileContent.FLAGGED) row[colIndex] = tile;
         else row[colIndex] = `${tile}${isAlternatingPosition}`;
       }
     }
@@ -220,7 +220,8 @@ export default function Play() {
             BLUE: '2',
             PURPLE: '3',
           };
-          newTiles[y - startPoint.y][x - startPoint.x] = (is_set ? 'F' + (colorMap[color] ?? color) : 'C') + ((x + y) % 2 === 0 ? '0' : '1');
+          newTiles[y - startPoint.y][x - startPoint.x] =
+            (is_set ? TileContent.FLAGGED + (colorMap[color] ?? color) : TileContent.CLOSED) + ((x + y) % 2 === 0 ? '0' : '1');
           setCachingTiles(newTiles);
           break;
         }

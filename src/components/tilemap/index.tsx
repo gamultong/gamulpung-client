@@ -5,6 +5,7 @@ import { Texture, TextStyle, SCALE_MODES, MIPMAP_MODES, WRAP_MODES, TextStyleFil
 import Paths from '@/assets/paths.json';
 import { useCursorStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
+import { TileContent } from '@/types';
 
 interface TilemapProps {
   tiles: string[][];
@@ -14,7 +15,6 @@ interface TilemapProps {
   isMoving: boolean;
   className?: string;
 }
-
 export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePaddingHeight, className, isMoving }: TilemapProps) {
   // constants
   const CURSOR_COLORS = useMemo(() => ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'], []);
@@ -166,7 +166,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         // Select textures based on tile content
         let outerTexture = textures.get(`${outer[2][0]}-${outer[2][1]}-${tileSize}`);
         let innerTexture = textures.get(`${inner[2][0]}-${inner[2][1]}-${tileSize}`);
-        if (content[0] === 'C' || content[0] === 'F') {
+        if (content[0] === TileContent.CLOSED || content[0] === TileContent.FLAGGED) {
           const isEven = content.slice(-1) === '0' ? 0 : 1;
           outerTexture = textures.get(`${outer[isEven][0]}-${outer[isEven][1]}-${tileSize}`);
           innerTexture = textures.get(`${inner[isEven][0]}-${inner[isEven][1]}-${tileSize}`);
@@ -203,7 +203,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         }
 
         // Boom sprite
-        if (content === 'B') {
+        if (content === TileContent.BOOM) {
           const boomKey = `boom-${tileSize}`;
           const baseBoom = boomCache.get(boomKey) ?? (
             <Sprite
@@ -221,7 +221,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         }
 
         // Flag sprite
-        if (content[0] === 'F') {
+        if (content[0] === TileContent.FLAGGED) {
           const flagIndex = content[1];
           const flagKey = `flag-${flagIndex}-${tileSize}`;
           const baseFlag = flagCache.get(flagKey) ?? (
