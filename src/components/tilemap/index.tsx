@@ -70,7 +70,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     };
 
     // Textures for outer and inner tiles
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < outer.length; i++) {
       createTileTexture(outer[i][0], outer[i][1]);
       createTileTexture(inner[i][0], inner[i][1]);
     }
@@ -101,7 +101,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
     // Flag textures
     const flagMinimalized = 4;
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < CURSOR_COLORS.length; i++) {
       const flagCanvas = document.createElement('canvas');
       flagCanvas.width = flagCanvas.height = tileSize / flagMinimalized;
       const flagCtx = getContext(flagCanvas);
@@ -249,7 +249,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
               text={content}
               x={x + tileSize / 2}
               y={y + tileSize / 2}
-              resolution={0.5}
+              resolution={0.4}
               anchor={0.5}
               style={cachedTextStyles[num - 1]}
               cacheAsBitmapResolution={0.001}

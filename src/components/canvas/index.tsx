@@ -1,6 +1,6 @@
 'use client';
 import S from './style.module.scss';
-import React, { useRef, useEffect, useState, Dispatch, SetStateAction, useLayoutEffect } from 'react';
+import React, { useRef, useEffect, useState, Dispatch, SetStateAction, useLayoutEffect, useCallback } from 'react';
 import Paths from '@/assets/paths.json';
 
 import useScreenSize from '@/hooks/useScreenSize';
@@ -209,44 +209,47 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     return { x: Infinity, y: Infinity };
   };
 
-  /** Draw cursor on canvas */
-  const drawCursor = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    color: string,
-    revive_at: number = 0,
-    rotate: number = 0,
-    scale: number = 1,
-  ) => {
-    const adjustedScale = (zoom / 3.5) * scale;
-    ctx.save();
-    ctx.fillStyle = color;
-    // What if the cursor is rotating. Then the cursor will rotate.
-    if (rotate !== 0) {
-      const [rotateX, rotateY] = [Math.cos(rotate - 1 / 4) * 2 * Math.PI, Math.sin(rotate - 1 / 4) * 2 * Math.PI];
-      ctx.translate(x - (rotateX * tileSize) / 18 / scale + tileSize / 2, y - (rotateY * tileSize) / 18 / scale + tileSize / 2);
-      ctx.rotate(rotate - (Math.PI / 24) * 8);
-    } else ctx.translate(x + tileSize / 6 / scale, y + tileSize / 6 / scale);
-    ctx.scale(adjustedScale, adjustedScale);
-    ctx.fill(cachedVectorAssets?.cursor as Path2D);
-    ctx.restore();
-    if (revive_at > 0 && Date.now() < revive_at && cachedVectorAssets?.stun) {
-      const stunScale = (zoom / 2) * scale;
+  // 렌더링 속도 향상: Canvas 렌더링 함수들 메모이제이션
+  const drawCursor = useCallback(
+    (
+      ctx: CanvasRenderingContext2D,
+      x: number,
+      y: number,
+      color: string,
+      revive_at: number = 0,
+      rotate: number = 0,
+      scale: number = 1,
+    ) => {
+      const adjustedScale = (zoom / 3.5) * scale;
       ctx.save();
-      ctx.translate(x - tileSize / 2 / scale, y - tileSize / 2 / scale);
-      ctx.fillStyle = 'white';
-      ctx.strokeStyle = 'black';
-      ctx.scale(stunScale, stunScale);
-      for (const stunPath of cachedVectorAssets.stun) {
-        ctx.fill(stunPath);
-        ctx.stroke(stunPath);
+      ctx.fillStyle = color;
+      // What if the cursor is rotating. Then the cursor will rotate.
+      if (rotate !== 0) {
+        const [rotateX, rotateY] = [Math.cos(rotate - 1 / 4) * 2 * Math.PI, Math.sin(rotate - 1 / 4) * 2 * Math.PI];
+        ctx.translate(x - (rotateX * tileSize) / 18 / scale + tileSize / 2, y - (rotateY * tileSize) / 18 / scale + tileSize / 2);
+        ctx.rotate(rotate - (Math.PI / 24) * 8);
+      } else ctx.translate(x + tileSize / 6 / scale, y + tileSize / 6 / scale);
+      ctx.scale(adjustedScale, adjustedScale);
+      ctx.fill(cachedVectorAssets?.cursor as Path2D);
+      ctx.restore();
+      if (revive_at > 0 && Date.now() < revive_at && cachedVectorAssets?.stun) {
+        const stunScale = (zoom / 2) * scale;
+        ctx.save();
+        ctx.translate(x - tileSize / 2 / scale, y - tileSize / 2 / scale);
+        ctx.fillStyle = 'white';
+        ctx.strokeStyle = 'black';
+        ctx.scale(stunScale, stunScale);
+        for (const stunPath of cachedVectorAssets.stun) {
+          ctx.fill(stunPath);
+          ctx.stroke(stunPath);
+        }
       }
-    }
-    ctx.restore();
-  };
+      ctx.restore();
+    },
+    [zoom, tileSize, cachedVectorAssets],
+  );
 
-  const drawOtherUserCursors = () => {
+  const drawOtherUserCursors = useCallback(() => {
     const otherCursorsCtx = canvasRefs.otherCursorsRef.current?.getContext('2d');
     if (!otherCursorsCtx) return;
     otherCursorsCtx.clearRect(0, 0, windowWidth, windowHeight);
@@ -256,18 +259,18 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const rotate = distanceX !== 0 || distanceY !== 0 ? Math.atan2(distanceY, distanceX) : 0;
       drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CursorColors[cursor.color], cursor.revive_at, rotate);
     });
-  };
+  }, [cursors, cursorOriginX, cursorOriginY, tilePaddingWidth, tilePaddingHeight, tileSize, drawCursor, windowWidth, windowHeight, canvasRefs.otherCursorsRef]);
 
-  const drawPointer = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, borderPixel: number) => {
+  const drawPointer = useCallback((ctx: CanvasRenderingContext2D, x: number, y: number, color: string, borderPixel: number) => {
     if (!ctx) return;
     ctx.beginPath();
     ctx.strokeStyle = color;
     ctx.lineWidth = borderPixel;
     ctx.strokeRect(x + borderPixel / 2, y + borderPixel / 2, tileSize - borderPixel, tileSize - borderPixel);
     ctx.closePath();
-  };
+  }, [tileSize]);
 
-  const drawOtherUserPointers = (borderPixel: number) => {
+  const drawOtherUserPointers = useCallback((borderPixel: number) => {
     const otherPointerCtx = canvasRefs.otherPointerRef.current?.getContext('2d');
     if (!otherPointerCtx) return;
     otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
@@ -275,7 +278,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const [x, y] = [cursor.pointer?.x - cursorOriginX + tilePaddingWidth / 2, cursor.pointer?.y - cursorOriginY + tilePaddingHeight / 2];
       drawPointer(otherPointerCtx, x * tileSize, y * tileSize, OtherCursorColors[cursor.color], borderPixel);
     });
-  };
+  }, [cursors, cursorOriginX, cursorOriginY, tilePaddingWidth, tilePaddingHeight, tileSize, drawPointer, windowWidth, windowHeight, canvasRefs.otherPointerRef]);
 
   // Check if the other cursor is on the tile
   const checkIsOtherCursorOnTile = (tileX: number, tileY: number) => cursors.some(c => c.x === tileX + startPoint.x && c.y === tileY + startPoint.y);

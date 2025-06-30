@@ -3,7 +3,7 @@
 import S from './page.module.scss';
 
 /** hooks */
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState, useCallback } from 'react';
 import useScreenSize from '@/hooks/useScreenSize';
 import { OtherUserSingleCursorState, useCursorStore, useOtherUserCursorsStore } from '../../store/cursorStore';
 
@@ -150,7 +150,7 @@ export default function Play() {
    * @param hex {string} - Hex string
    * byte: 0 = IsOpen, 1 = IsMine, 2 = IsFlag, 3 ~ 4 = color, 5 ~ 7 = count of mines
    */
-  const parseHex = (hex: string) => {
+  const parseHex = useCallback((hex: string) => {
     const hexArray = hex.match(/.{1,2}/g);
     if (!hexArray) return TileContent.NULL;
     const byte = hexArray.map(hex => parseInt(hex, 16).toString(2).padStart(8, '0')).join('');
@@ -162,7 +162,7 @@ export default function Play() {
     if (isTileOpened) return isMine ? TileContent.BOOM : count === 0 ? TileContent.OPEN : count.toString();
     if (isFlag) return TileContent.FLAGGED + color;
     return TileContent.CLOSED;
-  };
+  }, []);
 
   /**
    * @param end_x
@@ -172,47 +172,62 @@ export default function Play() {
    * @param unsortedTiles
    * @returns {rowlength, columnlength, sortedTiles}
    */
-  const sortTiles = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string) => {
-    const rowlen = Math.abs(end_x - start_x + 1) * 2;
-    const colLen = Math.abs(start_y - end_y + 1);
-    const sortedTiles = new Array(colLen);
-    const rowSize = rowlen / 2;
+  const sortTiles = useCallback(
+    (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string) => {
+      const rowlen = Math.abs(end_x - start_x + 1) * 2;
+      const colLen = Math.abs(start_y - end_y + 1);
+      const sortedTiles = new Array(colLen);
+      const rowSize = rowlen / 2;
 
-    for (let i = colLen - 1; i >= 0; i--) {
-      const newRow = new Array(rowSize);
-      const baseIndex = i * rowlen;
-      for (let j = 0; j < rowlen; j += 2) newRow[j >> 1] = parseHex(unsortedTiles.slice(baseIndex + j, baseIndex + j + 2));
-      sortedTiles[colLen - 1 - i] = newRow;
-    }
-
-    return { rowlen, colLen, sortedTiles };
-  };
-
-  const replaceTiles = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, replaceType: 'All' | 'PART') => {
-    if (!unsortedTiles.length) return;
-    const { sortedTiles } = sortTiles(end_x, end_y, start_x, start_y, unsortedTiles);
-    const yOffset = replaceType === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - sortedTiles.length + 1 : 0) : end_y - startPoint.y;
-    const xOffset = start_x - startPoint.x;
-    const baseY = -end_y - start_x;
-
-    // Create new tiles array with spread only once
-    const newTiles = [...cachingTiles];
-
-    // Direct array manipulation
-    for (let i = 0; i < sortedTiles.length; i++) {
-      const targetRow = newTiles[i + yOffset];
-      const sourceRow = sortedTiles[i];
-
-      for (let j = 0; j < sourceRow.length; j++) {
-        const tile = sourceRow[j];
-        if (!tile) continue;
-
-        const index = j + xOffset;
-        targetRow[index] = tile[0] !== TileContent.CLOSED && tile[0] !== TileContent.FLAGGED ? tile : tile + ((baseY + i + j) % 2);
+      for (let i = colLen - 1; i >= 0; i--) {
+        const newRow = new Array(rowSize);
+        const baseIndex = i * rowlen;
+        for (let j = 0; j < rowlen; j += 2) newRow[j >> 1] = parseHex(unsortedTiles.slice(baseIndex + j, baseIndex + j + 2));
+        sortedTiles[colLen - 1 - i] = newRow;
       }
-    }
-    setCachingTiles(newTiles);
-  };
+
+      return { rowlen, colLen, sortedTiles };
+    },
+    [parseHex],
+  );
+
+  /** 렌더링 속도 향상: 타일 교체 함수 최적화 */
+  const replaceTiles = useCallback(
+    (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, replaceType: 'All' | 'PART') => {
+      if (!unsortedTiles.length) return;
+      const { sortedTiles } = sortTiles(end_x, end_y, start_x, start_y, unsortedTiles);
+      const yOffset = replaceType === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - sortedTiles.length + 1 : 0) : end_y - startPoint.y;
+      const xOffset = start_x - startPoint.x;
+      const baseY = -end_y - start_x;
+
+      // 성능 최적화: 한 번의 복사로 새 배열 생성
+      setCachingTiles(prevTiles => {
+        const newTiles = [...prevTiles];
+
+        // 직접 배열 조작으로 성능 향상
+        for (let i = 0; i < sortedTiles.length; i++) {
+          const targetRowIndex = i + yOffset;
+          if (targetRowIndex >= 0 && targetRowIndex < newTiles.length) {
+            const targetRow = [...newTiles[targetRowIndex]]; // 행만 복사
+            const sourceRow = sortedTiles[i];
+
+            for (let j = 0; j < sourceRow.length; j++) {
+              const tile = sourceRow[j];
+              if (!tile) continue;
+
+              const index = j + xOffset;
+              if (index >= 0 && index < targetRow.length) {
+                targetRow[index] = tile[0] !== TileContent.CLOSED && tile[0] !== TileContent.FLAGGED ? tile : tile + ((baseY + i + j) % 2);
+              }
+            }
+            newTiles[targetRowIndex] = targetRow;
+          }
+        }
+        return newTiles;
+      });
+    },
+    [cursorY, endPoint.y, startPoint.y, startPoint.x, sortTiles],
+  );
 
   /** Handling Websocket Message */
   useLayoutEffect(() => {
