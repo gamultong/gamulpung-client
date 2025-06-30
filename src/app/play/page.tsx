@@ -84,13 +84,23 @@ export default function Play() {
 
     /** add Dummy data to originTiles */
     setCachingTiles(tiles => {
-      let newTiles = [...tiles];
-      if (type === Direction.UP) newTiles = [...Array.from({ length: cl }, () => Array(rl).fill('??')), ...tiles.slice(0, -cl)];
-      if (type === Direction.DOWN) newTiles = [...tiles.slice(cl), ...Array.from({ length: cl }, () => Array(rl).fill('??'))];
-      if (type === Direction.LEFT) for (let i = 0; i < cl; i++) newTiles[i] = [...Array(rl).fill('??'), ...tiles[i].slice(0, tiles[0].length - rl)];
-      if (type === Direction.RIGHT) for (let i = 0; i < cl; i++) newTiles[i] = [...tiles[i].slice(rl), ...Array(rl).fill('??')];
-      if (type === Direction.ALL) newTiles = Array.from({ length: cl }, () => Array(rl).fill('??'));
-      return newTiles;
+      const dummyRow = Array(rl).fill('??');
+      const dummyRows = Array(cl)
+        .fill(null)
+        .map(() => [...dummyRow]);
+
+      switch (type) {
+        case Direction.ALL:
+          return dummyRows;
+        case Direction.UP:
+          return [...dummyRows, ...tiles.slice(0, -cl)];
+        case Direction.DOWN:
+          return [...tiles.slice(cl), ...dummyRows];
+        case Direction.LEFT:
+          return tiles.map(row => [...dummyRow, ...row.slice(0, -rl)]);
+        case Direction.RIGHT:
+          return tiles.map(row => [...row.slice(rl), ...dummyRow]);
+      }
     });
     const payload = { start_p: { x: start_x, y: start_y }, end_p: { x: end_x, y: end_y } };
     const body = JSON.stringify({ event: 'fetch-tiles', payload });
@@ -163,33 +173,42 @@ export default function Play() {
    * @returns {rowlength, columnlength, sortedTiles}
    */
   const sortTiles = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string) => {
-    const [rowlen, colLen] = [Math.abs(end_x - start_x + 1) * 2, Math.abs(start_y - end_y + 1)];
-    const sortedTiles: string[][] = [];
-    for (let i = 0; i < colLen; i++) {
-      const newRow = new Array(rowlen / 2);
-      for (let j = 0, k = 0; j < rowlen; j += 2, k++) newRow[k] = parseHex(unsortedTiles.substring(i * rowlen + j, i * rowlen + j + 2));
-      sortedTiles.unshift(newRow);
+    const rowlen = Math.abs(end_x - start_x + 1) * 2;
+    const colLen = Math.abs(start_y - end_y + 1);
+    const sortedTiles = new Array(colLen);
+    const rowSize = rowlen / 2;
+
+    for (let i = colLen - 1; i >= 0; i--) {
+      const newRow = new Array(rowSize);
+      const baseIndex = i * rowlen;
+      for (let j = 0; j < rowlen; j += 2) newRow[j >> 1] = parseHex(unsortedTiles.slice(baseIndex + j, baseIndex + j + 2));
+      sortedTiles[colLen - 1 - i] = newRow;
     }
+
     return { rowlen, colLen, sortedTiles };
   };
 
   const replaceTiles = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, replaceType: 'All' | 'PART') => {
-    if (unsortedTiles.length === 0) return;
-    const { rowlen, colLen, sortedTiles } = sortTiles(end_x, end_y, start_x, start_y, unsortedTiles);
-    /** Replace dummy data according to coordinates */
-    const newTiles = [...cachingTiles];
-    const yOffset = replaceType === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - colLen + 1 : 0) : end_y - startPoint.y;
+    if (!unsortedTiles.length) return;
+    const { sortedTiles } = sortTiles(end_x, end_y, start_x, start_y, unsortedTiles);
+    const yOffset = replaceType === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - sortedTiles.length + 1 : 0) : end_y - startPoint.y;
     const xOffset = start_x - startPoint.x;
+    const baseY = -end_y - start_x;
 
-    for (let i = 0; i < colLen; i++) {
-      const row = newTiles[i + yOffset];
-      for (let j = 0; j < rowlen; j++) {
-        const tile = sortedTiles[i][j];
+    // Create new tiles array with spread only once
+    const newTiles = [...cachingTiles];
+
+    // Direct array manipulation
+    for (let i = 0; i < sortedTiles.length; i++) {
+      const targetRow = newTiles[i + yOffset];
+      const sourceRow = sortedTiles[i];
+
+      for (let j = 0; j < sourceRow.length; j++) {
+        const tile = sourceRow[j];
         if (!tile) continue;
-        const colIndex = j + xOffset;
-        const isAlternatingPosition = (i - end_y - start_x + j) % 2 === 1 ? '1' : '0';
-        if (tile[0] !== TileContent.CLOSED && tile[0] !== TileContent.FLAGGED) row[colIndex] = tile;
-        else row[colIndex] = `${tile}${isAlternatingPosition}`;
+
+        const index = j + xOffset;
+        targetRow[index] = tile[0] !== TileContent.CLOSED && tile[0] !== TileContent.FLAGGED ? tile : tile + ((baseY + i + j) % 2);
       }
     }
     setCachingTiles(newTiles);
@@ -325,15 +344,20 @@ export default function Play() {
 
   /** Detect changes in cached tile content and position */
   useLayoutEffect(() => {
-    const newTiles = [...cachingTiles.map(row => [...row.map(() => '??')])];
     const [offsetX, offsetY] = [cursorOriginX - cursorX, cursorOriginY - cursorY];
-    newTiles.forEach((row, ri) => {
-      if (!(ri + offsetY >= 0 && ri + offsetY < cachingTiles.length)) return;
-      row.forEach((_, ci) => {
-        const targetCol = ci + offsetX;
-        if (targetCol >= 0 && targetCol < cachingTiles[ri + offsetY].length) newTiles[ri][ci] = cachingTiles[ri + offsetY][targetCol] || '??';
+    const newTiles = Array(cachingTiles.length)
+      .fill(null)
+      .map((_, ri) => {
+        const sourceRow = cachingTiles[ri + offsetY];
+        if (!sourceRow) return Array(cachingTiles[0]?.length || 0).fill('??');
+
+        return Array(sourceRow.length)
+          .fill(null)
+          .map((_, ci) => {
+            const targetCol = ci + offsetX;
+            return targetCol >= 0 && targetCol < sourceRow.length ? sourceRow[targetCol] || '??' : '??';
+          });
       });
-    });
     setRenderTiles(newTiles);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cachingTiles, cursorOriginX, cursorOriginY]);
