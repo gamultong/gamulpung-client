@@ -15,6 +15,7 @@ interface TilemapProps {
   isMoving: boolean;
   className?: string;
 }
+
 export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePaddingHeight, className, isMoving }: TilemapProps) {
   // constants
   const CURSOR_COLORS = useMemo(() => ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'], []);

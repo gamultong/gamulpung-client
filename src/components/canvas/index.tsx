@@ -211,15 +211,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   // 렌더링 속도 향상: Canvas 렌더링 함수들 메모이제이션
   const drawCursor = useCallback(
-    (
-      ctx: CanvasRenderingContext2D,
-      x: number,
-      y: number,
-      color: string,
-      revive_at: number = 0,
-      rotate: number = 0,
-      scale: number = 1,
-    ) => {
+    (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, revive_at: number = 0, rotate: number = 0, scale: number = 1) => {
       const adjustedScale = (zoom / 3.5) * scale;
       ctx.save();
       ctx.fillStyle = color;
@@ -259,26 +251,54 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const rotate = distanceX !== 0 || distanceY !== 0 ? Math.atan2(distanceY, distanceX) : 0;
       drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CursorColors[cursor.color], cursor.revive_at, rotate);
     });
-  }, [cursors, cursorOriginX, cursorOriginY, tilePaddingWidth, tilePaddingHeight, tileSize, drawCursor, windowWidth, windowHeight, canvasRefs.otherCursorsRef]);
+  }, [
+    cursors,
+    cursorOriginX,
+    cursorOriginY,
+    tilePaddingWidth,
+    tilePaddingHeight,
+    tileSize,
+    drawCursor,
+    windowWidth,
+    windowHeight,
+    canvasRefs.otherCursorsRef,
+  ]);
 
-  const drawPointer = useCallback((ctx: CanvasRenderingContext2D, x: number, y: number, color: string, borderPixel: number) => {
-    if (!ctx) return;
-    ctx.beginPath();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = borderPixel;
-    ctx.strokeRect(x + borderPixel / 2, y + borderPixel / 2, tileSize - borderPixel, tileSize - borderPixel);
-    ctx.closePath();
-  }, [tileSize]);
+  const drawPointer = useCallback(
+    (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, borderPixel: number) => {
+      if (!ctx) return;
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = borderPixel;
+      ctx.strokeRect(x + borderPixel / 2, y + borderPixel / 2, tileSize - borderPixel, tileSize - borderPixel);
+      ctx.closePath();
+    },
+    [tileSize],
+  );
 
-  const drawOtherUserPointers = useCallback((borderPixel: number) => {
-    const otherPointerCtx = canvasRefs.otherPointerRef.current?.getContext('2d');
-    if (!otherPointerCtx) return;
-    otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
-    cursors.forEach(cursor => {
-      const [x, y] = [cursor.pointer?.x - cursorOriginX + tilePaddingWidth / 2, cursor.pointer?.y - cursorOriginY + tilePaddingHeight / 2];
-      drawPointer(otherPointerCtx, x * tileSize, y * tileSize, OtherCursorColors[cursor.color], borderPixel);
-    });
-  }, [cursors, cursorOriginX, cursorOriginY, tilePaddingWidth, tilePaddingHeight, tileSize, drawPointer, windowWidth, windowHeight, canvasRefs.otherPointerRef]);
+  const drawOtherUserPointers = useCallback(
+    (borderPixel: number) => {
+      const otherPointerCtx = canvasRefs.otherPointerRef.current?.getContext('2d');
+      if (!otherPointerCtx) return;
+      otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
+      cursors.forEach(cursor => {
+        const [x, y] = [cursor.pointer?.x - cursorOriginX + tilePaddingWidth / 2, cursor.pointer?.y - cursorOriginY + tilePaddingHeight / 2];
+        drawPointer(otherPointerCtx, x * tileSize, y * tileSize, OtherCursorColors[cursor.color], borderPixel);
+      });
+    },
+    [
+      cursors,
+      cursorOriginX,
+      cursorOriginY,
+      tilePaddingWidth,
+      tilePaddingHeight,
+      tileSize,
+      drawPointer,
+      windowWidth,
+      windowHeight,
+      canvasRefs.otherPointerRef,
+    ],
+  );
 
   // Check if the other cursor is on the tile
   const checkIsOtherCursorOnTile = (tileX: number, tileY: number) => cursors.some(c => c.x === tileX + startPoint.x && c.y === tileY + startPoint.y);
@@ -295,9 +315,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const getNeighbors = (grid: (TileNode | null)[][], node: TileNode) => {
       const neighbors = [];
       for (const [dx, dy] of CursorDirections) {
+        // Check if the neighbor is within bounds and not a flag or other cursor
         const [x, y] = [node.x + dx, node.y + dy];
+        // Check if the neighbor is within bounds
         if (y < 0 || y >= grid.length || x < 0 || x >= grid[y].length) continue;
+        // Check if the tile is opened and not occupied by another cursor
         if (grid[y][x] === null || checkIsOtherCursorOnTile(x, y)) continue;
+        // Add the neighbor node
         neighbors.push({ node: grid[y][x], isDiagonal: dx !== 0 && dy !== 0 });
       }
       return neighbors;
@@ -308,6 +332,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
     /** initialize tiles */
     const [start, target] = [new TileNode(startX, startY), new TileNode(targetX, targetY)];
+    // 추후 범위를 좁힐 것
     const grid = tiles.map((row, i) => row.map((tile, j) => (checkTileHasOpened(tile) ? new TileNode(j, i) : null))) as (TileNode | null)[][];
 
     /** initialize open and close list */
