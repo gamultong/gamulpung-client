@@ -56,7 +56,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const MOVE_SPEED = 200; // ms
   const ZOOM_MIN = 0.4; // min zoom level
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
+  const otherCursorPadding = 1 / (paddingTiles - 1); // padding for other cursors
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
+  const [otherCursorPaddingWidth, otherCursorPaddingHeight] = [tilePaddingWidth * otherCursorPadding, tilePaddingHeight * otherCursorPadding];
   const { boomPaths, cursorPaths, flagPaths, stunPaths } = Paths;
 
   /** stores */
@@ -204,7 +206,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const findOpenedNeighbors = (currentX: number, currentY: number) => {
     for (const [dx, dy] of [[0, 0], ...CursorDirections]) {
       const [x, y] = [currentX + dx, currentY + dy];
-      if (tiles[y]?.[x] && checkTileHasOpened(tiles[y][x])) return { x, y };
+      if (!tiles[y] || !tiles[y][x]) continue;
+      if (checkTileHasOpened(tiles[y][x])) return { x, y };
     }
     return { x: Infinity, y: Infinity };
   };
@@ -246,7 +249,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     if (!otherCursorsCtx) return;
     otherCursorsCtx.clearRect(0, 0, windowWidth, windowHeight);
     cursors.forEach(cursor => {
-      const [drawX, drawY] = [cursor.x - cursorOriginX + tilePaddingWidth * 2, cursor.y - cursorOriginY + tilePaddingHeight * 2];
+      const [drawX, drawY] = [cursor.x - cursorOriginX + otherCursorPaddingWidth, cursor.y - cursorOriginY + otherCursorPaddingHeight];
       const [distanceX, distanceY] = [cursor.x - (cursor.pointer?.x ?? cursor.x), cursor.y - (cursor.pointer?.y ?? cursor.y)];
       const rotate = distanceX !== 0 || distanceY !== 0 ? Math.atan2(distanceY, distanceX) : 0;
       drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CursorColors[cursor.color], cursor.revive_at, rotate);
@@ -272,7 +275,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       if (!otherPointerCtx) return;
       otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
       cursors.forEach(cursor => {
-        const [x, y] = [cursor.pointer?.x - cursorOriginX + tilePaddingWidth / 2, cursor.pointer?.y - cursorOriginY + tilePaddingHeight / 2];
+        const [x, y] = [cursor.pointer?.x - cursorOriginX + otherCursorPaddingWidth, cursor.pointer?.y - cursorOriginY + otherCursorPaddingHeight];
         drawPointer(otherPointerCtx, x * tileSize, y * tileSize, OtherCursorColors[cursor.color], borderPixel);
       });
     },
@@ -407,7 +410,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     }
   };
 
-  /** Load and Render */
+  /** Load Assets and Render */
   useLayoutEffect(() => {
     if (!isInitializing && tiles.length > 0) return;
     const lotteriaChabFont = new FontFace(

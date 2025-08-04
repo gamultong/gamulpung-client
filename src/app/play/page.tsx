@@ -176,11 +176,11 @@ export default function Play() {
     (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string) => {
       const rowlen = Math.abs(end_x - start_x + 1) * 2;
       const colLen = Math.abs(start_y - end_y + 1);
-      const sortedTiles = new Array(colLen);
+      const sortedTiles: string[][] = new Array(colLen);
       const rowSize = rowlen / 2;
 
       for (let i = colLen - 1; i >= 0; i--) {
-        const newRow = new Array(rowSize);
+        const newRow: string[] = new Array(rowSize);
         const baseIndex = i * rowlen;
         for (let j = 0; j < rowlen; j += 2) newRow[j >> 1] = parseHex(unsortedTiles.slice(baseIndex + j, baseIndex + j + 2));
         sortedTiles[colLen - 1 - i] = newRow;
@@ -212,12 +212,13 @@ export default function Play() {
             const sourceRow = sortedTiles[i];
 
             for (let j = 0; j < sourceRow.length; j++) {
+              if (!sourceRow[j]) continue;
               const tile = sourceRow[j];
-              if (!tile) continue;
-
               const index = j + xOffset;
               if (index >= 0 && index < targetRow.length) {
-                targetRow[index] = tile[0] !== TileContent.CLOSED && tile[0] !== TileContent.FLAGGED ? tile : tile + ((baseY + i + j) % 2);
+                const { CLOSED, FLAGGED } = TileContent;
+                targetRow[index] = tile;
+                if ([CLOSED, FLAGGED].some(t => t === tile[0])) targetRow[index] += (baseY + i + j) % 2;
               }
             }
             newTiles[targetRowIndex] = targetRow;
