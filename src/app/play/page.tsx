@@ -33,7 +33,7 @@ import { CursorColor, TileContent } from '@/types/canvas';
 
 export default function Play() {
   /** constants */
-  const RENDER_RANGE = 3;
+  const RENDER_RANGE = 1.5;
   const ORIGIN_TILE_SIZE = 80;
   const MAX_TILE_COUNT = 530;
   const MESSAGE_REMAIN_TIME = 1000 * 8; // 8 seconds

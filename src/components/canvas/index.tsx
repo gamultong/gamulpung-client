@@ -246,31 +246,21 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     if (!otherCursorsCtx) return;
     otherCursorsCtx.clearRect(0, 0, windowWidth, windowHeight);
     cursors.forEach(cursor => {
-      const [drawX, drawY] = [cursor.x - cursorOriginX + tilePaddingWidth / 2, cursor.y - cursorOriginY + tilePaddingHeight / 2];
+      const [drawX, drawY] = [cursor.x - cursorOriginX + tilePaddingWidth * 2, cursor.y - cursorOriginY + tilePaddingHeight * 2];
       const [distanceX, distanceY] = [cursor.x - (cursor.pointer?.x ?? cursor.x), cursor.y - (cursor.pointer?.y ?? cursor.y)];
       const rotate = distanceX !== 0 || distanceY !== 0 ? Math.atan2(distanceY, distanceX) : 0;
       drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CursorColors[cursor.color], cursor.revive_at, rotate);
     });
-  }, [
-    cursors,
-    cursorOriginX,
-    cursorOriginY,
-    tilePaddingWidth,
-    tilePaddingHeight,
-    tileSize,
-    drawCursor,
-    windowWidth,
-    windowHeight,
-    canvasRefs.otherCursorsRef,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cursors, cursorOriginX, cursorOriginY, tilePaddingWidth, tilePaddingHeight, tileSize, windowWidth, windowHeight, canvasRefs.otherCursorsRef]);
 
   const drawPointer = useCallback(
-    (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, borderPixel: number) => {
+    (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, border: number) => {
       if (!ctx) return;
       ctx.beginPath();
       ctx.strokeStyle = color;
-      ctx.lineWidth = borderPixel;
-      ctx.strokeRect(x + borderPixel / 2, y + borderPixel / 2, tileSize - borderPixel, tileSize - borderPixel);
+      ctx.lineWidth = border;
+      ctx.strokeRect(x + border / 2, y + border / 2, tileSize - border, tileSize - border);
       ctx.closePath();
     },
     [tileSize],
@@ -286,18 +276,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         drawPointer(otherPointerCtx, x * tileSize, y * tileSize, OtherCursorColors[cursor.color], borderPixel);
       });
     },
-    [
-      cursors,
-      cursorOriginX,
-      cursorOriginY,
-      tilePaddingWidth,
-      tilePaddingHeight,
-      tileSize,
-      drawPointer,
-      windowWidth,
-      windowHeight,
-      canvasRefs.otherPointerRef,
-    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cursors, cursorOriginX, cursorOriginY, tilePaddingWidth, tilePaddingHeight, tileSize, windowWidth, windowHeight, canvasRefs.otherPointerRef],
   );
 
   // Check if the other cursor is on the tile
