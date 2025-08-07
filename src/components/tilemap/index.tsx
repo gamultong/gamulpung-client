@@ -6,6 +6,7 @@ import Paths from '@/assets/paths.json';
 import { useCursorStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
 import { TileContent } from '@/types';
+import { fillCtxAndPath, makePath2d } from '@/utils';
 
 interface TilemapProps {
   tiles: string[][];
@@ -83,13 +84,10 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     const boomCtx = getContext(boomCanvas);
     if (boomCtx) {
       boomCtx.scale(zoom / boomMinimalized / 4, zoom / boomMinimalized / 4);
-      const inner = new Path2D(boomPaths[0]);
-      boomCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      boomCtx.fill(inner);
-
-      const outer = new Path2D(boomPaths[1]);
-      boomCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      boomCtx.fill(outer);
+      const inner = makePath2d(boomPaths[0]);
+      const outer = makePath2d(boomPaths[1]);
+      fillCtxAndPath(boomCtx, inner, 'rgba(0, 0, 0, 0.6)');
+      fillCtxAndPath(boomCtx, outer, 'rgba(0, 0, 0, 0.5)');
 
       const boomTexture = Texture.from(boomCanvas);
       boomTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
@@ -112,12 +110,10 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       flagGradient.addColorStop(1, 'transparent');
       flagCtx.translate(tileSize / flagMinimalized / 6, tileSize / flagMinimalized / 6);
       flagCtx.scale(zoom / flagMinimalized / 4.5, zoom / flagMinimalized / 4.5);
-      const flagPath = new Path2D(flagPaths[0]);
-      const polePath = new Path2D(flagPaths[1]);
-      flagCtx.fillStyle = CURSOR_COLORS[i];
-      flagCtx.fill(flagPath);
-      flagCtx.fillStyle = flagGradient;
-      flagCtx.fill(polePath);
+      const flagPath = makePath2d(flagPaths[0]);
+      const polePath = makePath2d(flagPaths[1]);
+      fillCtxAndPath(flagCtx, flagPath, CURSOR_COLORS[i]);
+      fillCtxAndPath(flagCtx, polePath, flagGradient);
 
       const flagTexture = Texture.from(flagCanvas);
       flagTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;

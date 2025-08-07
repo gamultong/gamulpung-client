@@ -11,6 +11,7 @@ import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
 import { XYType, VectorImagesType, TileContent } from '@/types';
 import { Click, ClickType, CursorColors, CursorDirections, OtherCursorColors } from '@/constants';
+import { makePath2d, makePath2dFromArray } from '@/utils';
 
 class TileNode {
   x: number;
@@ -214,20 +215,21 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   // 렌더링 속도 향상: Canvas 렌더링 함수들 메모이제이션
   const drawCursor = useCallback(
-    (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, revive_at: number = 0, rotate: number = 0, scale: number = 1) => {
+    (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, reviveAt: number = 0, rotated: number = 0, scale: number = 1) => {
       const adjustedScale = (zoom / 3.5) * scale;
       ctx.save();
       ctx.fillStyle = color;
       // What if the cursor is rotating. Then the cursor will rotate.
-      if (rotate !== 0) {
-        const [rotateX, rotateY] = [Math.cos(rotate - 1 / 4) * 2 * Math.PI, Math.sin(rotate - 1 / 4) * 2 * Math.PI];
+      if (rotated === 0) ctx.translate(x + tileSize / 6 / scale, y + tileSize / 6 / scale);
+      else {
+        const [rotateX, rotateY] = [Math.cos(rotated - 1 / 4) * 2 * Math.PI, Math.sin(rotated - 1 / 4) * 2 * Math.PI];
         ctx.translate(x - (rotateX * tileSize) / 18 / scale + tileSize / 2, y - (rotateY * tileSize) / 18 / scale + tileSize / 2);
-        ctx.rotate(rotate - (Math.PI / 24) * 8);
-      } else ctx.translate(x + tileSize / 6 / scale, y + tileSize / 6 / scale);
+        ctx.rotate(rotated - (Math.PI / 24) * 8);
+      }
       ctx.scale(adjustedScale, adjustedScale);
       ctx.fill(cachedVectorAssets?.cursor as Path2D);
       ctx.restore();
-      if (revive_at > 0 && Date.now() < revive_at && cachedVectorAssets?.stun) {
+      if (reviveAt > 0 && Date.now() < reviveAt && cachedVectorAssets?.stun) {
         const stunScale = (zoom / 2) * scale;
         ctx.save();
         ctx.translate(x - tileSize / 2 / scale, y - tileSize / 2 / scale);
@@ -325,29 +327,25 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     start.fTotal = start.gScore + start.heuristic;
 
     while (openNodeList.length > 0) {
-      const now = openNodeList.reduce((a, b) => (a.fTotal < b.fTotal ? a : b));
-      if (now.x === target.x && now.y === target.y) {
+      const nowNode = openNodeList.reduce((a, b) => (a.fTotal < b.fTotal ? a : b));
+      if (nowNode.x === target.x && nowNode.y === target.y) {
+        setLeftPaths(getLeftPaths(nowNode, startX, startY));
         const path = [];
-        let temp = now;
-        setLeftPaths(getLeftPaths(temp, startX, startY));
-        while (temp) {
-          path.unshift(getLeftPaths(temp, startX, startY));
-          temp = temp.parent!;
-        }
+        for (let tempNode = nowNode; tempNode; tempNode = tempNode.parent!) path.unshift({ x: tempNode.x - startX, y: tempNode.y - startY });
         return path;
       }
-      openNodeList = openNodeList.filter(node => node !== now);
-      closedList.push(now);
+      openNodeList = openNodeList.filter(node => node !== nowNode);
+      closedList.push(nowNode);
 
       /** Find neighbor nodes from current node. */
-      const neighbors = getNeighbors(grid, now);
+      const neighbors = getNeighbors(grid, nowNode);
       for (const { node: neighbor, isDiagonal } of neighbors) {
         if (closedList.includes(neighbor)) continue;
         // Apply different cost for diagonal movement
-        const tempG = now.gScore + (isDiagonal ? Math.sqrt(2) : 1);
+        const tempG = nowNode.gScore + (isDiagonal ? Math.sqrt(2) : 1);
         if (tempG >= neighbor.gScore) continue;
         if (!openNodeList.includes(neighbor)) openNodeList.push(neighbor);
-        neighbor.parent = now;
+        neighbor.parent = nowNode;
         neighbor.gScore = tempG;
         neighbor.heuristic = Math.abs(neighbor.x - target.x) + Math.abs(neighbor.y - target.y);
         neighbor.fTotal = neighbor.gScore + neighbor.heuristic;
@@ -420,10 +418,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     Promise.all([lotteriaChabFont.load()]).then(() => {
       // Set vector images
       document.fonts.add(lotteriaChabFont);
-      const cursor = new Path2D(cursorPaths);
-      const stun = [new Path2D(stunPaths[0]), new Path2D(stunPaths[1]), new Path2D(stunPaths[2])];
-      const flag = { flag: new Path2D(flagPaths[0]), pole: new Path2D(flagPaths[1]) };
-      const boom = { inner: new Path2D(boomPaths[0]), outer: new Path2D(boomPaths[1]) };
+      const cursor = makePath2d(cursorPaths);
+      const stun = makePath2dFromArray(stunPaths);
+      const flag = { flag: makePath2d(flagPaths[0]), pole: makePath2d(flagPaths[1]) };
+      const boom = { inner: makePath2d(boomPaths[0]), outer: makePath2d(boomPaths[1]) };
       setCachedVectorAssets({ cursor, stun, flag, boom });
       setIsInitializing(false);
     });

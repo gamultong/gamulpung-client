@@ -3,7 +3,7 @@
 import S from './page.module.scss';
 
 /** hooks */
-import { useEffect, useLayoutEffect, useState, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useState, useCallback, startTransition } from 'react';
 import useScreenSize from '@/hooks/useScreenSize';
 import { OtherUserSingleCursorState, useCursorStore, useOtherUserCursorsStore } from '../../store/cursorStore';
 
@@ -191,43 +191,59 @@ export default function Play() {
     [parseHex],
   );
 
-  /** 렌더링 속도 향상: 타일 교체 함수 최적화 */
+  /** 정리 속도 향상: 타일 교체 함수 최적화 */
   const replaceTiles = useCallback(
     (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, replaceType: 'All' | 'PART') => {
-      if (!unsortedTiles.length) return;
+      if (!unsortedTiles?.length) return;
+
       const { sortedTiles } = sortTiles(end_x, end_y, start_x, start_y, unsortedTiles);
+
       const yOffset = replaceType === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - sortedTiles.length + 1 : 0) : end_y - startPoint.y;
+
       const xOffset = start_x - startPoint.x;
-      const baseY = -end_y - start_x;
+      const baseParity = (-end_y - start_x) & 1;
+      const CLOSED = TileContent.CLOSED;
+      const FLAGGED = TileContent.FLAGGED;
 
-      // 성능 최적화: 한 번의 복사로 새 배열 생성
-      setCachingTiles(prevTiles => {
-        const newTiles = [...prevTiles];
+      startTransition(() =>
+        setCachingTiles(prevTiles => {
+          const nextTiles = [...prevTiles]; // 행 배열 얕은 복사
 
-        // 직접 배열 조작으로 성능 향상
-        for (let i = 0; i < sortedTiles.length; i++) {
-          const targetRowIndex = i + yOffset;
-          if (targetRowIndex >= 0 && targetRowIndex < newTiles.length) {
-            const targetRow = [...newTiles[targetRowIndex]]; // 행만 복사
-            const sourceRow = sortedTiles[i];
+          for (let i = 0; i < sortedTiles.length; i++) {
+            const r = i + yOffset;
+            if (r < 0 || r >= nextTiles.length) continue;
 
-            for (let j = 0; j < sourceRow.length; j++) {
-              if (!sourceRow[j]) continue;
-              const tile = sourceRow[j];
-              const index = j + xOffset;
-              if (index >= 0 && index < targetRow.length) {
-                const { CLOSED, FLAGGED } = TileContent;
-                targetRow[index] = tile;
-                if ([CLOSED, FLAGGED].some(t => t === tile[0])) targetRow[index] += (baseY + i + j) % 2;
+            const srcRow = sortedTiles[i];
+            const prevRow = nextTiles[r];
+            let row = prevRow; // copy-on-write
+
+            for (let j = 0; j < srcRow.length; j++) {
+              const c = j + xOffset;
+              if (c < 0 || c >= prevRow.length) continue;
+
+              let tile = srcRow[j];
+              if (!tile) continue;
+
+              const first = tile[0];
+              if (first === CLOSED || first === FLAGGED) {
+                tile = `${first}${baseParity ^ ((i + j) & 1)}`; // 패턴 토글
+              }
+
+              if (prevRow[c] !== tile) {
+                if (row === prevRow) row = [...prevRow]; // 행 최초 수정 시만 복사
+                row[c] = tile;
               }
             }
-            newTiles[targetRowIndex] = targetRow;
+
+            if (row !== prevRow) nextTiles[r] = row;
           }
-        }
-        return newTiles;
-      });
+
+          return nextTiles;
+        }),
+      );
     },
-    [cursorY, endPoint.y, startPoint.y, startPoint.x, sortTiles],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cursorY, endPoint.y, startPoint.y, startPoint.x],
   );
 
   /** Handling Websocket Message */
