@@ -209,34 +209,34 @@ export default function Play() {
         setCachingTiles(prevTiles => {
           const nextTiles = [...prevTiles]; // 행 배열 얕은 복사
 
-          for (let i = 0; i < sortedTiles.length; i++) {
-            const r = i + yOffset;
-            if (r < 0 || r >= nextTiles.length) continue;
+          sortedTiles.forEach(() => {
+            const sortedLen = sortedTiles.length;
+            const tilesLen = nextTiles.length;
 
-            const srcRow = sortedTiles[i];
-            const prevRow = nextTiles[r];
-            let row = prevRow; // copy-on-write
+            for (let i = 0; i < sortedLen; i++) {
+              const yIdx = i + yOffset;
+              if (yIdx < 0 || yIdx >= tilesLen) continue;
 
-            for (let j = 0; j < srcRow.length; j++) {
-              const c = j + xOffset;
-              if (c < 0 || c >= prevRow.length) continue;
+              const srcRow = sortedTiles[i];
+              const oldRow = nextTiles[yIdx];
+              const srcLen = srcRow.length;
+              const newRow = oldRow.slice(); // 행 복사
+              for (let col_idx = 0; col_idx < srcLen; col_idx++) {
+                const tile = srcRow[col_idx];
+                if (!tile) continue;
+                const xIdx = col_idx + xOffset;
+                if (xIdx < 0 || xIdx >= oldRow.length) continue;
 
-              let tile = srcRow[j];
-              if (!tile) continue;
+                let finalTile = tile;
+                const firstChar = tile[0];
+                if (firstChar === CLOSED || firstChar === FLAGGED) finalTile = firstChar + (baseParity ^ ((i + col_idx) & 1)).toString();
 
-              const first = tile[0];
-              if (first === CLOSED || first === FLAGGED) {
-                tile = `${first}${baseParity ^ ((i + j) & 1)}`; // 패턴 토글
+                if (oldRow[xIdx] !== finalTile) newRow[xIdx] = finalTile;
               }
 
-              if (prevRow[c] !== tile) {
-                if (row === prevRow) row = [...prevRow]; // 행 최초 수정 시만 복사
-                row[c] = tile;
-              }
+              if (newRow) nextTiles[yIdx] = newRow;
             }
-
-            if (row !== prevRow) nextTiles[r] = row;
-          }
+          });
 
           return nextTiles;
         }),
@@ -318,9 +318,8 @@ export default function Play() {
         case 'cursors': {
           const { cursors } = payload;
           type newCursorType = { position: XYType; id: string; color: string; pointer: XYType };
-          const newCursors = cursors.map(({ position: { x, y }, color, id, pointer }: newCursorType) => {
-            color = color.toLowerCase();
-            return { id, pointer, x, y, color };
+          const newCursors: OtherUserSingleCursorState[] = cursors.map(({ position: { x, y }, color, id, pointer }: newCursorType) => {
+            return { id, pointer, x, y, color: color.toLowerCase() };
           });
           addCursors(newCursors);
           break;
@@ -376,21 +375,55 @@ export default function Play() {
 
   /** Detect changes in cached tile content and position */
   useLayoutEffect(() => {
-    const [offsetX, offsetY] = [cursorOriginX - cursorX, cursorOriginY - cursorY];
-    const newTiles = Array(cachingTiles.length)
-      .fill(null)
-      .map((_, ri) => {
-        const sourceRow = cachingTiles[ri + offsetY];
-        if (!sourceRow) return Array(cachingTiles[0]?.length || 0).fill('??');
+    // assume: cachingTiles: string[][]
+    // cursorOriginX, cursorOriginY, cursorX, cursorY are numbers
 
-        return Array(sourceRow.length)
-          .fill(null)
-          .map((_, ci) => {
-            const targetCol = ci + offsetX;
-            return targetCol >= 0 && targetCol < sourceRow.length ? sourceRow[targetCol] || '??' : '??';
-          });
-      });
+    const offsetX = cursorOriginX - cursorX;
+    const offsetY = cursorOriginY - cursorY;
+    const rowLen = cachingTiles.length;
+    const colLen = cachingTiles[0]?.length ?? 0;
+    const DUMMY = '??';
+
+    // 미리 최종 타일 배열 생성
+    const newTiles: string[][] = new Array(rowLen);
+
+    for (let ri = 0; ri < rowLen; ri++) {
+      const srcRowIdx = ri + offsetY;
+      const row = new Array<string>(colLen);
+
+      // 원본 행이 범위를 벗어나면 전부 DUMMY
+      const srcRow = cachingTiles[srcRowIdx];
+      if (!srcRow) {
+        // 좌우 패딩 없이 전체 채움
+        for (let i = 0; i < colLen; i++) row[i] = DUMMY;
+        newTiles[ri] = row;
+        continue;
+      }
+
+      // 복사 시작 지점(원본/목적지)과 복사 길이 계산
+      // offsetX > 0 이면 원본의 start가 offsetX, 목적지 start는 0
+      // offsetX < 0 이면 목적지 start가 -offsetX, 원본 start는 0
+      const dstStart = Math.max(0, -offsetX);
+      const srcStart = Math.max(0, offsetX);
+
+      // 가능한 복사 길이 = 남은 목적지 칸과 남은 원본 칸의 최소
+      let copyLen = Math.min(colLen - dstStart, srcRow.length - srcStart);
+      if (copyLen < 0) copyLen = 0; // 안전장치
+
+      // 1) 왼쪽 패딩
+      for (let row_idx = 0; row_idx < dstStart; row_idx++) row[row_idx] = DUMMY;
+
+      // 2) 중간 복사
+      for (let col_idx = 0; col_idx < copyLen; col_idx++) row[dstStart + col_idx] = srcRow[srcStart + col_idx] ?? DUMMY;
+
+      // 3) 오른쪽 패딩
+      const rightStart = dstStart + copyLen;
+      for (let i = rightStart; i < colLen; i++) row[i] = DUMMY;
+      newTiles[ri] = row;
+    }
+
     setRenderTiles(newTiles);
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cachingTiles, cursorOriginX, cursorOriginY]);
 
