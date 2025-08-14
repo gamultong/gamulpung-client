@@ -9,7 +9,7 @@ import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
-import { XYType, VectorImagesType, TileContent } from '@/types';
+import { XYType, VectorImagesType, TileContent, SendMessageEvent } from '@/types';
 import { Click, ClickType, CursorColors, CursorDirections, OtherCursorColors } from '@/constants';
 import { makePath2d, makePath2dFromArray } from '@/utils';
 
@@ -170,7 +170,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const clickEvent = (x: number, y: number, click_type: ClickType) => {
     const position = { x, y };
     const payload = { position, click_type };
-    const body = JSON.stringify({ event: 'pointing', payload });
+    const body = JSON.stringify({ event: SendMessageEvent.POINTING, payload });
     sendMessage(body);
   };
 

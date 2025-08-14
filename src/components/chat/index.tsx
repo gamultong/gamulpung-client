@@ -5,6 +5,7 @@ import { CSSProperties, useEffect, useRef, useState } from 'react';
 import useWebSocketStore from '@/store/websocketStore';
 import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
+import { SendMessageEvent } from '@/types';
 
 export default function ChatComponent() {
   /** constants */
@@ -61,10 +62,8 @@ export default function ChatComponent() {
     if (message === '' || (startChatTime as number) < now) return;
     /** Send message using websocket. */
     const payload = { message };
-    const body = JSON.stringify({
-      event: 'send-chat',
-      payload,
-    });
+    const event = SendMessageEvent.SEND_CHAT;
+    const body = JSON.stringify({ event, payload });
     sendMessage(body);
     setMessage('');
   };
