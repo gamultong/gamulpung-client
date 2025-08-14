@@ -50,18 +50,21 @@ export const SendMessageEvent = {
 export type SendMessageEvent = (typeof SendMessageEvent)[keyof typeof SendMessageEvent];
 
 export const ReceiveMessageEvent = {
-  TILES: 'tiles',
-  FLAG_SET: 'flag-set',
-  POINTER_SET: 'pointer-set',
-  SINGLE_TILE_OPENED: 'single-tile-opened',
-  TILES_OPENED: 'tiles-opened',
+  // 나 (Self)
   MY_CURSOR: 'my-cursor',
   YOU_DIED: 'you-died',
+  MOVED: 'moved',
+  ERROR: 'error',
+  // 타인 (Others)
+  POINTER_SET: 'pointer-set',
   CURSORS: 'cursors',
   CURSORS_DIED: 'cursors-died',
-  MOVED: 'moved',
   CURSOR_QUIT: 'cursor-quit',
   CHAT: 'chat',
-  ERROR: 'error',
-};
+  // 모두 (All/Global)
+  TILES: 'tiles',
+  FLAG_SET: 'flag-set',
+  SINGLE_TILE_OPENED: 'single-tile-opened',
+  TILES_OPENED: 'tiles-opened',
+} as const;
 export type ReceiveMessageEvent = (typeof ReceiveMessageEvent)[keyof typeof ReceiveMessageEvent];
