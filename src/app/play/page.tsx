@@ -212,13 +212,13 @@ export default function Play() {
           const nextTiles = [...prevTiles]; // 행 배열 얕은 복사
 
           sortedTiles.forEach(() => {
-            const sortedLen = sortedTiles.length;
-            const tilesLen = nextTiles.length;
-            for (let i = 0; i < sortedLen; i++) {
-              const yIdx = i + yOffset;
+            const { length: sortedLen } = sortedTiles;
+            const { length: tilesLen } = nextTiles;
+            for (let row_idx = 0; row_idx < sortedLen; row_idx++) {
+              const yIdx = row_idx + yOffset;
               if (yIdx < 0 || yIdx >= tilesLen) continue;
 
-              const srcRow = sortedTiles[i];
+              const srcRow = sortedTiles[row_idx];
               const oldRow = nextTiles[yIdx];
               const srcLen = srcRow.length;
 
@@ -234,9 +234,8 @@ export default function Play() {
 
                 let finalTile = tile;
                 const firstChar = tile[0];
-                if (firstChar === CLOSED || firstChar === FLAGGED) {
-                  finalTile = firstChar + (baseParity ^ ((i + col_idx) & 1)).toString();
-                }
+                const coloredType = [CLOSED, FLAGGED].some(t => t === firstChar);
+                if (coloredType) finalTile = firstChar + (baseParity ^ ((row_idx + col_idx) & 1)).toString();
 
                 if (oldRow[xIdx] !== finalTile) {
                   if (newRow === null) newRow = oldRow.slice(); // 최초 변경 시 1회 복제
