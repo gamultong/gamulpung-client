@@ -27,8 +27,8 @@ const useWebSocketStore = create<WebSocketState>(set => ({
   sendMessage: (message: string) => {
     if (!message) return;
     const { socket, isOpen } = useWebSocketStore.getState();
-    if (isOpen) socket?.send(message);
-    set({}); // Update the message state
+    if (isOpen && socket) socket.send(message);
+    // Removed unnecessary set({}) that was causing infinite loops
   },
 }));
 

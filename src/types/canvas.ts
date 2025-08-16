@@ -12,6 +12,12 @@ export interface VectorImagesType {
 }
 
 export type CursorColor = 'red' | 'blue' | 'yellow' | 'purple';
+export const ColorMap: Record<CursorColor, string> = {
+  red: '0',
+  yellow: '1',
+  blue: '2',
+  purple: '3',
+} as const;
 
 export const TileContent = {
   CLOSED: 'C',

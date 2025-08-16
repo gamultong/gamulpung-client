@@ -123,7 +123,7 @@ export default function Play() {
   }, []);
 
   // initialization
-  const play = () => {
+  const initinialize = () => {
     if (!(!isOpen && startPoint.x !== endPoint.x && endPoint.y !== startPoint.y)) return;
     setLeftReviveTime(-1);
     setCachingTiles([]);
@@ -144,7 +144,7 @@ export default function Play() {
   };
 
   useLayoutEffect(() => {
-    play();
+    initinialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, startPoint, endPoint]);
 
@@ -214,7 +214,6 @@ export default function Play() {
           sortedTiles.forEach(() => {
             const sortedLen = sortedTiles.length;
             const tilesLen = nextTiles.length;
-
             for (let i = 0; i < sortedLen; i++) {
               const yIdx = i + yOffset;
               if (yIdx < 0 || yIdx >= tilesLen) continue;
@@ -222,21 +221,31 @@ export default function Play() {
               const srcRow = sortedTiles[i];
               const oldRow = nextTiles[yIdx];
               const srcLen = srcRow.length;
-              const newRow = oldRow.slice(); // 행 복사
+
+              // 변경 생길 때만 복사
+              let newRow: string[] | null = null;
+
               for (let col_idx = 0; col_idx < srcLen; col_idx++) {
                 const tile = srcRow[col_idx];
                 if (!tile) continue;
+
                 const xIdx = col_idx + xOffset;
                 if (xIdx < 0 || xIdx >= oldRow.length) continue;
 
                 let finalTile = tile;
                 const firstChar = tile[0];
-                if (firstChar === CLOSED || firstChar === FLAGGED) finalTile = firstChar + (baseParity ^ ((i + col_idx) & 1)).toString();
+                if (firstChar === CLOSED || firstChar === FLAGGED) {
+                  finalTile = firstChar + (baseParity ^ ((i + col_idx) & 1)).toString();
+                }
 
-                if (oldRow[xIdx] !== finalTile) newRow[xIdx] = finalTile;
+                if (oldRow[xIdx] !== finalTile) {
+                  if (newRow === null) newRow = oldRow.slice(); // 최초 변경 시 1회 복제
+                  newRow![xIdx] = finalTile;
+                }
               }
 
-              if (newRow) nextTiles[yIdx] = newRow;
+              // 실제 변경이 있었을 때만 대입
+              if (newRow !== null) nextTiles[yIdx] = newRow;
             }
           });
 
