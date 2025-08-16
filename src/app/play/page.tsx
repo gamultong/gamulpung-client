@@ -211,42 +211,46 @@ export default function Play() {
         setCachingTiles(prevTiles => {
           const nextTiles = [...prevTiles]; // 행 배열 얕은 복사
 
-          sortedTiles.forEach(() => {
-            const { length: sortedLen } = sortedTiles;
-            const { length: tilesLen } = nextTiles;
-            for (let row_idx = 0; row_idx < sortedLen; row_idx++) {
-              const yIdx = row_idx + yOffset;
-              if (yIdx < 0 || yIdx >= tilesLen) continue;
+          // 최적화: forEach 제거, 사전 계산, 효율적인 조건 체크
+          const { length: sortedLen } = sortedTiles;
+          const { length: tilesLen } = nextTiles;
 
-              const srcRow = sortedTiles[row_idx];
-              const oldRow = nextTiles[yIdx];
-              const srcLen = srcRow.length;
+          for (let row_idx = 0; row_idx < sortedLen; row_idx++) {
+            const yIdx = row_idx + yOffset;
+            if (yIdx < 0 || yIdx >= tilesLen) continue;
 
-              // 변경 생길 때만 복사
-              let newRow: string[] | null = null;
+            const srcRow = sortedTiles[row_idx];
+            const oldRow = nextTiles[yIdx];
+            const srcLen = srcRow.length;
 
-              for (let col_idx = 0; col_idx < srcLen; col_idx++) {
-                const tile = srcRow[col_idx];
-                if (!tile) continue;
+            // 변경이 필요한 경우에만 새 행 생성
+            let newRow: string[] | null = null;
 
-                const xIdx = col_idx + xOffset;
-                if (xIdx < 0 || xIdx >= oldRow.length) continue;
+            for (let col_idx = 0; col_idx < srcLen; col_idx++) {
+              const tile = srcRow[col_idx];
+              if (!tile) continue;
 
-                let finalTile = tile;
-                const firstChar = tile[0];
-                const coloredType = [CLOSED, FLAGGED].some(t => t === firstChar);
-                if (coloredType) finalTile = firstChar + (baseParity ^ ((row_idx + col_idx) & 1)).toString();
+              const xIdx = col_idx + xOffset;
+              if (xIdx < 0 || xIdx >= oldRow.length) continue;
 
-                if (oldRow[xIdx] !== finalTile) {
-                  if (newRow === null) newRow = oldRow.slice(); // 최초 변경 시 1회 복제
-                  newRow![xIdx] = finalTile;
-                }
+              let finalTile = tile;
+              const firstChar = tile[0];
+
+              // 최적화: 직접 비교로 조건 체크 속도 향상
+              if (firstChar === CLOSED || firstChar === FLAGGED) {
+                finalTile = firstChar + (baseParity ^ ((row_idx + col_idx) & 1)).toString();
               }
 
-              // 실제 변경이 있었을 때만 대입
-              if (newRow !== null) nextTiles[yIdx] = newRow;
+              // 값이 다를 때만 업데이트
+              if (oldRow[xIdx] !== finalTile) {
+                if (newRow === null) newRow = oldRow.slice(); // 지연 복사
+                newRow[xIdx] = finalTile;
+              }
             }
-          });
+
+            // 실제 변경이 있었을 때만 업데이트
+            if (newRow !== null) nextTiles[yIdx] = newRow;
+          }
 
           return nextTiles;
         }),
