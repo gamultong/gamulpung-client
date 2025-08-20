@@ -274,12 +274,12 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       height={windowHeight}
       options={{
         backgroundColor: 0x808080,
-        resolution: isMoving ? 0.3 : 0.8,
+        resolution: isMoving ? 0.2 : 0.5, // 해상도 대폭 감소
         antialias: false,
         powerPreference: 'low-power',
         autoDensity: false,
-        preserveDrawingBuffer: false, // true에서 false로 변경
-        clearBeforeRender: true,
+        preserveDrawingBuffer: false,
+        clearBeforeRender: false, // 불필요한 클리어 제거
         sharedTicker: true,
       }}
     >

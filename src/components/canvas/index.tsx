@@ -408,25 +408,39 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     }
   };
 
-  /** Load Assets and Render */
+  /** Load Assets and Render (optimized) */
   useLayoutEffect(() => {
     if (!isInitializing && tiles.length > 0) return;
-    const lotteriaChabFont = new FontFace(
-      'LOTTERIACHAB',
-      "url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2302@1.0/LOTTERIACHAB.woff2') format('woff2')",
-    );
-    Promise.all([lotteriaChabFont.load()]).then(() => {
-      // Set vector images
-      document.fonts.add(lotteriaChabFont);
-      const cursor = makePath2d(cursorPaths);
-      const stun = makePath2dFromArray(stunPaths);
-      const flag = { flag: makePath2d(flagPaths[0]), pole: makePath2d(flagPaths[1]) };
-      const boom = { inner: makePath2d(boomPaths[0]), outer: makePath2d(boomPaths[1]) };
-      setCachedVectorAssets({ cursor, stun, flag, boom });
-      setIsInitializing(false);
-    });
+
+    // 폰트를 비동기로 로드하되, 실패해도 계속 진행
+    const loadFontOptional = async () => {
+      try {
+        const lotteriaChabFont = new FontFace(
+          'LOTTERIACHAB',
+          "url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2302@1.0/LOTTERIACHAB.woff2') format('woff2')",
+        );
+        await lotteriaChabFont.load();
+        document.fonts.add(lotteriaChabFont);
+      } catch {
+        console.warn('Font loading failed, using fallback font');
+      }
+    };
+
+    // 벡터 에셋은 즉시 생성 (폰트 로딩과 병렬)
+    const cursor = makePath2d(cursorPaths);
+    const stun = makePath2dFromArray(stunPaths);
+    const flag = { flag: makePath2d(flagPaths[0]), pole: makePath2d(flagPaths[1]) };
+    const boom = { inner: makePath2d(boomPaths[0]), outer: makePath2d(boomPaths[1]) };
+    setCachedVectorAssets({ cursor, stun, flag, boom });
+
+    // 폰트 로딩과 관계없이 초기화 완료
+    setIsInitializing(false);
+
+    // 폰트는 백그라운드에서 로드
+    loadFontOptional();
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles, isInitializing, tileSize, zoom]);
+  }, [tiles, isInitializing]);
 
   // Render Intreraction Objects
   useEffect(() => {

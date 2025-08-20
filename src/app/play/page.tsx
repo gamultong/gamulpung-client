@@ -67,7 +67,7 @@ export default function Play() {
   const [endPoint, setEndPoint] = useState<XYType>({ x: 0, y: 0 });
   const [renderStartPoint, setRenderStartPoint] = useState<XYType>({ x: 0, y: 0 });
   const [cachingTiles, setCachingTiles] = useState<string[][]>([]);
-  const [renderTiles, setRenderTiles] = useState<string[][]>([...cachingTiles.map(r => [...r])]);
+  const [renderTiles, setRenderTiles] = useState<string[][]>([]);
   const [leftReviveTime, setLeftReviveTime] = useState<number>(-1);
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
@@ -124,7 +124,7 @@ export default function Play() {
 
   // initialization
   const initinialize = () => {
-    if (!(!isOpen && startPoint.x !== endPoint.x && endPoint.y !== startPoint.y)) return;
+    if (isOpen) return;
     setLeftReviveTime(-1);
     setCachingTiles([]);
     setRenderTiles([]);
@@ -146,7 +146,7 @@ export default function Play() {
   useLayoutEffect(() => {
     initinialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, startPoint, endPoint]);
+  }, [isOpen]);
 
   /** Parse Hex using two charactors
    * @param hex {string} - Hex string
@@ -194,71 +194,67 @@ export default function Play() {
   );
 
   /** 정리 속도 향상: 타일 교체 함수 최적화 */
-  const replaceTiles = useCallback(
-    (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, replaceType: 'All' | 'PART') => {
-      if (!unsortedTiles?.length) return;
+  const replaceTiles = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, replaceType: 'All' | 'PART') => {
+    if (!unsortedTiles?.length) return;
 
-      const { sortedTiles } = sortTiles(end_x, end_y, start_x, start_y, unsortedTiles);
+    const { sortedTiles } = sortTiles(end_x, end_y, start_x, start_y, unsortedTiles);
 
-      const yOffset = replaceType === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - sortedTiles.length + 1 : 0) : end_y - startPoint.y;
+    const yOffset = replaceType === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - sortedTiles.length + 1 : 0) : end_y - startPoint.y;
 
-      const xOffset = start_x - startPoint.x;
-      const baseParity = (-end_y - start_x) & 1;
-      const CLOSED = TileContent.CLOSED;
-      const FLAGGED = TileContent.FLAGGED;
+    const xOffset = start_x - startPoint.x;
+    const baseParity = (-end_y - start_x) & 1;
+    const CLOSED = TileContent.CLOSED;
+    const FLAGGED = TileContent.FLAGGED;
 
-      startTransition(() =>
-        setCachingTiles(prevTiles => {
-          const nextTiles = [...prevTiles]; // 행 배열 얕은 복사
+    startTransition(() =>
+      setCachingTiles(prevTiles => {
+        const nextTiles = [...prevTiles]; // 행 배열 얕은 복사
 
-          // 최적화: forEach 제거, 사전 계산, 효율적인 조건 체크
-          const { length: sortedLen } = sortedTiles;
-          const { length: tilesLen } = nextTiles;
+        // 최적화: forEach 제거, 사전 계산, 효율적인 조건 체크
+        const { length: sortedLen } = sortedTiles;
+        const { length: tilesLen } = nextTiles;
 
-          for (let row_idx = 0; row_idx < sortedLen; row_idx++) {
-            const yIdx = row_idx + yOffset;
-            if (yIdx < 0 || yIdx >= tilesLen) continue;
+        for (let row_idx = 0; row_idx < sortedLen; row_idx++) {
+          const yIdx = row_idx + yOffset;
+          if (yIdx < 0 || yIdx >= tilesLen) continue;
 
-            const srcRow = sortedTiles[row_idx];
-            const oldRow = nextTiles[yIdx];
-            const srcLen = srcRow.length;
+          const srcRow = sortedTiles[row_idx];
+          const oldRow = nextTiles[yIdx];
+          const srcLen = srcRow.length;
 
-            // 변경이 필요한 경우에만 새 행 생성
-            let newRow: string[] | null = null;
+          // 변경이 필요한 경우에만 새 행 생성
+          let newRow: string[] | null = null;
 
-            for (let col_idx = 0; col_idx < srcLen; col_idx++) {
-              const tile = srcRow[col_idx];
-              if (!tile) continue;
+          for (let col_idx = 0; col_idx < srcLen; col_idx++) {
+            const tile = srcRow[col_idx];
+            if (!tile) continue;
 
-              const xIdx = col_idx + xOffset;
-              if (xIdx < 0 || xIdx >= oldRow.length) continue;
+            const xIdx = col_idx + xOffset;
+            if (xIdx < 0 || xIdx >= oldRow.length) continue;
 
-              let finalTile = tile;
-              const firstChar = tile[0];
+            let finalTile = tile;
+            const firstChar = tile[0];
 
-              // 최적화: 직접 비교로 조건 체크 속도 향상
-              if (firstChar === CLOSED || firstChar === FLAGGED) {
-                finalTile = firstChar + (baseParity ^ ((row_idx + col_idx) & 1)).toString();
-              }
-
-              // 값이 다를 때만 업데이트
-              if (oldRow[xIdx] !== finalTile) {
-                if (newRow === null) newRow = oldRow.slice(); // 지연 복사
-                newRow[xIdx] = finalTile;
-              }
+            // 최적화: 직접 비교로 조건 체크 속도 향상
+            if (firstChar === CLOSED || firstChar === FLAGGED) {
+              finalTile = firstChar + (baseParity ^ ((row_idx + col_idx) & 1)).toString();
             }
 
-            // 실제 변경이 있었을 때만 업데이트
-            if (newRow !== null) nextTiles[yIdx] = newRow;
+            // 값이 다를 때만 업데이트
+            if (oldRow[xIdx] !== finalTile) {
+              if (newRow === null) newRow = oldRow.slice(); // 지연 복사
+              newRow[xIdx] = finalTile;
+            }
           }
 
-          return nextTiles;
-        }),
-      );
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cursorY, endPoint.y, startPoint.y, startPoint.x],
-  );
+          // 실제 변경이 있었을 때만 업데이트
+          if (newRow !== null) nextTiles[yIdx] = newRow;
+        }
+
+        return nextTiles;
+      }),
+    );
+  };
 
   /** Handling Websocket Message */
   useLayoutEffect(() => {
@@ -460,10 +456,15 @@ export default function Play() {
       y: type === 'START' ? baseY - tilePaddingHeight : baseY + tilePaddingHeight,
     });
 
-    setStartPoint(createPoint(cursorX, cursorY, 'START'));
-    setEndPoint(createPoint(cursorX, cursorY, 'END'));
-    setRenderStartPoint(createPoint(cursorOriginX, cursorOriginY, 'START'));
-    setTileSize(newTileSize);
+    const newStartPoint = createPoint(cursorX, cursorY, 'START');
+    const newEndPoint = createPoint(cursorX, cursorY, 'END');
+    const newRenderStartPoint = createPoint(cursorOriginX, cursorOriginY, 'START');
+
+    // 값이 실제로 변경된 경우에만 업데이트 (무한 루프 방지)
+    setStartPoint(prev => (prev.x !== newStartPoint.x || prev.y !== newStartPoint.y ? newStartPoint : prev));
+    setEndPoint(prev => (prev.x !== newEndPoint.x || prev.y !== newEndPoint.y ? newEndPoint : prev));
+    setRenderStartPoint(prev => (prev.x !== newRenderStartPoint.x || prev.y !== newRenderStartPoint.y ? newRenderStartPoint : prev));
+    setTileSize(prev => (prev !== newTileSize ? newTileSize : prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowWidth, windowHeight, zoom, cursorOriginX, cursorOriginY, cursorX, cursorY, isInitialized]);
 
@@ -546,14 +547,20 @@ export default function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursorX, cursorY]);
 
-  /** Send user move event */
+  /** Send user move event (throttled) */
   useEffect(() => {
     if (!isInitialized) return;
-    const event = SendMessageEvent.MOVING;
-    const position = { x: cursorOriginX, y: cursorOriginY };
-    const payload = { position };
-    const body = JSON.stringify({ event, payload });
-    sendMessage(body);
+
+    // 50ms 쓰로틀링으로 네트워크 부하 감소
+    const timeoutId = setTimeout(() => {
+      const event = SendMessageEvent.MOVING;
+      const position = { x: cursorOriginX, y: cursorOriginY };
+      const payload = { position };
+      const body = JSON.stringify({ event, payload });
+      sendMessage(body);
+    }, 50);
+
+    return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursorOriginX, cursorOriginY]);
 

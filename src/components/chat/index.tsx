@@ -40,9 +40,16 @@ export default function ChatComponent() {
     opacity: getOpacity(startChatTime),
   };
 
+  // 메모리 최적화: 불필요한 getBoundingClientRect 호출 제거
   useEffect(() => {
-    if (!messageRef.current) return;
-    setMessageWidth(messageRef?.current.getBoundingClientRect().width);
+    if (!messageRef.current || !message) return;
+    // requestAnimationFrame으로 DOM 업데이트 최적화
+    const rafId = requestAnimationFrame(() => {
+      if (messageRef.current) {
+        setMessageWidth(messageRef.current.getBoundingClientRect().width);
+      }
+    });
+    return () => cancelAnimationFrame(rafId);
   }, [message]);
 
   const handleKeyEvent = (event: KeyboardEvent) => {
