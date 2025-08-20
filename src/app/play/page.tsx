@@ -3,7 +3,7 @@
 import S from './page.module.scss';
 
 /** hooks */
-import { useEffect, useLayoutEffect, useState, useCallback, startTransition } from 'react';
+import { useEffect, useLayoutEffect, useState, useCallback, startTransition, useRef } from 'react';
 import useScreenSize from '@/hooks/useScreenSize';
 import { OtherUserSingleCursorState, useCursorStore, useOtherUserCursorsStore } from '../../store/cursorStore';
 
@@ -70,6 +70,7 @@ export default function Play() {
   const [renderTiles, setRenderTiles] = useState<string[][]>([]);
   const [leftReviveTime, setLeftReviveTime] = useState<number>(-1);
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
+  const trytoconnect = useRef<boolean>(false);
 
   /**
    * Request Tiles
@@ -82,6 +83,7 @@ export default function Play() {
    *  */
   const requestTiles = (start_x: number, start_y: number, end_x: number, end_y: number, type: DirectionType) => {
     if (!isOpen || !isInitialized) return;
+    if (end_y === start_y || start_x === end_y) return;
     const [rl, cl] = [Math.abs(end_x - start_x) + 1, Math.abs(start_y - end_y) + 1]; // row length, column length
 
     /** add Dummy data to originTiles */
@@ -123,28 +125,28 @@ export default function Play() {
   }, []);
 
   // initialization
-  const initinialize = () => {
-    if (isOpen) return;
-    setLeftReviveTime(-1);
-    setCachingTiles([]);
-    setRenderTiles([]);
-    setIsInitialized(false);
-    setCursorPosition(cursorOriginX, cursorOriginY);
-    setClickPosition(cursorOriginX, cursorOriginY, TileContent.NULL);
-    setCursors([]);
-    setRenderStartPoint({ x: 0, y: 0 });
-    setStartPoint({ x: cursorX, y: cursorY });
-    setEndPoint({ x: cursorX, y: cursorY });
-    setTileSize(ORIGIN_TILE_SIZE * zoom);
-    setColor('blue');
-    setOringinPosition(cursorX, cursorY);
-    setZoom(1);
-    const [view_width, view_height] = [endPoint.x - startPoint.x + 1, endPoint.y - startPoint.y + 1];
-    connect(WS_URL + `?view_width=${view_width}&view_height=${view_height}`);
-  };
-
   useLayoutEffect(() => {
-    initinialize();
+    const initinialize = () => {
+      if (isOpen || trytoconnect.current) return;
+      trytoconnect.current = true;
+      setLeftReviveTime(-1);
+      setCachingTiles([]);
+      setRenderTiles([]);
+      setIsInitialized(true);
+      setCursorPosition(cursorOriginX, cursorOriginY);
+      setClickPosition(cursorOriginX, cursorOriginY, TileContent.NULL);
+      setCursors([]);
+      setRenderStartPoint({ x: 0, y: 0 });
+      setStartPoint({ x: cursorX, y: cursorY });
+      setEndPoint({ x: cursorX, y: cursorY });
+      setTileSize(ORIGIN_TILE_SIZE * zoom);
+      setColor('blue');
+      setOringinPosition(cursorX, cursorY);
+      setZoom(1);
+      const [view_width, view_height] = [endPoint.x - startPoint.x + 1, endPoint.y - startPoint.y + 1];
+      connect(WS_URL + `?view_width=${view_width}&view_height=${view_height}`);
+    };
+    if (!trytoconnect.current) initinialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
@@ -200,7 +202,6 @@ export default function Play() {
     const { sortedTiles } = sortTiles(end_x, end_y, start_x, start_y, unsortedTiles);
 
     const yOffset = replaceType === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - sortedTiles.length + 1 : 0) : end_y - startPoint.y;
-
     const xOffset = start_x - startPoint.x;
     const baseParity = (-end_y - start_x) & 1;
     const CLOSED = TileContent.CLOSED;
@@ -444,11 +445,11 @@ export default function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cachingTiles, cursorOriginX, cursorOriginY]);
 
-  /** Reset screen range when cursor position or screen size changes */
+  /** Reset screen range if cursor position or screen size changes */
   useLayoutEffect(() => {
-    const newTileSize = ORIGIN_TILE_SIZE * zoom;
-    const tilePaddingWidth = Math.floor((windowWidth * RENDER_RANGE) / newTileSize / 2);
-    const tilePaddingHeight = Math.floor((windowHeight * RENDER_RANGE) / newTileSize / 2);
+    if (tileSize <= 0) return;
+    const tilePaddingWidth = Math.floor((windowWidth * RENDER_RANGE) / tileSize / 2);
+    const tilePaddingHeight = Math.floor((windowHeight * RENDER_RANGE) / tileSize / 2);
 
     if (tilePaddingHeight < 1 || tilePaddingWidth < 1) return;
     const createPoint = (baseX: number, baseY: number, type: 'START' | 'END') => ({
@@ -464,14 +465,14 @@ export default function Play() {
     setStartPoint(prev => (prev.x !== newStartPoint.x || prev.y !== newStartPoint.y ? newStartPoint : prev));
     setEndPoint(prev => (prev.x !== newEndPoint.x || prev.y !== newEndPoint.y ? newEndPoint : prev));
     setRenderStartPoint(prev => (prev.x !== newRenderStartPoint.x || prev.y !== newRenderStartPoint.y ? newRenderStartPoint : prev));
-    setTileSize(prev => (prev !== newTileSize ? newTileSize : prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowWidth, windowHeight, zoom, cursorOriginX, cursorOriginY, cursorX, cursorY, isInitialized]);
+  }, [windowWidth, windowHeight, cursorOriginX, cursorOriginY, cursorX, cursorY, isInitialized, tileSize]);
 
   /** Handling zoom event */
   useLayoutEffect(() => {
-    if (!isInitialized) return;
+    if (!isInitialized || !isOpen) return;
     const newTileSize = ORIGIN_TILE_SIZE * zoom;
+    setTileSize(prev => (prev !== newTileSize ? newTileSize : prev));
     const tileVisibleWidth = Math.floor((windowWidth * RENDER_RANGE) / newTileSize);
     const tileVisibleHeight = Math.floor((windowHeight * RENDER_RANGE) / newTileSize);
     const [tilePaddingWidth, tilePaddingHeight] = [Math.floor(tileVisibleWidth / 2), Math.floor(tileVisibleHeight / 2)];
