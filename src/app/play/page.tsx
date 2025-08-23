@@ -15,6 +15,7 @@ import Inactive from '@/components/inactive';
 import CanvasDashboard from '@/components/canvasDashboard';
 import TutorialStep from '@/components/tutorialstep';
 import ScoreBoard from '@/components/scoreboard';
+import { ReceiveMessageEvent } from '@/types';
 
 interface Point {
   x: number;
@@ -185,11 +186,17 @@ export default function Play() {
   /** Handling Websocket Message */
   useLayoutEffect(() => {
     if (!message) return;
+    // me
+    const { MY_CURSOR, YOU_DIED, MOVED, ERROR } = ReceiveMessageEvent;
+    // others
+    const { POINTER_SET, CURSORS, CURSORS_DIED, CURSOR_QUIT, CHAT } = ReceiveMessageEvent;
+    // all
+    const { TILES, FLAG_SET, SINGLE_TILE_OPENED, TILES_OPENED } = ReceiveMessageEvent;
     try {
       const { event, payload } = JSON.parse(message);
       switch (event) {
         /** When receiving requested tiles */
-        case 'tiles': {
+        case TILES: {
           const { tiles, start_p, end_p } = payload;
           const { x: start_x, y: start_y } = start_p;
           const { x: end_x, y: end_y } = end_p;
@@ -197,7 +204,7 @@ export default function Play() {
           break;
         }
         /** When receiving unrequested tiles when sending tile open event */
-        case 'flag-set': {
+        case FLAG_SET: {
           const { position, is_set, color } = payload;
           const { x, y } = position;
           const newTiles = [...cachingTiles];
@@ -211,12 +218,12 @@ export default function Play() {
           setCachingTiles(newTiles);
           break;
         }
-        case 'pointer-set': {
+        case POINTER_SET: {
           const { id, pointer } = payload;
-          const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => (id === cursor.id ? { ...cursor, pointer } : cursor));
+          const newCursors = cursors.map(cursor => (id === cursor.id ? { ...cursor, pointer } : cursor));
           setCursors(newCursors);
         }
-        case 'single-tile-opened': {
+        case SINGLE_TILE_OPENED: {
           const { position, tile } = payload;
           if (!position || !tile) return;
           const { x, y } = position;
@@ -225,7 +232,7 @@ export default function Play() {
           setCachingTiles(newTiles);
           break;
         }
-        case 'tiles-opened': {
+        case TILES_OPENED: {
           const { tiles, start_p, end_p } = payload;
           const { x: start_x, y: start_y } = start_p;
           const { x: end_x, y: end_y } = end_p;
@@ -233,7 +240,7 @@ export default function Play() {
           break;
         }
         /** Fetches own information only once when connected. */
-        case 'my-cursor': {
+        case MY_CURSOR: {
           const { position, pointer, color, id } = payload;
           setId(id);
           setOringinPosition(position.x, position.y);
@@ -244,13 +251,13 @@ export default function Play() {
           break;
         }
         /** Fetches information of other users. */
-        case 'you-died': {
+        case YOU_DIED: {
           const { revive_at } = payload;
           const leftTime = Math.floor((new Date(revive_at)?.getTime() - Date.now()) / 1000);
           setLeftReviveTime(leftTime);
           break;
         }
-        case 'cursors': {
+        case CURSORS: {
           const { cursors } = payload;
           type newCursorType = {
             position: { x: number; y: number };
@@ -268,10 +275,10 @@ export default function Play() {
           addCursors(newCursors);
           break;
         }
-        case 'cursors-died': {
+        case CURSORS_DIED: {
           const { cursors: deadCursors, revive_at } = payload;
           const revive_time = new Date(revive_at)?.getTime();
-          const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => {
+          const newCursors = cursors.map(cursor => {
             for (const deadCursor of deadCursors as OtherUserSingleCursorState[])
               if (cursor.id === deadCursor.id) return { ...cursor, revive_at: revive_time };
             return cursor;
@@ -280,32 +287,32 @@ export default function Play() {
           break;
         }
         /** Receives movement events from other users. */
-        case 'moved': {
+        case MOVED: {
           const { id, new_position } = payload;
           const { x, y } = new_position;
-          const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => (id === cursor.id ? { ...cursor, x, y } : cursor));
+          const newCursors = cursors.map(cursor => (id === cursor.id ? { ...cursor, x, y } : cursor));
           setCursors(newCursors);
           break;
         }
         /** Receives other user's quit */
-        case 'cursor-quit': {
+        case CURSOR_QUIT: {
           const { id } = payload;
           const newCursors = [...cursors];
-          const index = newCursors.findIndex((cursor: OtherUserSingleCursorState) => cursor.id === id);
+          const index = newCursors.findIndex(cursor => cursor.id === id);
           if (index !== -1) newCursors.splice(index, 1);
           setCursors(newCursors);
           break;
         }
-        case 'chat': {
+        case CHAT: {
           const { cursor_id, message } = payload;
-          const newCursors = cursors.map((cursor: OtherUserSingleCursorState) => {
+          const newCursors = cursors.map(cursor => {
             if (cursor.id === cursor_id) return { ...cursor, message, messageTime: Date.now() + 1000 * 8 };
             return cursor;
           });
           setCursors(newCursors);
           break;
         }
-        case 'error': {
+        case ERROR: {
           const { msg } = payload;
           console.error(msg);
           break;
