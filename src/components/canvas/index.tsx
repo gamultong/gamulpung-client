@@ -251,10 +251,12 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     if (!otherCursorsCtx) return;
     otherCursorsCtx.clearRect(0, 0, windowWidth, windowHeight);
     cursors.forEach(cursor => {
-      const [drawX, drawY] = [cursor.x - cursorOriginX + otherCursorPaddingWidth, cursor.y - cursorOriginY + otherCursorPaddingHeight];
-      const [distanceX, distanceY] = [cursor.x - (cursor.pointer?.x ?? cursor.x), cursor.y - (cursor.pointer?.y ?? cursor.y)];
+      const { x, y, color, revive_at } = cursor;
+      const { x: pointerX, y: pointerY } = cursor?.pointer ?? { x, y };
+      const [drawX, drawY] = [x - cursorOriginX + otherCursorPaddingWidth, y - cursorOriginY + otherCursorPaddingHeight];
+      const [distanceX, distanceY] = [x - pointerX, y - pointerY];
       const rotate = distanceX !== 0 || distanceY !== 0 ? Math.atan2(distanceY, distanceX) : 0;
-      drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CursorColors[cursor.color], cursor.revive_at, rotate);
+      drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CursorColors[color], revive_at, rotate);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursors, cursorOriginX, cursorOriginY, tilePaddingWidth, tilePaddingHeight, tileSize, windowWidth, windowHeight, canvasRefs.otherCursorsRef]);
@@ -276,9 +278,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const otherPointerCtx = canvasRefs.otherPointerRef.current?.getContext('2d');
       if (!otherPointerCtx) return;
       otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
-      cursors.forEach(cursor => {
-        const [x, y] = [cursor.pointer?.x - cursorOriginX + otherCursorPaddingWidth, cursor.pointer?.y - cursorOriginY + otherCursorPaddingHeight];
-        drawPointer(otherPointerCtx, x * tileSize, y * tileSize, OtherCursorColors[cursor.color], borderPixel);
+      cursors.forEach(({ pointer, color }) => {
+        const { x, y } = pointer ?? { x: 0, y: 0 };
+        const [drawX, drawY] = [x - cursorOriginX + otherCursorPaddingWidth, y - cursorOriginY + otherCursorPaddingHeight];
+        drawPointer(otherPointerCtx, drawX * tileSize, drawY * tileSize, OtherCursorColors[color], borderPixel);
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
