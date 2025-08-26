@@ -15,12 +15,7 @@ import Inactive from '@/components/inactive';
 import CanvasDashboard from '@/components/canvasDashboard';
 import TutorialStep from '@/components/tutorialstep';
 import ScoreBoard from '@/components/scoreboard';
-import { ReceiveMessageEvent, SendMessageEvent } from '@/types';
-
-interface Point {
-  x: number;
-  y: number;
-}
+import { ReceiveMessageEvent, SendMessageEvent, XYType } from '@/types';
 
 export default function Play() {
   /** constants */
@@ -51,9 +46,9 @@ export default function Play() {
 
   /** states */
   const [tileSize, setTileSize] = useState<number>(0); //px
-  const [startPoint, setStartPoint] = useState<Point>({ x: 0, y: 0 });
-  const [endPoint, setEndPoint] = useState<Point>({ x: 0, y: 0 });
-  const [renderStartPoint, setRenderStartPoint] = useState<Point>({ x: 0, y: 0 });
+  const [startPoint, setStartPoint] = useState<XYType>({ x: 0, y: 0 });
+  const [endPoint, setEndPoint] = useState<XYType>({ x: 0, y: 0 });
+  const [renderStartPoint, setRenderStartPoint] = useState<XYType>({ x: 0, y: 0 });
   const [cachingTiles, setCachingTiles] = useState<string[][]>([]);
   const [renderTiles, setRenderTiles] = useState<string[][]>([...cachingTiles.map(row => [...row])]);
   const [leftReviveTime, setLeftReviveTime] = useState<number>(-1);
