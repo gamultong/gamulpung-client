@@ -10,4 +10,4 @@ export const Direction = {
   DOWN: 'D',
   ALL: 'A',
 } as const;
-export type DirectionType = (typeof Direction)[keyof typeof Direction];
+export type Direction = (typeof Direction)[keyof typeof Direction];

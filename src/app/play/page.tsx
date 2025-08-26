@@ -15,7 +15,7 @@ import Inactive from '@/components/inactive';
 import CanvasDashboard from '@/components/canvasDashboard';
 import TutorialStep from '@/components/tutorialstep';
 import ScoreBoard from '@/components/scoreboard';
-import { ReceiveMessageEvent, SendMessageEvent, XYType } from '@/types';
+import { Direction, ReceiveMessageEvent, SendMessageEvent, XYType } from '@/types';
 
 export default function Play() {
   /** constants */
@@ -63,7 +63,7 @@ export default function Play() {
    * @param end_y {number} - end y position
    * @param type {string} - Request type (R: Right tiles, L: Left tiles, U: Up tiles, D: Down tiles, A: All tiles)
    *  */
-  const requestTiles = (start_x: number, start_y: number, end_x: number, end_y: number, type: 'R' | 'L' | 'U' | 'D' | 'A') => {
+  const requestTiles = (start_x: number, start_y: number, end_x: number, end_y: number, type: Direction) => {
     if (!isOpen || !isInitialized) return;
     /** add Dummy data to originTiles */
     const [rowlength, columnlength] = [Math.abs(end_x - start_x) + 1, Math.abs(start_y - end_y) + 1];
@@ -71,20 +71,20 @@ export default function Play() {
     setCachingTiles(tiles => {
       let newTiles = [...tiles];
       switch (type) {
-        case 'U': // Upper tiles
+        case Direction.UP: // Upper tiles
           newTiles = [...Array.from({ length: columnlength }, () => Array(rowlength).fill('??')), ...newTiles.slice(0, -columnlength)];
           break;
-        case 'D': // Down tiles
+        case Direction.DOWN: // Down tiles
           newTiles = [...newTiles.slice(columnlength), ...Array.from({ length: columnlength }, () => Array(rowlength).fill('??'))];
           break;
-        case 'L': // Left tiles
+        case Direction.LEFT: // Left tiles
           for (let i = 0; i < columnlength; i++)
             newTiles[i] = [...Array(rowlength).fill('??'), ...newTiles[i].slice(0, newTiles[0].length - rowlength)];
           break;
-        case 'R': // Right tiles
+        case Direction.RIGHT: // Right tiles
           for (let i = 0; i < columnlength; i++) newTiles[i] = [...newTiles[i].slice(rowlength), ...Array(rowlength).fill('??')];
           break;
-        case 'A': // All tiles
+        case Direction.ALL: // All tiles
           newTiles = Array.from({ length: columnlength }, () => Array.from({ length: rowlength }, () => '??'));
       }
       return newTiles;
