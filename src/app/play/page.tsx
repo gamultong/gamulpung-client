@@ -15,7 +15,7 @@ import Inactive from '@/components/inactive';
 import CanvasDashboard from '@/components/canvasDashboard';
 import TutorialStep from '@/components/tutorialstep';
 import ScoreBoard from '@/components/scoreboard';
-import { ReceiveMessageEvent } from '@/types';
+import { ReceiveMessageEvent, SendMessageEvent } from '@/types';
 
 interface Point {
   x: number;
@@ -95,7 +95,7 @@ export default function Play() {
       return newTiles;
     });
     const payload = { start_p: { x: start_x, y: start_y }, end_p: { x: end_x, y: end_y } };
-    const body = JSON.stringify({ event: 'fetch-tiles', payload });
+    const body = JSON.stringify({ event: SendMessageEvent.FETCH_TILES, payload });
     sendMessage(body);
     return;
   };
@@ -397,7 +397,7 @@ export default function Play() {
     const width = Math.floor((windowWidth * RENDER_RANGE) / newTileSize);
     const height = Math.floor((windowHeight * RENDER_RANGE) / newTileSize);
     const payload = { width, height };
-    const body = JSON.stringify({ event: 'set-view-size', payload });
+    const body = JSON.stringify({ event: SendMessageEvent.SET_VIEW_SIZE, payload });
     sendMessage(body);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowWidth, windowHeight, zoom, isInitialized]);
@@ -439,7 +439,7 @@ export default function Play() {
   /** Send user move event */
   useEffect(() => {
     if (!isInitialized) return;
-    const event = 'moving';
+    const event = SendMessageEvent.MOVING;
     const position = { x: cursorOriginX, y: cursorOriginY };
     const payload = { position };
     const body = JSON.stringify({ event, payload });
