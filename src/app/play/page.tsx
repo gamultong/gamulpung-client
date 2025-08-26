@@ -120,22 +120,33 @@ export default function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, startPoint, endPoint]);
 
-  /** Parse Hex using two charactors
+  /** Parse Hex using direct byte operations (optimized)
    * @param hex {string} - Hex string
+   * @param x {number} - Optional X coordinate for checkerboard pattern
+   * @param y {number} - Optional Y coordinate for checkerboard pattern
    */
-  const parseHex = (hex: string) => {
-    const hexArray = hex.match(/.{1,2}/g);
-    if (!hexArray) return '';
-    const byte = hexArray.map(hex => parseInt(hex, 16).toString(2).padStart(8, '0')).join('');
-    // byte 0 - IsOpen, 1 - IsMine, 2 - IsFlag, 3 ~ 4 color, 5 ~ 7 number of mines
-    const isTileOpened = byte[0] === '1';
-    const isMine = byte[1] === '1';
-    const isFlag = byte[2] === '1';
-    const color = parseInt(byte.slice(3, 5), 2); /** 00 red, 01 yellow, 10 blue, 11 purple */
-    const number = parseInt(byte.slice(5), 2);
+  const parseHex = (hex: string, x?: number, y?: number) => {
+    if (hex.length < 2) return '';
+
+    // Direct hex to integer conversion (much faster than string operations)
+    const byte = parseInt(hex.slice(0, 2), 16);
+
+    // Bit operations instead of string manipulation
+    const isTileOpened = (byte & 0b10000000) !== 0; // bit 7 (MSB)
+    const isMine = (byte & 0b01000000) !== 0; // bit 6
+    const isFlag = (byte & 0b00100000) !== 0; // bit 5
+    const color = (byte & 0b00011000) >> 3; // bits 4-3
+    const number = byte & 0b00000111; // bits 2-0
+
+    // Calculate checkerboard pattern for position-based coloring
+    const getCheckerPattern = (posX?: number, posY?: number) => {
+      if (posX === undefined || posY === undefined) return '0';
+      return (posX + posY) % 2 === 0 ? '0' : '1';
+    };
+
     if (isTileOpened) return isMine ? 'B' : number === 0 ? 'O' : number.toString();
-    if (isFlag) return 'F' + color;
-    return 'C';
+    if (isFlag) return 'F' + color + getCheckerPattern(x, y);
+    return 'C' + getCheckerPattern(x, y);
   };
 
   const sortTiles = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string) => {
@@ -144,7 +155,11 @@ export default function Play() {
     for (let i = 0; i < columnlength; i++) {
       const newRow = new Array(rowlength / 2);
       const rowOffset = i * rowlength;
-      for (let j = 0; j < rowlength; j += 2) newRow[j / 2] = parseHex(unsortedTiles.slice(rowOffset + j, rowOffset + j + 2));
+      for (let j = 0; j < rowlength; j += 2) {
+        const tileX = start_x + j / 2;
+        const tileY = start_y + i;
+        newRow[j / 2] = parseHex(unsortedTiles.slice(rowOffset + j, rowOffset + j + 2), tileX, tileY);
+      }
       sortedTiles[i] = newRow;
     }
     /** The y-axis is reversed.*/
@@ -223,7 +238,7 @@ export default function Play() {
           if (!position || !tile) return;
           const { x, y } = position;
           const newTiles = [...cachingTiles];
-          newTiles[y - startPoint.y][x - startPoint.x] = parseHex(tile);
+          newTiles[y - startPoint.y][x - startPoint.x] = parseHex(tile, x, y);
           setCachingTiles(newTiles);
           break;
         }
@@ -326,16 +341,37 @@ export default function Play() {
   useLayoutEffect(() => {
     const newTiles = [...cachingTiles.map(row => [...row.map(() => '??')])];
     const [offsetX, offsetY] = [cursorOriginX - cursorX, cursorOriginY - cursorY];
+
     for (let row = 0; row < cachingTiles.length; row++) {
-      if (row + offsetY >= 0 && row + offsetY < cachingTiles.length)
+      if (row + offsetY >= 0 && row + offsetY < cachingTiles.length) {
         for (let col = 0; col < cachingTiles[row].length; col++) {
           const targetCol = col + offsetX;
-          if (targetCol >= 0 && targetCol < cachingTiles[row + offsetY].length) newTiles[row][col] = cachingTiles[row + offsetY][targetCol] || '??';
+          if (targetCol >= 0 && targetCol < cachingTiles[row + offsetY].length) {
+            const sourceTile = cachingTiles[row + offsetY][targetCol] || '??';
+
+            // Fix checkerboard pattern for repositioned tiles
+            if (sourceTile[0] === 'C' || sourceTile[0] === 'F') {
+              const renderX = renderStartPoint.x + col;
+              const renderY = renderStartPoint.y + row;
+              const newCheckerPattern = (renderX + renderY) % 2 === 0 ? '0' : '1';
+
+              if (sourceTile[0] === 'C') {
+                newTiles[row][col] = 'C' + newCheckerPattern;
+              } else if (sourceTile[0] === 'F') {
+                // Keep flag color but update checkerboard pattern
+                const flagColor = sourceTile[1] || '0';
+                newTiles[row][col] = 'F' + flagColor + newCheckerPattern;
+              }
+            } else {
+              newTiles[row][col] = sourceTile;
+            }
+          }
         }
+      }
     }
     setRenderTiles(newTiles);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cachingTiles, cursorOriginX, cursorOriginY]);
+  }, [cachingTiles, cursorOriginX, cursorOriginY, renderStartPoint]);
 
   /** Reset screen range when cursor position or screen size changes */
   useLayoutEffect(() => {
