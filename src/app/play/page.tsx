@@ -183,14 +183,15 @@ export default function Play() {
       const rowIndex = i + yOffset;
       const row = newTiles[rowIndex] || (newTiles[rowIndex] = []);
       const sortedRow = sortedTiles[i];
-      const baseOffset = i - end_y - start_x;
-
       for (let j = 0; j < rowlength; j++) {
         const tile = sortedRow[j];
         if (!tile) continue;
         const colIndex = j + xOffset;
-        const isAlternatingPosition = (baseOffset + j) % 2 === 1;
-        if (tile[0] === 'C' || tile[0] === 'F') row[colIndex] = `${tile}${isAlternatingPosition ? '1' : '0'}`;
+        // Compute checker pattern using absolute tile coordinates
+        const xAbs = start_x + j;
+        const yAbs = end_y - i; // because sortedTiles were reversed on Y
+        const checkerBit = (xAbs + yAbs) & 1;
+        if (tile[0] === 'C' || tile[0] === 'F') row[colIndex] = `${tile}${checkerBit}`;
         else row[colIndex] = tile;
       }
     }
@@ -618,7 +619,6 @@ export default function Play() {
         leftReviveTime={leftReviveTime}
         paddingTiles={RENDER_RANGE}
         tiles={renderTiles}
-        setCachingTiles={setCachingTiles}
         tileSize={tileSize}
         startPoint={renderStartPoint}
         cursorOriginX={cursorOriginX}

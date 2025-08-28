@@ -1,6 +1,6 @@
 'use client';
 import S from './style.module.scss';
-import React, { useRef, useEffect, useState, Dispatch, SetStateAction, useLayoutEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useLayoutEffect, useCallback } from 'react';
 import Paths from '@/assets/paths.json';
 
 import useScreenSize from '@/hooks/useScreenSize';
@@ -40,7 +40,6 @@ interface CanvasRenderComponentProps {
   paddingTiles: number;
   startPoint: { x: number; y: number };
   leftReviveTime: number;
-  setCachingTiles: Dispatch<SetStateAction<string[][]>>;
 }
 
 const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
@@ -51,7 +50,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   cursorOriginY,
   startPoint,
   leftReviveTime,
-  setCachingTiles,
 }) => {
   /** constants */
   const MOVE_SPEED = 200; // ms

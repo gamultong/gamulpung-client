@@ -275,7 +275,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         backgroundColor: 0x808080,
         resolution: 1,
         antialias: false,
-        powerPreference: 'default',
+        powerPreference: 'low-power',
         autoDensity: false,
         preserveDrawingBuffer: false,
         clearBeforeRender: true,
