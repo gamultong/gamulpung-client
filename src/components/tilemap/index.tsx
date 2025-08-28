@@ -50,7 +50,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       if (newTileTextures.has(key)) return newTileTextures.get(key);
 
       const tempCanvas = document.createElement('canvas');
-      const tileMinializedSize = Math.sqrt(tileSize / 8);
+      const tileMinializedSize = Math.sqrt(tileSize / 16);
       tempCanvas.width = tempCanvas.height = tileMinializedSize;
       const ctx = getContext(tempCanvas);
       if (!ctx) return;
