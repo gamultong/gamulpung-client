@@ -65,7 +65,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       texture.baseTexture.mipmap = MIPMAP_MODES.OFF;
       texture.baseTexture.wrapMode = WRAP_MODES.CLAMP;
       texture.baseTexture.setSize(tileMinializedSize, tileMinializedSize);
-      texture.baseTexture.resolution = 1;
+      texture.baseTexture.resolution = 0.001;
 
       newTileTextures.set(key, texture);
     };
