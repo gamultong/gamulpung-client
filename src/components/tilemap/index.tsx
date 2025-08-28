@@ -157,13 +157,16 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         const content = tiles[ri][ci];
         const tileKey = `${ri}-${ci}-${tileSize}`;
 
-        // Select textures based on tile content
-        let outerTexture = textures.get(`${outer[2][0]}-${outer[2][1]}-${tileSize}`);
-        let innerTexture = textures.get(`${inner[2][0]}-${inner[2][1]}-${tileSize}`);
+        // Select textures based on tile content with bounds-safe defaults
+        const safeIndex = (idx: number, arr: string[][]) => (idx >= 0 && idx < arr.length ? idx : 0);
+        const baseIdx = safeIndex(2, outer);
+        let outerTexture = textures.get(`${outer[baseIdx][0]}-${outer[baseIdx][1]}-${tileSize}`);
+        let innerTexture = textures.get(`${inner[baseIdx][0]}-${inner[baseIdx][1]}-${tileSize}`);
         if (content[0] === TileContent.CLOSED || content[0] === TileContent.FLAGGED) {
           const isEven = content.slice(-1) === '0' ? 0 : 1;
-          outerTexture = textures.get(`${outer[isEven][0]}-${outer[isEven][1]}-${tileSize}`);
-          innerTexture = textures.get(`${inner[isEven][0]}-${inner[isEven][1]}-${tileSize}`);
+          const evenIdx = safeIndex(isEven, outer);
+          outerTexture = textures.get(`${outer[evenIdx][0]}-${outer[evenIdx][1]}-${tileSize}`);
+          innerTexture = textures.get(`${inner[evenIdx][0]}-${inner[evenIdx][1]}-${tileSize}`);
         }
 
         // Outer sprite

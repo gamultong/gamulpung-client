@@ -119,7 +119,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   }, []);
 
   /** Check if the tile has been opened */
-  const checkTileHasOpened = (tile: string) => ![TileContent.CLOSED, TileContent.FLAGGED].some(c => tile.includes(c));
+  const checkTileHasOpened = (tile: string) => {
+    const type = tile?.[0];
+    return type !== TileContent.CLOSED && type !== TileContent.FLAGGED;
+  };
 
   /**
    * General Click Event Handler
