@@ -92,7 +92,6 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       boomTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
       boomTexture.baseTexture.mipmap = MIPMAP_MODES.OFF;
       boomTexture.baseTexture.setSize(tileSize / boomMinimalized, tileSize / boomMinimalized);
-      boomTexture.baseTexture.resolution = 1;
 
       newTileTextures.set('boom', boomTexture);
     }
@@ -118,7 +117,6 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       flagTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
       flagTexture.baseTexture.mipmap = MIPMAP_MODES.OFF;
       flagTexture.baseTexture.setSize(tileSize, tileSize);
-      flagTexture.baseTexture.resolution = 1;
 
       newTileTextures.set(`flag-${i}`, flagTexture);
     }
@@ -172,15 +170,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         if (outerTexture) {
           const outerKey = `${outerTexture.textureCacheIds || outerTexture}-${tileSize}`;
           const baseOuter = outerCache.get(outerKey) ?? (
-            <Sprite
-              cullable={true}
-              scale={0.1}
-              eventMode="none"
-              texture={outerTexture}
-              width={tileSize}
-              height={tileSize}
-              cacheAsBitmapResolution={1}
-            />
+            <Sprite cullable={true} scale={0.1} eventMode="none" texture={outerTexture} width={tileSize} height={tileSize} />
           );
 
           outerCache.set(outerKey, baseOuter);
@@ -202,15 +192,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         if (content === TileContent.BOOM) {
           const boomKey = `boom-${tileSize}`;
           const baseBoom = boomCache.get(boomKey) ?? (
-            <Sprite
-              cullable={true}
-              scale={0.1}
-              eventMode="none"
-              texture={textures.get('boom')}
-              width={tileSize}
-              height={tileSize}
-              cacheAsBitmapResolution={1}
-            />
+            <Sprite cullable={true} scale={0.1} eventMode="none" texture={textures.get('boom')} width={tileSize} height={tileSize} />
           );
           boomCache.set(boomKey, baseBoom);
           boomSprites.push(cloneElement(baseBoom, { key: `boom-${tileKey}`, x, y }));
@@ -229,7 +211,6 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
               scale={0.1}
               width={tileSize}
               height={tileSize}
-              cacheAsBitmapResolution={1}
             />
           );
           flagCache.set(flagKey, baseFlag);
@@ -248,7 +229,6 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
               resolution={1}
               anchor={0.5}
               style={cachedTextStyles[num - 1]}
-              cacheAsBitmapResolution={1}
             />,
           );
         }

@@ -105,9 +105,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     // 🚀 HIGH QUALITY: Text rendering optimization (if supported)
-    if ('textRenderingOptimization' in ctx) {
-      (ctx as CanvasRenderingContext2D & { textRenderingOptimization?: string }).textRenderingOptimization = 'optimizeQuality';
-    }
+    if ('textRenderingOptimization' in ctx) ctx.textRenderingOptimization = 'optimizeQuality';
   };
 
   /** Prevent default right click event */
@@ -222,12 +220,16 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const isAlreadyCursorNeighbor = (x: number, y: number) => CursorDirections.some(([dx, dy]) => cursorOriginX + dx === x && cursorOriginY + dy === y);
 
   const findOpenedNeighbors = (currentX: number, currentY: number) => {
-    for (const [dx, dy] of [[0, 0], ...CursorDirections]) {
-      const [x, y] = [currentX + dx, currentY + dy];
-      if (!tiles[y] || !tiles[y][x]) continue;
-      if (checkTileHasOpened(tiles[y][x])) return { x, y };
-    }
-    return { x: Infinity, y: Infinity };
+    let result = { x: Infinity, y: Infinity };
+    [[0, 0], ...CursorDirections].some(([dx, dy]) => {
+      const x = currentX + dx;
+      const y = currentY + dy;
+      if (!tiles[y] || !tiles[y][x]) return false;
+      if (!checkTileHasOpened(tiles[y][x])) return false;
+      result = { x, y };
+      return true;
+    });
+    return result;
   };
 
   // 렌더링 속도 향상: Canvas 렌더링 함수들 메모이제이션
@@ -305,7 +307,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       // 🚀 HIGH QUALITY: Setup high-resolution rendering
       setupHighResCanvas(canvas, otherPointerCtx);
       otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
-      cursors.forEach(({ pointer, color }) => {
+      cursors.forEach(({ pointer = { x: 0, y: 0 }, color }) => {
         const { x, y } = pointer ?? { x: 0, y: 0 };
         const [drawX, drawY] = [x - cursorOriginX + otherCursorPaddingWidth, y - cursorOriginY + otherCursorPaddingHeight];
         drawPointer(otherPointerCtx, drawX * tileSize, drawY * tileSize, OtherCursorColors[color], borderPixel);

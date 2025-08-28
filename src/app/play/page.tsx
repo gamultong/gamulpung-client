@@ -25,6 +25,8 @@ export default function Play() {
   const WS_URL = `${process.env.NEXT_PUBLIC_WS_HOST}/session`;
 
   /** stores */
+  const { setPosition: setClickPosition } = useClickStore();
+  const { setCursors, addCursors, cursors } = useOtherUserCursorsStore();
   const { isOpen, message, sendMessage, connect, disconnect } = useWebSocketStore();
   const {
     x: cursorX,
@@ -38,8 +40,6 @@ export default function Play() {
     setOringinPosition,
     setId,
   } = useCursorStore();
-  const { setCursors, addCursors, cursors } = useOtherUserCursorsStore();
-  const { setPosition: setClickPosition } = useClickStore();
 
   /** hooks */
   const { windowWidth, windowHeight } = useScreenSize();
@@ -276,18 +276,14 @@ export default function Play() {
         case CURSORS: {
           const { cursors } = payload;
           type newCursorType = {
-            position: { x: number; y: number };
+            position: XYType;
+            pointer: XYType;
             id: string;
             color: string;
-            pointer: { x: number; y: number };
           };
-          const newCursors = cursors.map(({ position: { x, y }, color, id, pointer }: newCursorType) => ({
-            id,
-            pointer,
-            x,
-            y,
-            color: color.toLowerCase(),
-          }));
+          const newCursors = cursors.map(({ position: { x, y }, color, id, pointer }: newCursorType) => {
+            return { id, pointer, x, y, color: color.toLowerCase() };
+          });
           addCursors(newCursors);
           break;
         }
@@ -322,8 +318,8 @@ export default function Play() {
         case CHAT: {
           const { cursor_id, message } = payload;
           const newCursors = cursors.map(cursor => {
-            if (cursor.id === cursor_id) return { ...cursor, message, messageTime: Date.now() + 1000 * 8 };
-            return cursor;
+            if (cursor.id !== cursor_id) return cursor;
+            return { ...cursor, message, messageTime: Date.now() + 1000 * 8 };
           });
           setCursors(newCursors);
           break;
@@ -429,9 +425,7 @@ export default function Play() {
     const renderBaseY = renderStartPoint.y;
 
     // INSTANT: Perfect alignment - no processing needed
-    if (offsetX === 0 && offsetY === 0) {
-      return cachingTiles; // O(1) return!
-    }
+    if (offsetX === 0 && offsetY === 0) return cachingTiles; // O(1) return!
 
     // STABLE CPU processing - no disappearing tiles
     return processWithStableCPU();
@@ -442,35 +436,25 @@ export default function Play() {
         const sourceRowIndex = row + offsetY;
 
         // Bounds check for source row
-        if (sourceRowIndex < 0 || sourceRowIndex >= cachingLength) {
-          return new Array(cachingRow.length).fill('??');
-        }
+        if (sourceRowIndex < 0 || sourceRowIndex >= cachingLength) return new Array(cachingRow.length).fill('??');
 
         const sourceRow = cachingTiles[sourceRowIndex];
-        if (!sourceRow) {
-          return new Array(cachingRow.length).fill('??');
-        }
+        if (!sourceRow) return new Array(cachingRow.length).fill('??');
 
         // Process each column safely
         return cachingRow.map((_, col) => {
           const sourceColIndex = col + offsetX;
 
           // Bounds check for source column
-          if (sourceColIndex < 0 || sourceColIndex >= sourceRow.length) {
-            return '??';
-          }
+          if (sourceColIndex < 0 || sourceColIndex >= sourceRow.length) return '??';
 
           const sourceTile = sourceRow[sourceColIndex];
-          if (!sourceTile || sourceTile === '??') {
-            return '??';
-          }
+          if (!sourceTile || sourceTile === '??') return '??';
 
           const tileType = sourceTile[0];
 
           // Fast path for most tiles - no transformation needed
-          if (tileType !== 'C' && tileType !== 'F') {
-            return sourceTile;
-          }
+          if (tileType !== 'C' && tileType !== 'F') return sourceTile;
 
           // Safe checkerboard calculation
           const renderX = renderBaseX + col;
@@ -478,9 +462,7 @@ export default function Play() {
           const checkerBit = (renderX + renderY) & 1;
 
           // Safe tile type handling
-          if (tileType === 'C') {
-            return checkerBit ? 'C1' : 'C0';
-          }
+          if (tileType === 'C') return checkerBit ? 'C1' : 'C0';
 
           if (tileType === 'F') {
             const flagColor = sourceTile[1] || '0';
@@ -548,7 +530,7 @@ export default function Play() {
       endPoint.y + heightReductionLength,
       endPoint.x + widthReductionLength,
       startPoint.y - heightReductionLength,
-      'A',
+      Direction.ALL,
     );
     // setting view size
     const width = Math.floor((windowWidth * RENDER_RANGE) / newTileSize);
@@ -575,21 +557,21 @@ export default function Play() {
       rightto: endPoint.x + widthExtendLength,
     };
     if (isRight && isDown) {
-      requestTiles(rightfrom, downfrom, rightto, upto, 'R');
-      requestTiles(leftfrom, downfrom, rightto, downto, 'D');
+      requestTiles(rightfrom, downfrom, rightto, upto, Direction.RIGHT);
+      requestTiles(leftfrom, downfrom, rightto, downto, Direction.DOWN);
     } else if (isLeft && isDown) {
-      requestTiles(leftfrom, downfrom, leftto, upto, 'L');
-      requestTiles(leftfrom, downfrom, rightto, downto, 'D');
+      requestTiles(leftfrom, downfrom, leftto, upto, Direction.LEFT);
+      requestTiles(leftfrom, downfrom, rightto, downto, Direction.DOWN);
     } else if (isRight && isUp) {
-      requestTiles(rightfrom, downfrom, rightto, upto, 'R');
-      requestTiles(leftfrom, upfrom, rightto, upto, 'U');
+      requestTiles(rightfrom, downfrom, rightto, upto, Direction.RIGHT);
+      requestTiles(leftfrom, upfrom, rightto, upto, Direction.UP);
     } else if (isLeft && isUp) {
-      requestTiles(leftfrom, downfrom, leftto, upto, 'L');
-      requestTiles(leftfrom, upfrom, rightto, upto, 'U');
-    } else if (isRight) requestTiles(rightfrom, endPoint.y, rightto, startPoint.y, 'R');
-    else if (isLeft) requestTiles(leftfrom, endPoint.y, leftto, startPoint.y, 'L');
-    else if (isDown) requestTiles(startPoint.x, downfrom, endPoint.x, downto, 'D');
-    else if (isUp) requestTiles(startPoint.x, upfrom, endPoint.x, upto, 'U');
+      requestTiles(leftfrom, downfrom, leftto, upto, Direction.LEFT);
+      requestTiles(leftfrom, upfrom, rightto, upto, Direction.UP);
+    } else if (isRight) requestTiles(rightfrom, endPoint.y, rightto, startPoint.y, Direction.RIGHT);
+    else if (isLeft) requestTiles(leftfrom, endPoint.y, leftto, startPoint.y, Direction.LEFT);
+    else if (isDown) requestTiles(startPoint.x, downfrom, endPoint.x, downto, Direction.DOWN);
+    else if (isUp) requestTiles(startPoint.x, upfrom, endPoint.x, upto, Direction.UP);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursorX, cursorY]);
 
@@ -605,7 +587,7 @@ export default function Play() {
   }, [cursorOriginX, cursorOriginY]);
 
   useEffect(() => {
-    setTimeout(() => setLeftReviveTime(e => (e > 0 ? --e : e)), 1000);
+    setTimeout(() => setLeftReviveTime(e => (e > 0 ? e - 1 : e)), 1000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leftReviveTime]);
 
