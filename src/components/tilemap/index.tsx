@@ -13,11 +13,10 @@ interface TilemapProps {
   tileSize: number;
   tilePaddingWidth: number;
   tilePaddingHeight: number;
-  isMoving: boolean;
   className?: string;
 }
 
-export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePaddingHeight, className, isMoving }: TilemapProps) {
+export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePaddingHeight, className }: TilemapProps) {
   // constants
   const CURSOR_COLORS = useMemo(() => ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'], []);
   const { flagPaths, tileColors, countColors, boomPaths } = Paths;
@@ -66,7 +65,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       texture.baseTexture.mipmap = MIPMAP_MODES.OFF;
       texture.baseTexture.wrapMode = WRAP_MODES.CLAMP;
       texture.baseTexture.setSize(tileMinializedSize, tileMinializedSize);
-      texture.baseTexture.resolution = 0;
+      texture.baseTexture.resolution = 1;
 
       newTileTextures.set(key, texture);
     };
@@ -79,7 +78,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
     // Boom texture
     const boomCanvas = document.createElement('canvas');
-    const boomMinimalized = 4;
+    const boomMinimalized = 2;
     boomCanvas.width = boomCanvas.height = tileSize / boomMinimalized;
     const boomCtx = getContext(boomCanvas);
     if (boomCtx) {
@@ -93,13 +92,13 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       boomTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
       boomTexture.baseTexture.mipmap = MIPMAP_MODES.OFF;
       boomTexture.baseTexture.setSize(tileSize / boomMinimalized, tileSize / boomMinimalized);
-      boomTexture.baseTexture.resolution = 0.1;
+      boomTexture.baseTexture.resolution = 1;
 
       newTileTextures.set('boom', boomTexture);
     }
 
     // Flag textures
-    const flagMinimalized = 4;
+    const flagMinimalized = 2;
     for (let i = 0; i < CURSOR_COLORS.length; i++) {
       const flagCanvas = document.createElement('canvas');
       flagCanvas.width = flagCanvas.height = tileSize / flagMinimalized;
@@ -119,7 +118,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       flagTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
       flagTexture.baseTexture.mipmap = MIPMAP_MODES.OFF;
       flagTexture.baseTexture.setSize(tileSize, tileSize);
-      flagTexture.baseTexture.resolution = 0.5;
+      flagTexture.baseTexture.resolution = 1;
 
       newTileTextures.set(`flag-${i}`, flagTexture);
     }
@@ -180,7 +179,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
               texture={outerTexture}
               width={tileSize}
               height={tileSize}
-              cacheAsBitmapResolution={0.0001}
+              cacheAsBitmapResolution={1}
             />
           );
 
@@ -193,7 +192,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           const innerKey = `${innerTexture.textureCacheIds || innerTexture}-${tileSize}`;
           const size = tileSize - 10 * zoom;
           const baseInner = innerCache.get(innerKey) ?? (
-            <Sprite cullable={true} scale={0.1} eventMode="none" texture={innerTexture} width={size} height={size} cacheAsBitmapResolution={0.001} />
+            <Sprite cullable={true} scale={0.1} eventMode="none" texture={innerTexture} width={size} height={size} cacheAsBitmapResolution={1} />
           );
           innerCache.set(innerKey, baseInner);
           innerSprites.push(cloneElement(baseInner, { key: `inner-${tileKey}`, x: x + 5 * zoom, y: y + 5 * zoom }));
@@ -210,7 +209,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
               texture={textures.get('boom')}
               width={tileSize}
               height={tileSize}
-              cacheAsBitmapResolution={0.01}
+              cacheAsBitmapResolution={1}
             />
           );
           boomCache.set(boomKey, baseBoom);
@@ -230,7 +229,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
               scale={0.1}
               width={tileSize}
               height={tileSize}
-              cacheAsBitmapResolution={0.1}
+              cacheAsBitmapResolution={1}
             />
           );
           flagCache.set(flagKey, baseFlag);
@@ -246,10 +245,10 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
               text={content}
               x={x + tileSize / 2}
               y={y + tileSize / 2}
-              resolution={0.4}
+              resolution={1}
               anchor={0.5}
               style={cachedTextStyles[num - 1]}
-              cacheAsBitmapResolution={0.001}
+              cacheAsBitmapResolution={1}
             />,
           );
         }
@@ -274,22 +273,16 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       height={windowHeight}
       options={{
         backgroundColor: 0x808080,
-        resolution: isMoving ? 0.2 : 0.5, // 해상도 대폭 감소
+        resolution: 1,
         antialias: false,
-        powerPreference: 'low-power',
+        powerPreference: 'default',
         autoDensity: false,
         preserveDrawingBuffer: false,
-        clearBeforeRender: false, // 불필요한 클리어 제거
+        clearBeforeRender: true,
         sharedTicker: true,
       }}
     >
-      <Container
-        name={'container'}
-        sortableChildren={false}
-        eventMode="none"
-        cacheAsBitmap={false} // 조건부 캐싱에서 완전 비활성화로 변경
-        cullable={true}
-      >
+      <Container name={'container'} sortableChildren={false} eventMode="none" cacheAsBitmap={false} cullable={true}>
         {outerSprites}
         {innerSprites}
         {boomSprites}

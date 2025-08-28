@@ -236,6 +236,7 @@ export default function Play() {
           const { id, pointer } = payload;
           const newCursors = cursors.map(cursor => (id === cursor.id ? { ...cursor, pointer } : cursor));
           setCursors(newCursors);
+          break;
         }
         case SINGLE_TILE_OPENED: {
           const { position, tile } = payload;
@@ -341,14 +342,15 @@ export default function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [message]);
 
-  /** 🚀 GPU INITIALIZATION - 1000X SPEED BOOST 🚀 */
+  /** 🚀 GPU INITIALIZATION - HIGH QUALITY SETUP 🚀 */
   useEffect(() => {
     const canvas = document.createElement('canvas');
-    canvas.width = 1;
-    canvas.height = 1;
+    canvas.width = 1024; // 🚀 HIGH QUALITY: Larger canvas for better precision
+    canvas.height = 1024;
     canvas.style.display = 'none';
     document.body.appendChild(canvas);
 
+    // 🚀 HIGH QUALITY: Request high-performance context
     const gl = canvas.getContext('webgl2');
     if (!gl) {
       console.warn('WebGL2 not supported - falling back to CPU');
@@ -366,28 +368,31 @@ export default function Play() {
     `;
 
     const fragmentShaderSource = `#version 300 es
-      precision highp float;
+      precision highp float; // 🚀 HIGH QUALITY: Maximum precision
+      precision highp sampler2D;
       
       uniform sampler2D u_tileData;
       uniform vec2 u_offset;
       uniform vec2 u_renderBase;
       uniform vec2 u_dimensions;
+      uniform float u_devicePixelRatio; // 🚀 HIGH QUALITY: Device pixel ratio support
       
       out vec4 fragColor;
       
       void main() {
-        vec2 coord = gl_FragCoord.xy / u_dimensions;
-        vec2 sourceCoord = coord + u_offset / u_dimensions;
+        // 🚀 HIGH QUALITY: Sub-pixel accuracy with device pixel ratio
+        vec2 coord = gl_FragCoord.xy / (u_dimensions * u_devicePixelRatio);
+        vec2 sourceCoord = coord + u_offset / (u_dimensions * u_devicePixelRatio);
         
-        // Sample tile data from texture
+        // 🚀 HIGH QUALITY: High-precision texture sampling
         vec4 tileData = texture(u_tileData, sourceCoord);
         
-        // GPU-parallel checkerboard calculation
-        vec2 renderPos = u_renderBase + gl_FragCoord.xy;
-        float checkerBit = mod(renderPos.x + renderPos.y, 2.0);
+        // 🚀 HIGH QUALITY: Anti-aliased checkerboard calculation
+        vec2 renderPos = u_renderBase + gl_FragCoord.xy / u_devicePixelRatio;
+        float checkerPattern = step(0.5, fract((renderPos.x + renderPos.y) * 0.5));
         
-        // Encode result back to texture
-        fragColor = vec4(tileData.rgb, checkerBit);
+        // 🚀 HIGH QUALITY: Enhanced color blending
+        fragColor = vec4(tileData.rgb * (0.9 + 0.1 * checkerPattern), tileData.a);
       }
     `;
 

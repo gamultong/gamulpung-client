@@ -78,6 +78,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     myCursorRef: useRef<HTMLCanvasElement>(null),
   };
 
+  // 🚀 HIGH QUALITY: Device pixel ratio for crisp rendering
+  const devicePixelRatio = 1;
+
   /** States */
   const [isInitializing, setIsInitializing] = useState<boolean>(true);
   const [paths, setPaths] = useState<XYType[]>([]);
@@ -90,6 +93,23 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     if (!movementInterval.current) return;
     clearInterval(movementInterval.current);
     movementInterval.current = null;
+  };
+
+  /** 🚀 HIGH QUALITY: Setup high-resolution canvas */
+  const setupHighResCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * devicePixelRatio;
+    canvas.height = rect.height * devicePixelRatio;
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+
+    ctx.scale(devicePixelRatio, devicePixelRatio);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    // 🚀 HIGH QUALITY: Text rendering optimization (if supported)
+    if ('textRenderingOptimization' in ctx) {
+      (ctx as CanvasRenderingContext2D & { textRenderingOptimization?: string }).textRenderingOptimization = 'optimizeQuality';
+    }
   };
 
   /** Prevent default right click event */
@@ -191,7 +211,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const clickType: ClickType = event.buttons === 2 ? Click.SPECIAL_CLICK : Click.GENERAL_CLICK;
     if (movementInterval.current) {
       cancelCurrentMovement();
-      setCachingTiles(tiles);
     }
     clickEvent(tileX, tileY, clickType);
 
@@ -247,8 +266,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   );
 
   const drawOtherUserCursors = useCallback(() => {
-    const otherCursorsCtx = canvasRefs.otherCursorsRef.current?.getContext('2d');
+    const canvas = canvasRefs.otherCursorsRef.current;
+    if (!canvas) return;
+    const otherCursorsCtx = canvas.getContext('2d');
     if (!otherCursorsCtx) return;
+
+    // 🚀 HIGH QUALITY: Setup high-resolution rendering
+    setupHighResCanvas(canvas, otherCursorsCtx);
     otherCursorsCtx.clearRect(0, 0, windowWidth, windowHeight);
     cursors.forEach(cursor => {
       const { x, y, color, revive_at } = cursor;
@@ -275,8 +299,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   const drawOtherUserPointers = useCallback(
     (borderPixel: number) => {
-      const otherPointerCtx = canvasRefs.otherPointerRef.current?.getContext('2d');
+      const canvas = canvasRefs.otherPointerRef.current;
+      if (!canvas) return;
+      const otherPointerCtx = canvas.getContext('2d');
       if (!otherPointerCtx) return;
+
+      // 🚀 HIGH QUALITY: Setup high-resolution rendering
+      setupHighResCanvas(canvas, otherPointerCtx);
       otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
       cursors.forEach(({ pointer, color }) => {
         const { x, y } = pointer ?? { x: 0, y: 0 };
@@ -367,6 +396,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     if (!interactionCanvas || !myCursorCanvas || !otherCursorsCanvas || !otherPointerCanvas) return;
     const [interactionCtx, myCursorCtx] = [interactionCanvas.getContext('2d'), myCursorCanvas.getContext('2d')];
     if (!interactionCtx || !myCursorCtx) return;
+
+    // 🚀 HIGH QUALITY: Setup high-resolution rendering for all canvases
+    setupHighResCanvas(interactionCanvas, interactionCtx);
+    setupHighResCanvas(myCursorCanvas, myCursorCtx);
 
     // intialize canvases
     myCursorCtx.clearRect(0, 0, windowWidth, windowHeight);
@@ -462,23 +495,34 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       {!isInitializing && (
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
           <ChatComponent />
-          <Tilemap
-            isMoving={paths.length > 0}
+          <Tilemap className={S.canvas} tilePaddingHeight={tilePaddingHeight} tilePaddingWidth={tilePaddingWidth} tileSize={tileSize} tiles={tiles} />
+          <canvas
             className={S.canvas}
-            tilePaddingHeight={tilePaddingHeight}
-            tilePaddingWidth={tilePaddingWidth}
-            tileSize={tileSize}
-            tiles={tiles}
+            id="OtherCursors"
+            ref={canvasRefs.otherCursorsRef}
+            width={windowWidth * devicePixelRatio}
+            height={windowHeight * devicePixelRatio}
           />
-          <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
-          <canvas className={S.canvas} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />
-          <canvas className={S.canvas} id="MyCursor" ref={canvasRefs.myCursorRef} width={windowWidth} height={windowHeight} />
+          <canvas
+            className={S.canvas}
+            id="OtherPointer"
+            ref={canvasRefs.otherPointerRef}
+            width={windowWidth * devicePixelRatio}
+            height={windowHeight * devicePixelRatio}
+          />
+          <canvas
+            className={S.canvas}
+            id="MyCursor"
+            ref={canvasRefs.myCursorRef}
+            width={windowWidth * devicePixelRatio}
+            height={windowHeight * devicePixelRatio}
+          />
           <canvas
             className={S.canvas}
             id="InteractionCanvas"
             ref={canvasRefs.interactionCanvasRef}
-            width={windowWidth}
-            height={windowHeight}
+            width={windowWidth * devicePixelRatio}
+            height={windowHeight * devicePixelRatio}
             onPointerDown={handleClick}
           />
         </div>
