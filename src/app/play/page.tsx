@@ -3,7 +3,7 @@
 import S from './page.module.scss';
 
 /** hooks */
-import { useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useMemo } from 'react';
 import useScreenSize from '@/hooks/useScreenSize';
 import { OtherUserSingleCursorState, useCursorStore, useOtherUserCursorsStore } from '../../store/cursorStore';
 
@@ -16,6 +16,46 @@ import CanvasDashboard from '@/components/canvasDashboard';
 import TutorialStep from '@/components/tutorialstep';
 import ScoreBoard from '@/components/scoreboard';
 import { Direction, ReceiveMessageEvent, SendMessageEvent, XYType } from '@/types';
+
+// Fast string lookups to avoid repeated concatenations
+const F_LOOKUP = [
+  ['F00', 'F01'],
+  ['F10', 'F11'],
+  ['F20', 'F21'],
+  ['F30', 'F31'],
+] as const;
+const NUM_OPEN_LOOKUP = ['O', '1', '2', '3', '4', '5', '6', '7'] as const;
+
+// Byte → string LUTs to minimize per-tile branching
+const OPEN_LUT: (string | null)[] = new Array(256);
+const CLOSED0_LUT: string[] = new Array(256);
+const CLOSED1_LUT: string[] = new Array(256);
+(() => {
+  for (let b = 0; b < 256; b++) {
+    const isOpened = (b & 0b10000000) !== 0;
+    const isMine = (b & 0b01000000) !== 0;
+    const isFlag = (b & 0b00100000) !== 0;
+    const color = (b & 0b00011000) >> 3;
+    const number = b & 0b00000111;
+
+    if (isOpened) {
+      OPEN_LUT[b] = isMine ? 'B' : NUM_OPEN_LOOKUP[number];
+      CLOSED0_LUT[b] = 'C0';
+      CLOSED1_LUT[b] = 'C1';
+    } else if (isFlag) {
+      OPEN_LUT[b] = null;
+      const pair = F_LOOKUP[color];
+      CLOSED0_LUT[b] = pair[0];
+      CLOSED1_LUT[b] = pair[1];
+    } else {
+      OPEN_LUT[b] = null;
+      CLOSED0_LUT[b] = 'C0';
+      CLOSED1_LUT[b] = 'C1';
+    }
+  }
+})();
+
+// hex -> byte conversion is inlined in the hot loop to avoid call overhead
 
 export default function Play() {
   /** constants */
@@ -54,9 +94,76 @@ export default function Play() {
   const [leftReviveTime, setLeftReviveTime] = useState<number>(-1);
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
-  // 🚀 GPU ACCELERATION SETUP 🚀
-  const gpuContextRef = useRef<WebGL2RenderingContext | null>(null);
-  const gpuProgramRef = useRef<WebGLProgram | null>(null);
+  // Inline Worker: parse tiles off main thread for large payloads
+  const workerRef: { current: Worker | null } = ((globalThis as unknown as Record<string, unknown>)._tileWorkerRef as { current: Worker | null }) || {
+    current: null,
+  };
+  const generationRef: { current: number } = ((globalThis as unknown as Record<string, unknown>)._tileWorkerGen as { current: number }) || {
+    current: 0,
+  };
+  (globalThis as unknown as Record<string, unknown>)._tileWorkerRef = workerRef;
+  (globalThis as unknown as Record<string, unknown>)._tileWorkerGen = generationRef;
+
+  function ensureWorker(): Worker | null {
+    if (typeof window === 'undefined') return null;
+    if (workerRef.current) return workerRef.current;
+    try {
+      const workerCode = `
+        const F_LOOKUP = [['F00','F01'],['F10','F11'],['F20','F21'],['F30','F31']];
+        const NUM_OPEN = ['O','1','2','3','4','5','6','7'];
+        const OPEN = new Array(256);
+        const CL0 = new Array(256);
+        const CL1 = new Array(256);
+        for (let b=0;b<256;b++){
+          const opened=(b&0x80)!==0; const mine=(b&0x40)!==0; const flag=(b&0x20)!==0; const color=(b&0x18)>>3; const num=b&0x07;
+          if(opened){ OPEN[b]=mine?'B':NUM_OPEN[num]; CL0[b]='C0'; CL1[b]='C1'; }
+          else if(flag){ OPEN[b]=null; const p=F_LOOKUP[color]; CL0[b]=p[0]; CL1[b]=p[1]; }
+          else { OPEN[b]=null; CL0[b]='C0'; CL1[b]='C1'; }
+        }
+        onmessage = (e)=>{
+          const { id, hex, start_x, end_y, startPointY, endPointY, xOffset, yOffset, rowlengthBytes, tilesPerRow, columnlength, widthHint } = e.data;
+          const rows=[];
+          for(let i=0;i<columnlength;i++){
+            const reversedI = columnlength-1-i;
+            const rowIndex = reversedI + yOffset;
+            const yAbs = end_y - reversedI;
+            const rowParityBase = (start_x + yAbs) & 1;
+            let tStart = 0; if (xOffset < 0) tStart = -xOffset;
+            let tEnd = tilesPerRow;
+            // use widthHint when provided
+            const maxVisible = widthHint - xOffset;
+            if (tEnd > maxVisible) tEnd = maxVisible;
+            if (tStart >= tEnd) continue;
+            let p = i * rowlengthBytes + (tStart<<1);
+            let checker = rowParityBase ^ (tStart & 1);
+            const vals = new Array(tEnd - tStart);
+            let idx=0; let t=tStart;
+            while(t < tEnd){
+              let c0=hex.charCodeAt(p), c1=hex.charCodeAt(p+1);
+              let n0=c0<=57?c0-48:c0<=70?c0-55:c0-87; let n1=c1<=57?c1-48:c1<=70?c1-55:c1-87;
+              let byte=(n0<<4)|n1; p+=2;
+              let opened=OPEN[byte]; vals[idx++] = opened!==null? opened : (checker===0? CL0[byte] : CL1[byte]);
+              checker^=1; t++;
+              if(t>=tEnd) break;
+              c0=hex.charCodeAt(p); c1=hex.charCodeAt(p+1);
+              n0=c0<=57?c0-48:c0<=70?c0-55:c0-87; n1=c1<=57?c1-48:c1<=70?c1-55:c1-87;
+              byte=(n0<<4)|n1; p+=2;
+              opened=OPEN[byte]; vals[idx++] = opened!==null? opened : (checker===0? CL0[byte] : CL1[byte]);
+              checker^=1; t++;
+            }
+            rows.push({ rowIndex, tStart, values: vals, xOffset });
+          }
+          postMessage({ id, rows });
+        };
+      `;
+      const blob = new Blob([workerCode], { type: 'application/javascript' });
+      const url = URL.createObjectURL(blob);
+      workerRef.current = new Worker(url);
+      return workerRef.current;
+    } catch {
+      return null;
+    }
+  }
 
   /**
    * Request Tiles
@@ -129,7 +236,7 @@ export default function Play() {
    * @param x {number} - Optional X coordinate for checkerboard pattern
    * @param y {number} - Optional Y coordinate for checkerboard pattern
    */
-  const parseHex = (hex: string, x?: number, y?: number) => {
+  const parseHex = (hex: string, x: number, y: number) => {
     if (hex.length < 2) return '';
 
     // Direct hex to integer conversion (much faster than string operations)
@@ -143,59 +250,173 @@ export default function Play() {
     const number = byte & 0b00000111; // bits 2-0
 
     // Calculate checkerboard pattern for position-based coloring
-    const getCheckerPattern = (posX?: number, posY?: number) => {
-      if (posX === undefined || posY === undefined) return '0';
-      return (posX + posY) % 2 === 0 ? '0' : '1';
-    };
+    const getPattern = (posX: number, posY: number) => (posX + posY) % 2;
 
-    if (isTileOpened) return isMine ? 'B' : number === 0 ? 'O' : number.toString();
-    if (isFlag) return 'F' + color + getCheckerPattern(x, y);
-    return 'C' + getCheckerPattern(x, y);
+    if (isTileOpened) return isMine ? 'B' : number === 0 ? 'O' : `${number}`;
+    if (isFlag) return 'F' + color + getPattern(x, y);
+    return 'C' + getPattern(x, y);
   };
 
-  const sortTiles = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string) => {
-    const [rowlength, columnlength] = [Math.abs(end_x - start_x + 1) * 2, Math.abs(start_y - end_y + 1)];
-    const sortedTiles: string[][] = [];
-    for (let i = 0; i < columnlength; i++) {
-      const newRow = new Array(rowlength / 2);
-      const rowOffset = i * rowlength;
-      for (let j = 0; j < rowlength; j += 2) {
-        const tileX = start_x + j / 2;
-        const tileY = start_y + i;
-        newRow[j / 2] = parseHex(unsortedTiles.slice(rowOffset + j, rowOffset + j + 2), tileX, tileY);
-      }
-      sortedTiles[i] = newRow;
-    }
-    /** The y-axis is reversed.*/
-    sortedTiles.reverse();
-    return { rowlength, columnlength, sortedTiles };
-  };
+  // Deprecated: parsing into 2D array created extra allocations.
+  // Direct streaming parse is used in replaceTiles.
 
   const replaceTiles = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
     if (unsortedTiles.length === 0) return;
-    const { rowlength, columnlength, sortedTiles } = sortTiles(end_x, end_y, start_x, start_y, unsortedTiles);
+    const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1; // 2 hex chars per tile
+    const tilesPerRow = rowlengthBytes >> 1;
+    const columnlength = Math.abs(start_y - end_y + 1);
     /** Replace dummy data according to coordinates */
-    const newTiles = [...cachingTiles];
+    let newTiles = cachingTiles as string[][];
+    let outerCloned = false;
     const yOffset = type === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - columnlength + 1 : 0) : end_y - startPoint.y;
     const xOffset = start_x - startPoint.x;
 
+    // Try worker for large payloads
+    const worker = ensureWorker();
+    const approxCells = columnlength * tilesPerRow;
+    const useWorker = worker && approxCells > 20000; // threshold
+    if (useWorker) {
+      const widthHint = newTiles[0]?.length || tilesPerRow;
+      const id = ++generationRef.current;
+      const payload = {
+        id,
+        hex: unsortedTiles,
+        start_x,
+        end_y,
+        startPointY: startPoint.y,
+        endPointY: endPoint.y,
+        xOffset,
+        yOffset,
+        rowlengthBytes,
+        tilesPerRow,
+        columnlength,
+        widthHint,
+      };
+      worker!.postMessage(payload);
+      worker!.onmessage = (e: MessageEvent) => {
+        const { id: respId, rows } = e.data as { id: number; rows: Array<{ rowIndex: number; tStart: number; values: string[]; xOffset: number }> };
+        if (respId !== generationRef.current) return; // stale
+        let tiles = cachingTiles as string[][];
+        let anyChanged = false;
+        let outerDone = false;
+        for (const r of rows) {
+          const existingRow = tiles[r.rowIndex] || [];
+          let row = existingRow;
+          let rowCloned = false;
+          const startCol = r.tStart + xOffset;
+          const endCol = startCol + r.values.length;
+          if (startCol < 0 || endCol <= 0) continue;
+          // ensure bounds
+          const needLen = endCol;
+          if (!outerDone) {
+            tiles = [...tiles];
+            outerDone = true;
+          }
+          if (row.length < needLen) {
+            row = existingRow.slice();
+            row.length = needLen;
+            rowCloned = true;
+            tiles[r.rowIndex] = row;
+          }
+          let col = startCol;
+          for (let k = 0; k < r.values.length; k++, col++) {
+            const v = r.values[k];
+            if (row[col] !== v) {
+              if (!rowCloned) {
+                row = existingRow.slice();
+                tiles[r.rowIndex] = row;
+                rowCloned = true;
+              }
+              row[col] = v;
+              anyChanged = true;
+            }
+          }
+        }
+        if (outerDone && anyChanged) setCachingTiles(tiles);
+      };
+      return;
+    }
+
+    // Existing optimized CPU path
+    const OPEN = OPEN_LUT;
+    const CL0 = CLOSED0_LUT;
+    const CL1 = CLOSED1_LUT;
+    let anyChanged = false;
     for (let i = 0; i < columnlength; i++) {
-      const rowIndex = i + yOffset;
-      const row = newTiles[rowIndex] || (newTiles[rowIndex] = []);
-      const sortedRow = sortedTiles[i];
-      for (let j = 0; j < rowlength; j++) {
-        const tile = sortedRow[j];
-        if (!tile) continue;
-        const colIndex = j + xOffset;
-        // Compute checker pattern using absolute tile coordinates
-        const xAbs = start_x + j;
-        const yAbs = end_y - i; // because sortedTiles were reversed on Y
-        const checkerBit = (xAbs + yAbs) & 1;
-        if (tile[0] === 'C' || tile[0] === 'F') row[colIndex] = `${tile}${checkerBit}`;
-        else row[colIndex] = tile;
+      const reversedI = columnlength - 1 - i;
+      const rowIndex = reversedI + yOffset;
+      // Vertical clipping: skip parsing whole row if offscreen
+      if (rowIndex < 0 || rowIndex >= newTiles.length) {
+        continue;
+      }
+
+      const existingRow = newTiles[rowIndex] || [];
+      let row = existingRow;
+      let rowCloned = false;
+      const rowLen = existingRow.length;
+      if (rowLen === 0) continue;
+
+      const yAbs = end_y - reversedI; // match previous reversed indexing
+      const rowParityBase = (start_x + yAbs) & 1;
+
+      // Clip horizontal range to the visible row bounds
+      let tStart = 0;
+      if (xOffset < 0) tStart = -xOffset;
+      let tEnd = tilesPerRow;
+      const maxVisible = rowLen - xOffset;
+      if (tEnd > maxVisible) tEnd = maxVisible;
+      if (tStart >= tEnd) continue;
+
+      let p = i * rowlengthBytes + (tStart << 1); // pointer in hex string (input is top->bottom)
+      let checker = rowParityBase ^ (tStart & 1);
+      let t = tStart;
+      while (t < tEnd) {
+        // First tile
+        let c0 = unsortedTiles.charCodeAt(p);
+        let c1 = unsortedTiles.charCodeAt(p + 1);
+        let n0 = c0 <= 57 ? c0 - 48 : c0 <= 70 ? c0 - 55 : c0 - 87;
+        let n1 = c1 <= 57 ? c1 - 48 : c1 <= 70 ? c1 - 55 : c1 - 87;
+        let byte = (n0 << 4) | n1;
+        p += 2;
+        let colIndex = t + xOffset;
+        let opened = OPEN[byte];
+        let nextValue = opened !== null ? opened : checker === 0 ? CL0[byte] : CL1[byte];
+        if (!outerCloned) {
+          newTiles = [...newTiles];
+          outerCloned = true;
+        }
+        if (!rowCloned) {
+          row = existingRow.slice();
+          newTiles[rowIndex] = row;
+          rowCloned = true;
+        }
+        if (row[colIndex] !== nextValue) {
+          row[colIndex] = nextValue;
+          anyChanged = true;
+        }
+        checker ^= 1;
+        t++;
+        if (t >= tEnd) break;
+
+        // Second tile (unrolled)
+        c0 = unsortedTiles.charCodeAt(p);
+        c1 = unsortedTiles.charCodeAt(p + 1);
+        n0 = c0 <= 57 ? c0 - 48 : c0 <= 70 ? c0 - 55 : c0 - 87;
+        n1 = c1 <= 57 ? c1 - 48 : c1 <= 70 ? c1 - 55 : c1 - 87;
+        byte = (n0 << 4) | n1;
+        p += 2;
+        colIndex = t + xOffset;
+        opened = OPEN[byte];
+        nextValue = opened !== null ? opened : checker === 0 ? CL0[byte] : CL1[byte];
+        if (row[colIndex] !== nextValue) {
+          row[colIndex] = nextValue;
+          anyChanged = true;
+        }
+        checker ^= 1;
+        t++;
       }
     }
-    setCachingTiles(newTiles);
+    if (outerCloned && anyChanged) setCachingTiles(newTiles);
   };
 
   /** Handling Websocket Message */
@@ -334,81 +555,6 @@ export default function Play() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [message]);
-
-  /** 🚀 GPU INITIALIZATION - HIGH QUALITY SETUP 🚀 */
-  useEffect(() => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1024; // 🚀 HIGH QUALITY: Larger canvas for better precision
-    canvas.height = 1024;
-    canvas.style.display = 'none';
-    document.body.appendChild(canvas);
-
-    // 🚀 HIGH QUALITY: Request high-performance context
-    const gl = canvas.getContext('webgl2');
-    if (!gl) {
-      console.warn('WebGL2 not supported - falling back to CPU');
-      return;
-    }
-
-    gpuContextRef.current = gl;
-
-    // GPU Compute Shader for tile processing
-    const vertexShaderSource = `#version 300 es
-      in vec2 position;
-      void main() {
-        gl_Position = vec4(position, 0.0, 1.0);
-      }
-    `;
-
-    const fragmentShaderSource = `#version 300 es
-      precision highp float; // 🚀 HIGH QUALITY: Maximum precision
-      precision highp sampler2D;
-      
-      uniform sampler2D u_tileData;
-      uniform vec2 u_offset;
-      uniform vec2 u_renderBase;
-      uniform vec2 u_dimensions;
-      uniform float u_devicePixelRatio; // 🚀 HIGH QUALITY: Device pixel ratio support
-      
-      out vec4 fragColor;
-      
-      void main() {
-        // 🚀 HIGH QUALITY: Sub-pixel accuracy with device pixel ratio
-        vec2 coord = gl_FragCoord.xy / (u_dimensions * u_devicePixelRatio);
-        vec2 sourceCoord = coord + u_offset / (u_dimensions * u_devicePixelRatio);
-        
-        // 🚀 HIGH QUALITY: High-precision texture sampling
-        vec4 tileData = texture(u_tileData, sourceCoord);
-        
-        // 🚀 HIGH QUALITY: Anti-aliased checkerboard calculation
-        vec2 renderPos = u_renderBase + gl_FragCoord.xy / u_devicePixelRatio;
-        float checkerPattern = step(0.5, fract((renderPos.x + renderPos.y) * 0.5));
-        
-        // 🚀 HIGH QUALITY: Enhanced color blending
-        fragColor = vec4(tileData.rgb * (0.9 + 0.1 * checkerPattern), tileData.a);
-      }
-    `;
-
-    // Compile shaders and create program
-    const vertexShader = gl.createShader(gl.VERTEX_SHADER)!;
-    gl.shaderSource(vertexShader, vertexShaderSource);
-    gl.compileShader(vertexShader);
-
-    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER)!;
-    gl.shaderSource(fragmentShader, fragmentShaderSource);
-    gl.compileShader(fragmentShader);
-
-    const program = gl.createProgram()!;
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-
-    gpuProgramRef.current = program;
-
-    return () => {
-      document.body.removeChild(canvas);
-    };
-  }, []);
 
   /** STABLE & FAST: Reliable tile computation without GPU bugs */
   const computedRenderTiles = useMemo(() => {
