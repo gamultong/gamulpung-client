@@ -30,6 +30,8 @@ const NUM_OPEN_LOOKUP = ['O', '1', '2', '3', '4', '5', '6', '7'] as const;
 const OPEN_LUT: (string | null)[] = new Array(256);
 const CLOSED0_LUT: string[] = new Array(256);
 const CLOSED1_LUT: string[] = new Array(256);
+
+// initialize LUTs
 (() => {
   for (let b = 0; b < 256; b++) {
     const isOpened = (b & 0b10000000) !== 0;
@@ -68,18 +70,10 @@ export default function Play() {
   const { setPosition: setClickPosition } = useClickStore();
   const { setCursors, addCursors, cursors } = useOtherUserCursorsStore();
   const { isOpen, message, sendMessage, connect, disconnect } = useWebSocketStore();
-  const {
-    x: cursorX,
-    y: cursorY,
-    setColor,
-    setPosition: setCursorPosition,
-    zoom,
-    setZoom,
-    originX: cursorOriginX,
-    originY: cursorOriginY,
-    setOringinPosition,
-    setId,
-  } = useCursorStore();
+  // for states
+  const { x: cursorX, y: cursorY, zoom, originX: cursorOriginX, originY: cursorOriginY } = useCursorStore();
+  // for actions
+  const { setColor, setPosition: setCursorPosition, setZoom, setOringinPosition, setId } = useCursorStore();
 
   /** hooks */
   const { windowWidth, windowHeight } = useScreenSize();
@@ -98,10 +92,14 @@ export default function Play() {
   const workerRef: { current: Worker | null } = ((globalThis as unknown as Record<string, unknown>)._tileWorkerRef as { current: Worker | null }) || {
     current: null,
   };
+  const workerInitRef: { current: boolean } = ((globalThis as unknown as Record<string, unknown>)._tileWorkerInit as { current: boolean }) || {
+    current: false,
+  };
   const generationRef: { current: number } = ((globalThis as unknown as Record<string, unknown>)._tileWorkerGen as { current: number }) || {
     current: 0,
   };
   (globalThis as unknown as Record<string, unknown>)._tileWorkerRef = workerRef;
+  (globalThis as unknown as Record<string, unknown>)._tileWorkerInit = workerInitRef;
   (globalThis as unknown as Record<string, unknown>)._tileWorkerGen = generationRef;
 
   function ensureWorker(): Worker | null {
@@ -109,49 +107,96 @@ export default function Play() {
     if (workerRef.current) return workerRef.current;
     try {
       const workerCode = `
-        const F_LOOKUP = [['F00','F01'],['F10','F11'],['F20','F21'],['F30','F31']];
-        const NUM_OPEN = ['O','1','2','3','4','5','6','7'];
-        const OPEN = new Array(256);
-        const CL0 = new Array(256);
-        const CL1 = new Array(256);
-        for (let b=0;b<256;b++){
-          const opened=(b&0x80)!==0; const mine=(b&0x40)!==0; const flag=(b&0x20)!==0; const color=(b&0x18)>>3; const num=b&0x07;
-          if(opened){ OPEN[b]=mine?'B':NUM_OPEN[num]; CL0[b]='C0'; CL1[b]='C1'; }
-          else if(flag){ OPEN[b]=null; const p=F_LOOKUP[color]; CL0[b]=p[0]; CL1[b]=p[1]; }
-          else { OPEN[b]=null; CL0[b]='C0'; CL1[b]='C1'; }
+        // LUTs will be injected from the main thread to avoid recomputation
+        let OPEN_LUT = null;      // (string|null)[]
+        let CLOSED0_LUT = null;   // string[]
+        let CLOSED1_LUT = null;   // string[]
+
+        // Optional fallback precompute if INIT not received
+        function ensureLocalLUTs() {
+          if (OPEN_LUT && CLOSED0_LUT && CLOSED1_LUT) return;
+          const FLAG_LOOKUP = [['F00','F01'],['F10','F11'],['F20','F21'],['F30','F31']];
+          const OPEN_NUM_LOOKUP = ['O','1','2','3','4','5','6','7'];
+          OPEN_LUT = new Array(256);
+          CLOSED0_LUT = new Array(256);
+          CLOSED1_LUT = new Array(256);
+          for (let byteValue = 0; byteValue < 256; byteValue++) {
+            const isOpened = (byteValue & 0x80) !== 0;
+            const isMine = (byteValue & 0x40) !== 0;
+            const isFlag = (byteValue & 0x20) !== 0;
+            const color = (byteValue & 0x18) >> 3;
+            const number = byteValue & 0x07;
+            if (isOpened) {
+              OPEN_LUT[byteValue] = isMine ? 'B' : OPEN_NUM_LOOKUP[number];
+              CLOSED0_LUT[byteValue] = 'C0';
+              CLOSED1_LUT[byteValue] = 'C1';
+            } else if (isFlag) {
+              OPEN_LUT[byteValue] = null;
+              const flagPair = FLAG_LOOKUP[color];
+              CLOSED0_LUT[byteValue] = flagPair[0];
+              CLOSED1_LUT[byteValue] = flagPair[1];
+            } else {
+              OPEN_LUT[byteValue] = null;
+              CLOSED0_LUT[byteValue] = 'C0';
+              CLOSED1_LUT[byteValue] = 'C1';
+            }
+          }
         }
-        onmessage = (e)=>{
-          const { id, hex, start_x, end_y, startPointY, endPointY, xOffset, yOffset, rowlengthBytes, tilesPerRow, columnlength, widthHint } = e.data;
-          const rows=[];
-          for(let i=0;i<columnlength;i++){
-            const reversedI = columnlength-1-i;
+
+        // Worker message handler
+        onmessage = (e) => {
+          const msg = e.data && e.data.msg;
+          if (msg === 'INIT') {
+            OPEN_LUT = e.data.OPEN;
+            CLOSED0_LUT = e.data.CL0;
+            CLOSED1_LUT = e.data.CL1;
+            return;
+          }
+
+          const { id, hex, start_x, end_y, xOffset, yOffset, rowlengthBytes, tilesPerRow, columnlength, widthHint } = e.data;
+          ensureLocalLUTs();
+          const rows = [];
+          for (let i = 0; i < columnlength; i++) {
+            const reversedI = columnlength - 1 - i;
             const rowIndex = reversedI + yOffset;
             const yAbs = end_y - reversedI;
             const rowParityBase = (start_x + yAbs) & 1;
-            let tStart = 0; if (xOffset < 0) tStart = -xOffset;
+
+            // Horizontal clipping with hint
+            let tStart = 0;
+            if (xOffset < 0) tStart = -xOffset;
             let tEnd = tilesPerRow;
-            // use widthHint when provided
-            const maxVisible = widthHint - xOffset;
+            const maxVisible = widthHint - xOffset; // widthHint may be row length
             if (tEnd > maxVisible) tEnd = maxVisible;
             if (tStart >= tEnd) continue;
-            let p = i * rowlengthBytes + (tStart<<1);
+
+            let p = i * rowlengthBytes + (tStart << 1);
             let checker = rowParityBase ^ (tStart & 1);
-            const vals = new Array(tEnd - tStart);
-            let idx=0; let t=tStart;
-            while(t < tEnd){
-              let c0=hex.charCodeAt(p), c1=hex.charCodeAt(p+1);
-              let n0=c0<=57?c0-48:c0<=70?c0-55:c0-87; let n1=c1<=57?c1-48:c1<=70?c1-55:c1-87;
-              let byte=(n0<<4)|n1; p+=2;
-              let opened=OPEN[byte]; vals[idx++] = opened!==null? opened : (checker===0? CL0[byte] : CL1[byte]);
-              checker^=1; t++;
-              if(t>=tEnd) break;
-              c0=hex.charCodeAt(p); c1=hex.charCodeAt(p+1);
-              n0=c0<=57?c0-48:c0<=70?c0-55:c0-87; n1=c1<=57?c1-48:c1<=70?c1-55:c1-87;
-              byte=(n0<<4)|n1; p+=2;
-              opened=OPEN[byte]; vals[idx++] = opened!==null? opened : (checker===0? CL0[byte] : CL1[byte]);
-              checker^=1; t++;
+            const values = new Array(tEnd - tStart);
+            let idx = 0;
+            let t = tStart;
+
+            while (t < tEnd) {
+              // Tile A
+              let c0 = hex.charCodeAt(p), c1 = hex.charCodeAt(p + 1);
+              let n0 = c0 <= 57 ? c0 - 48 : c0 <= 70 ? c0 - 55 : c0 - 87;
+              let n1 = c1 <= 57 ? c1 - 48 : c1 <= 70 ? c1 - 55 : c1 - 87;
+              let byteValue = (n0 << 4) | n1; p += 2;
+              let opened = OPEN_LUT[byteValue];
+              values[idx++] = opened !== null ? opened : (checker === 0 ? CLOSED0_LUT[byteValue] : CLOSED1_LUT[byteValue]);
+              checker ^= 1; t++;
+              if (t >= tEnd) break;
+
+              // Tile B (unrolled)
+              c0 = hex.charCodeAt(p); c1 = hex.charCodeAt(p + 1);
+              n0 = c0 <= 57 ? c0 - 48 : c0 <= 70 ? c0 - 55 : c0 - 87;
+              n1 = c1 <= 57 ? c1 - 48 : c1 <= 70 ? c1 - 55 : c1 - 87;
+              byteValue = (n0 << 4) | n1; p += 2;
+              opened = OPEN_LUT[byteValue];
+              values[idx++] = opened !== null ? opened : (checker === 0 ? CLOSED0_LUT[byteValue] : CLOSED1_LUT[byteValue]);
+              checker ^= 1; t++;
             }
-            rows.push({ rowIndex, tStart, values: vals, xOffset });
+            rows.push({ rowIndex, tStart, values, xOffset });
           }
           postMessage({ id, rows });
         };
@@ -159,6 +204,18 @@ export default function Play() {
       const blob = new Blob([workerCode], { type: 'application/javascript' });
       const url = URL.createObjectURL(blob);
       workerRef.current = new Worker(url);
+      // Initialize LUTs in worker once
+      try {
+        if (!workerInitRef.current) {
+          workerRef.current.postMessage({
+            msg: 'INIT',
+            OPEN: OPEN_LUT,
+            CL0: CLOSED0_LUT,
+            CL1: CLOSED1_LUT,
+          });
+          workerInitRef.current = true;
+        }
+      } catch {}
       return workerRef.current;
     } catch {
       return null;
@@ -172,7 +229,7 @@ export default function Play() {
    * @param start_y {number} - start y position
    * @param end_x {number} - end x position
    * @param end_y {number} - end y position
-   * @param type {string} - Request type (R: Right tiles, L: Left tiles, U: Up tiles, D: Down tiles, A: All tiles)
+   * @param type {Direction} - Request type (U: Up tiles, D: Down tiles, L: Left tiles, R: Right tiles, A: All tiles)
    *  */
   const requestTiles = (start_x: number, start_y: number, end_x: number, end_y: number, type: Direction) => {
     if (!isOpen || !isInitialized) return;
