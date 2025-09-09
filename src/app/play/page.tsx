@@ -3,7 +3,7 @@
 import S from './page.module.scss';
 
 /** hooks */
-import { useEffect, useLayoutEffect, useState, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
 import useScreenSize from '@/hooks/useScreenSize';
 import { OtherUserSingleCursorState, useCursorStore, useOtherUserCursorsStore } from '../../store/cursorStore';
 
@@ -88,6 +88,7 @@ export default function Play() {
   const [leftReviveTime, setLeftReviveTime] = useState<number>(-1);
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
+  const requestedTilesTimeRef = useRef<number>(0);
   // Inline Worker: parse tiles off main thread for large payloads
   const workerRef: { current: Worker | null } = ((globalThis as unknown as Record<string, unknown>)._tileWorkerRef as { current: Worker | null }) || {
     current: null,
@@ -233,6 +234,9 @@ export default function Play() {
    *  */
   const requestTiles = (start_x: number, start_y: number, end_x: number, end_y: number, type: Direction) => {
     if (!isOpen || !isInitialized) return;
+    const now = performance.now();
+    if (type === Direction.ALL && now - requestedTilesTimeRef.current < 0.3) return;
+    requestedTilesTimeRef.current = now;
     /** add Dummy data to originTiles */
     const [rowlength, columnlength] = [Math.abs(end_x - start_x) + 1, Math.abs(start_y - end_y) + 1];
 
