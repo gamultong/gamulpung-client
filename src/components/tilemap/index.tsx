@@ -50,7 +50,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       if (newTileTextures.has(key)) return newTileTextures.get(key);
 
       const tempCanvas = document.createElement('canvas');
-      const tileMinializedSize = Math.sqrt(tileSize / 16);
+      const tileMinializedSize = Math.sqrt(tileSize / 6);
       tempCanvas.width = tempCanvas.height = tileMinializedSize;
       const ctx = getContext(tempCanvas);
       if (!ctx) return;
@@ -173,7 +173,15 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         if (outerTexture) {
           const outerKey = `${outerTexture.textureCacheIds || outerTexture}-${tileSize}`;
           const baseOuter = outerCache.get(outerKey) ?? (
-            <Sprite cullable={true} scale={0.1} eventMode="none" texture={outerTexture} width={tileSize} height={tileSize} />
+            <Sprite
+              cullable={true}
+              scale={0.1}
+              eventMode="none"
+              texture={outerTexture}
+              width={tileSize}
+              height={tileSize}
+              cacheAsBitmapResolution={0.001}
+            />
           );
 
           outerCache.set(outerKey, baseOuter);
@@ -208,6 +216,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           const baseFlag = flagCache.get(flagKey) ?? (
             <Sprite
               cullable={true}
+              cacheAsBitmapResolution={0.7}
               eventMode="none"
               texture={textures.get(`flag-${flagIndex}`)}
               anchor={0.5}
@@ -229,7 +238,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
               text={content}
               x={x + tileSize / 2}
               y={y + tileSize / 2}
-              resolution={1}
+              resolution={0.6}
               anchor={0.5}
               style={cachedTextStyles[num - 1]}
             />,
