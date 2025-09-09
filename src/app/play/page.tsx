@@ -73,7 +73,7 @@ export default function Play() {
   // for states
   const { x: cursorX, y: cursorY, zoom, originX: cursorOriginX, originY: cursorOriginY } = useCursorStore();
   // for actions
-  const { setColor, setPosition: setCursorPosition, setZoom, setOringinPosition, setId } = useCursorStore();
+  const { setColor, setPosition: setCursorPosition, setOringinPosition, setId, zoomUp, zoomDown, setZoom } = useCursorStore();
 
   /** hooks */
   const { windowWidth, windowHeight } = useScreenSize();
@@ -263,13 +263,26 @@ export default function Play() {
     return;
   };
 
+  const zoomHandler = (e: KeyboardEvent) => {
+    if (e.key === '-') {
+      e.preventDefault();
+      zoomDown();
+    }
+    if (e.key === '=') {
+      e.preventDefault();
+      zoomUp();
+    }
+  };
+
   /** Disconnect websocket when Component has been unmounted */
   useLayoutEffect(() => {
     document.documentElement.style.overflow = 'hidden';
     setIsInitialized(false);
     setZoom(1);
+    document.addEventListener('keydown', zoomHandler);
     return () => {
       document.documentElement.style.overflow = 'auto';
+      document.removeEventListener('keydown', zoomHandler);
       disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -279,7 +292,7 @@ export default function Play() {
    * Initialize
    * Re-connect websocket when websocket is closed state.
    * */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isOpen && startPoint.x !== endPoint.x && endPoint.y !== startPoint.y) {
       setLeftReviveTime(-1);
       const [view_width, view_height] = [endPoint.x - startPoint.x + 1, endPoint.y - startPoint.y + 1];

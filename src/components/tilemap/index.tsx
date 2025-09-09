@@ -6,7 +6,7 @@ import Paths from '@/assets/paths.json';
 import { useCursorStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
 import { TileContent } from '@/types';
-import { fillCtxAndPath, makePath2d } from '@/utils';
+import { fillCtxAndPath as fillPathInCtx, makePath2d } from '@/utils';
 
 interface TilemapProps {
   tiles: string[][];
@@ -50,7 +50,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       if (newTileTextures.has(key)) return newTileTextures.get(key);
 
       const tempCanvas = document.createElement('canvas');
-      const tileMinializedSize = Math.sqrt(tileSize / 6);
+      const tileMinializedSize = Math.sqrt(tileSize / 8);
       tempCanvas.width = tempCanvas.height = tileMinializedSize;
       const ctx = getContext(tempCanvas);
       if (!ctx) return;
@@ -78,15 +78,13 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
     // Boom texture
     const boomCanvas = document.createElement('canvas');
-    const boomMinimalized = 2;
+    const boomMinimalized = 3;
     boomCanvas.width = boomCanvas.height = tileSize / boomMinimalized;
     const boomCtx = getContext(boomCanvas);
     if (boomCtx) {
       boomCtx.scale(zoom / boomMinimalized / 4, zoom / boomMinimalized / 4);
-      const inner = makePath2d(boomPaths[0]);
-      const outer = makePath2d(boomPaths[1]);
-      fillCtxAndPath(boomCtx, inner, 'rgba(0, 0, 0, 0.6)');
-      fillCtxAndPath(boomCtx, outer, 'rgba(0, 0, 0, 0.5)');
+      fillPathInCtx(boomCtx, makePath2d(boomPaths[0]), 'rgba(0, 0, 0, 0.6)'); // fill boom inner
+      fillPathInCtx(boomCtx, makePath2d(boomPaths[1]), 'rgba(0, 0, 0, 0.5)'); // fill boom outer
 
       const boomTexture = Texture.from(boomCanvas);
       boomTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
@@ -97,7 +95,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     }
 
     // Flag textures
-    const flagMinimalized = 2;
+    const flagMinimalized = 3;
     for (let i = 0; i < CURSOR_COLORS.length; i++) {
       const flagCanvas = document.createElement('canvas');
       flagCanvas.width = flagCanvas.height = tileSize / flagMinimalized;
@@ -108,10 +106,9 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       flagGradient.addColorStop(1, 'transparent');
       flagCtx.translate(tileSize / flagMinimalized / 6, tileSize / flagMinimalized / 6);
       flagCtx.scale(zoom / flagMinimalized / 4.5, zoom / flagMinimalized / 4.5);
-      const flagPath = makePath2d(flagPaths[0]);
-      const polePath = makePath2d(flagPaths[1]);
-      fillCtxAndPath(flagCtx, flagPath, CURSOR_COLORS[i]);
-      fillCtxAndPath(flagCtx, polePath, flagGradient);
+
+      fillPathInCtx(flagCtx, makePath2d(flagPaths[0]), CURSOR_COLORS[i]); // fill flag color
+      fillPathInCtx(flagCtx, makePath2d(flagPaths[1]), flagGradient); // fill flag pole
 
       const flagTexture = Texture.from(flagCanvas);
       flagTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
@@ -173,15 +170,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         if (outerTexture) {
           const outerKey = `${outerTexture.textureCacheIds || outerTexture}-${tileSize}`;
           const baseOuter = outerCache.get(outerKey) ?? (
-            <Sprite
-              cullable={true}
-              scale={0.1}
-              eventMode="none"
-              texture={outerTexture}
-              width={tileSize}
-              height={tileSize}
-              cacheAsBitmapResolution={0.001}
-            />
+            <Sprite cullable={true} scale={0.1} eventMode="none" texture={outerTexture} width={tileSize} height={tileSize} />
           );
 
           outerCache.set(outerKey, baseOuter);
@@ -193,7 +182,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           const innerKey = `${innerTexture.textureCacheIds || innerTexture}-${tileSize}`;
           const size = tileSize - 10 * zoom;
           const baseInner = innerCache.get(innerKey) ?? (
-            <Sprite cullable={true} scale={0.1} eventMode="none" texture={innerTexture} width={size} height={size} cacheAsBitmapResolution={1} />
+            <Sprite cullable={true} scale={0.1} eventMode="none" texture={innerTexture} width={size} height={size} />
           );
           innerCache.set(innerKey, baseInner);
           innerSprites.push(cloneElement(baseInner, { key: `inner-${tileKey}`, x: x + 5 * zoom, y: y + 5 * zoom }));
@@ -216,7 +205,6 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           const baseFlag = flagCache.get(flagKey) ?? (
             <Sprite
               cullable={true}
-              cacheAsBitmapResolution={0.7}
               eventMode="none"
               texture={textures.get(`flag-${flagIndex}`)}
               anchor={0.5}
@@ -238,7 +226,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
               text={content}
               x={x + tileSize / 2}
               y={y + tileSize / 2}
-              resolution={0.6}
+              resolution={0.4}
               anchor={0.5}
               style={cachedTextStyles[num - 1]}
             />,
@@ -267,7 +255,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         backgroundColor: 0x808080,
         resolution: 1,
         antialias: false,
-        powerPreference: 'low-power',
+        powerPreference: 'high-performance',
         autoDensity: false,
         preserveDrawingBuffer: false,
         clearBeforeRender: true,
