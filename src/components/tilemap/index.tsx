@@ -50,15 +50,34 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       if (newTileTextures.has(key)) return newTileTextures.get(key);
 
       const tempCanvas = document.createElement('canvas');
-      const tileMinializedSize = Math.sqrt(tileSize / 8);
+      const tileMinializedSize = 128; // fixed small size for pixelated look
       tempCanvas.width = tempCanvas.height = tileMinializedSize;
       const ctx = getContext(tempCanvas);
       if (!ctx) return;
-      const gradient = ctx.createLinearGradient(0, 0, tileMinializedSize, tileMinializedSize);
-      gradient.addColorStop(0, color1);
-      gradient.addColorStop(1, color2);
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, tileMinializedSize, tileMinializedSize);
+
+      const hexToRgb = (hex: string) => {
+        const normalized = hex.replace('#', '');
+        const bigint = parseInt(normalized, 16);
+        const r = (bigint >> 16) & 255;
+        const g = (bigint >> 8) & 255;
+        const b = bigint & 255;
+        return { r, g, b };
+      };
+
+      const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
+
+      const c1 = hexToRgb(color1);
+      const c2 = hexToRgb(color2);
+
+      // draw vertical stepped bands
+      for (let x = 0; x < tileMinializedSize; x++) {
+        const t = x / (tileMinializedSize - 1);
+        const r = lerp(c1.r, c2.r, t);
+        const g = lerp(c1.g, c2.g, t);
+        const b = lerp(c1.b, c2.b, t);
+        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.fillRect(x, 0, 1, tileMinializedSize);
+      }
 
       const texture = Texture.from(tempCanvas);
       texture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
@@ -95,7 +114,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     }
 
     // Flag textures
-    const flagMinimalized = 3;
+    const flagMinimalized = 2;
     for (let i = 0; i < CURSOR_COLORS.length; i++) {
       const flagCanvas = document.createElement('canvas');
       flagCanvas.width = flagCanvas.height = tileSize / flagMinimalized;
@@ -104,7 +123,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       const flagGradient = flagCtx.createLinearGradient(36.5, 212.5, 36.5, 259);
       flagGradient.addColorStop(0, '#E8E8E8');
       flagGradient.addColorStop(1, 'transparent');
-      flagCtx.translate(tileSize / flagMinimalized / 6, tileSize / flagMinimalized / 6);
+      flagCtx.translate(flagCanvas.width / 6, flagCanvas.height / 6);
       flagCtx.scale(zoom / flagMinimalized / 4.5, zoom / flagMinimalized / 4.5);
 
       fillPathInCtx(flagCtx, makePath2d(flagPaths[0]), CURSOR_COLORS[i]); // fill flag color
@@ -126,8 +145,9 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
   const cachedTextStyles = useMemo(() => {
     const fontFamily = 'LOTTERIACHAB';
     const fontSize = 50 * zoom;
+    const { length } = countColors;
     const makeTextStyle = (fill: TextStyleFill) => new TextStyle({ fontFamily, fontSize, fill });
-    return Array.from({ length: 8 }, (_, i) => makeTextStyle(countColors[i % countColors.length]));
+    return Array.from({ length }, (_, i) => makeTextStyle(countColors[i]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom]);
 
@@ -179,13 +199,13 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
         // Inner sprite
         if (innerTexture) {
-          const innerKey = `${innerTexture.textureCacheIds || innerTexture}-${tileSize}`;
-          const size = tileSize - 10 * zoom;
+          const innerKey = `${innerTexture.textureCacheIds}-${tileSize}`;
+          const size = tileSize - 10 * zoom; // 10px padding for outer
           const baseInner = innerCache.get(innerKey) ?? (
             <Sprite cullable={true} scale={0.1} eventMode="none" texture={innerTexture} width={size} height={size} />
           );
           innerCache.set(innerKey, baseInner);
-          innerSprites.push(cloneElement(baseInner, { key: `inner-${tileKey}`, x: x + 5 * zoom, y: y + 5 * zoom }));
+          innerSprites.push(cloneElement(baseInner, { key: `inner-${tileKey}`, x: x + 5 * zoom, y: y + 5 * zoom })); // 5px padding for outer
         }
 
         // Boom sprite
@@ -217,18 +237,17 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           flagSprites.push(cloneElement(baseFlag, { key: `flag-${tileKey}`, x: x + tileSize / 2, y: y + tileSize / 2 }));
         }
 
-        // Text elements
-        const num = parseInt(content);
-        if (num > 0) {
+        // Text number elements
+        if (+content > 0) {
           textElements.push(
             <Text
               key={`text-${tileKey}`}
               text={content}
               x={x + tileSize / 2}
               y={y + tileSize / 2}
-              resolution={0.4}
+              resolution={0.5}
               anchor={0.5}
-              style={cachedTextStyles[num - 1]}
+              style={cachedTextStyles[+content - 1]}
             />,
           );
         }
