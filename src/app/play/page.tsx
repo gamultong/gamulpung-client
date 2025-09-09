@@ -73,7 +73,9 @@ export default function Play() {
   // for states
   const { x: cursorX, y: cursorY, zoom, originX: cursorOriginX, originY: cursorOriginY } = useCursorStore();
   // for actions
-  const { setColor, setPosition: setCursorPosition, setOringinPosition, setId, zoomUp, zoomDown, setZoom } = useCursorStore();
+  const { setColor, setPosition: setCursorPosition, setOringinPosition, setId } = useCursorStore();
+  // for movings
+  const { zoomUp, zoomDown, setZoom } = useCursorStore();
 
   /** hooks */
   const { windowWidth, windowHeight } = useScreenSize();
@@ -268,13 +270,32 @@ export default function Play() {
   };
 
   const zoomHandler = (e: KeyboardEvent) => {
-    if (e.key === '-') {
-      e.preventDefault();
-      zoomDown();
-    }
-    if (e.key === '=') {
-      e.preventDefault();
-      zoomUp();
+    const key = e.key.toLowerCase();
+    switch (key) {
+      case '-':
+        e.preventDefault();
+        zoomDown();
+        break;
+      case '=':
+        e.preventDefault();
+        zoomUp();
+        break;
+      // case 'w':
+      //   e.preventDefault();
+      //   moveUp();
+      //   break;
+      // case 's':
+      //   e.preventDefault();
+      //   moveDown();
+      //   break;
+      // case 'a':
+      //   e.preventDefault();
+      //   moveLeft();
+      //   break;
+      // case 'd':
+      //   e.preventDefault();
+      //   moveRight();
+      //   break;
     }
   };
 

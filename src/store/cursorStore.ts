@@ -25,6 +25,10 @@ interface ClientCursorState extends CursorState {
   setZoom: (zoom: number) => void;
   zoomUp: () => void;
   zoomDown: () => void;
+  moveUp: () => void;
+  moveDown: () => void;
+  moveLeft: () => void;
+  moveRight: () => void;
 }
 
 export interface OtherUserSingleCursorState extends CursorState {
@@ -58,6 +62,10 @@ export const useCursorStore = create<ClientCursorState>(set => ({
   setPosition: (x, y) => set({ x, y }),
   zoomUp: () => set(s => ({ zoom: s.zoom * 1.5 < 1.7 ? s.zoom * 1.5 : s.zoom })),
   zoomDown: () => set(s => ({ zoom: s.zoom / 1.5 > 0.15 ? s.zoom / 1.5 : s.zoom })),
+  moveUp: () => set(s => ({ y: s.originY - 1 })),
+  moveDown: () => set(s => ({ y: s.originY + 1 })),
+  moveLeft: () => set(s => ({ x: s.originX - 1 })),
+  moveRight: () => set(s => ({ x: s.originX + 1 })),
 }));
 
 export const useOtherUserCursorsStore = create<OtherUserCursorsState>(set => ({
