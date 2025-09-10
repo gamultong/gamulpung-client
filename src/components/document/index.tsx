@@ -7,17 +7,15 @@ import './global.css';
 import { useSearchParams } from 'next/navigation';
 import { Converter } from 'showdown';
 import { useEffect, useState } from 'react';
-
-type AsideType = {
-  [key: string]: { link: string; [key: string]: string };
-};
+import { AsideItem, AsideType } from '@/types';
 
 export default function Document({ endpoint, files, dir }: { endpoint: string; files: string[]; dir: string }) {
   const url = process.env.NEXT_PUBLIC_HOST;
-  const [data, setData] = useState('');
   const lang = useSearchParams().get('lang') || 'ko';
   const doc = useSearchParams().get('doc') || files[0];
   const asideData: AsideType = aside[lang as keyof typeof aside];
+  const asideKeys = Object.keys(asideData);
+  const [data, setData] = useState('');
   const [nowUrl, setNowUrl] = useState<string | null>(null);
 
   const fetchMarkdownFiles = async () => {
@@ -36,10 +34,14 @@ export default function Document({ endpoint, files, dir }: { endpoint: string; f
     }
   };
 
+  const makeHref = (text: string, page: string) => `${url}/documents/${text.replace(/ /g, '-').toLowerCase()}?lang=${lang}&doc=${page}`;
+  const makeAsideItem = (key: string) =>
+    Object.entries(asideData[key] as AsideItem)
+      .filter(i => i[0] !== 'link')
+      .map(([text, page]) => ({ text, page }));
+
   useEffect(() => {
-    if (nowUrl !== `${url}/docs/${lang}/${dir}/${doc}.md`) {
-      fetchMarkdownFiles();
-    }
+    if (nowUrl !== `${url}/docs/${lang}/${dir}/${doc}.md`) fetchMarkdownFiles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang, doc]);
 
@@ -47,26 +49,18 @@ export default function Document({ endpoint, files, dir }: { endpoint: string; f
     <div className={S.document}>
       <aside className={S.aside}>
         <h2>Documentation</h2>
-        {asideData &&
-          Object.keys(asideData).map(key => (
-            <details key={key} open={endpoint === asideData[key].link}>
-              <summary>{key}</summary>
-              <ul>
-                {Object.entries(asideData[key as keyof typeof asideData]).map(
-                  ([text, page]) =>
-                    text !== 'link' && (
-                      <Link
-                        key={text}
-                        href={`${url}/documents/${asideData[key].link.replace(/ /g, '-').toLowerCase()}?lang=${lang}&doc=${page}`}
-                        prefetch={false}
-                      >
-                        <li>{text}</li>
-                      </Link>
-                    ),
-                )}
-              </ul>
-            </details>
-          ))}
+        {asideKeys?.map(key => (
+          <details key={key} open={endpoint === asideData[key].link}>
+            <summary>{key}</summary>
+            <ul>
+              {makeAsideItem(key).map(({ text, page }) => (
+                <Link key={text} href={makeHref(asideData[key].link, page)}>
+                  <li>{text}</li>
+                </Link>
+              ))}
+            </ul>
+          </details>
+        ))}
       </aside>
       <main className={S.main} dangerouslySetInnerHTML={{ __html: data }} />
     </div>

@@ -1,80 +1,103 @@
 'use client';
-import { Container, Sprite, Stage, Text } from '@pixi/react';
-import { cloneElement, useMemo, useRef, useState } from 'react';
-import { Texture, TextStyle, SCALE_MODES, MIPMAP_MODES, WRAP_MODES } from 'pixi.js';
+import { Container, Sprite, Stage } from '@pixi/react';
+import { cloneElement, useLayoutEffect, useMemo, useRef } from 'react';
+import { Texture, SCALE_MODES, MIPMAP_MODES, WRAP_MODES, Container as PixiContainer, Sprite as PixiSprite } from 'pixi.js';
 import Paths from '@/assets/paths.json';
 import { useCursorStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
+import { TileContent } from '@/types';
+import { fillCtxAndPath as fillPathInCtx, makePath2d } from '@/utils';
 
 interface TilemapProps {
   tiles: string[][];
   tileSize: number;
   tilePaddingWidth: number;
   tilePaddingHeight: number;
-  isMoving: boolean;
   className?: string;
 }
 
-export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePaddingHeight, className, isMoving }: TilemapProps) {
+export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePaddingHeight, className }: TilemapProps) {
   // constants
-  const cursorColors = useMemo(() => ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'], []);
+  const CURSOR_COLORS = useMemo(() => ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'], []);
   const { flagPaths, tileColors, countColors, boomPaths } = Paths;
+  const { outer, inner } = tileColors;
 
   // stores
   const { zoom } = useCursorStore();
   const { windowHeight, windowWidth } = useScreenSize();
 
-  // states
-  const [innerZoom, setInnerZoom] = useState(zoom);
-  const [cachedTextures, setCachedTextures] = useState(new Map<string, Texture>());
+  // texture cache (persistent across renders)
+  const cachedTexturesRef = useRef(new Map<string, Texture>());
+  const makeSpriteMap = () => new Map<string, JSX.Element>();
+
+  // CLOSED/FLAGGED tiles pooling layer (imperative Pixi for max perf)
+  const closedLayerRef = useRef<PixiContainer | null>(null);
+  const closedPoolRef = useRef<{ outer: PixiSprite; inner: PixiSprite }[]>([]);
 
   // Generate textures for tiles, boom, and flags
   const cachedSpritesRef = useRef({
-    outerCachedSprite: new Map<string, JSX.Element>(),
-    innerCachedSprite: new Map<string, JSX.Element>(),
-    boomCachedSprite: new Map<string, JSX.Element>(),
-    flagCachedSprite: new Map<string, JSX.Element>(),
+    outerCachedSprite: makeSpriteMap(),
+    innerCachedSprite: makeSpriteMap(),
+    boomCachedSprite: makeSpriteMap(),
+    flagCachedSprite: makeSpriteMap(),
+    numberCachedSprite: makeSpriteMap(),
   });
 
   const getContext = (canvas: HTMLCanvasElement): CanvasRenderingContext2D =>
-    canvas.getContext('2d', {
-      willReadFrequently: false,
-      desynchronized: true,
-    }) as CanvasRenderingContext2D;
+    canvas.getContext('2d', { willReadFrequently: false, desynchronized: true })!;
 
-  // Memoize textures creation
+  // Memoize textures access/creation: create once and reuse from ref cache
   const textures = useMemo(() => {
-    const newTileTextures = new Map(Array.from(cachedTextures.entries()).map(([key, t]) => [key, Texture.from(t.baseTexture)]));
+    const textureCache = cachedTexturesRef.current;
 
     const createTileTexture = (color1: string, color2: string) => {
       const key = `${color1}-${color2}-${tileSize}`;
-      if (newTileTextures.has(key)) return newTileTextures.get(key);
+      if (textureCache.has(key)) return textureCache.get(key);
 
       const tempCanvas = document.createElement('canvas');
-      const tileMinializedSize = Math.sqrt(tileSize / 5);
+      const tileMinializedSize = 4; // fixed small size for pixelated look
       tempCanvas.width = tempCanvas.height = tileMinializedSize;
       const ctx = getContext(tempCanvas);
       if (!ctx) return;
-      const gradient = ctx.createLinearGradient(0, 0, tileMinializedSize, tileMinializedSize);
-      gradient.addColorStop(0, color1);
-      gradient.addColorStop(1, color2);
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, tileMinializedSize, tileMinializedSize);
+
+      const hexToRgb = (hex: string) => {
+        const normalized = hex.replace('#', '');
+        const bigint = parseInt(normalized, 16);
+        const r = (bigint >> 16) & 255;
+        const g = (bigint >> 8) & 255;
+        const b = bigint & 255;
+        return { r, g, b };
+      };
+
+      const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
+
+      const c1 = hexToRgb(color1);
+      const c2 = hexToRgb(color2);
+
+      // draw vertical stepped bands
+      for (let x = 0; x < tileMinializedSize; x++) {
+        const t = x / (tileMinializedSize - 1);
+        const r = lerp(c1.r, c2.r, t);
+        const g = lerp(c1.g, c2.g, t);
+        const b = lerp(c1.b, c2.b, t);
+        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.fillRect(x, 0, 1, tileMinializedSize);
+      }
 
       const texture = Texture.from(tempCanvas);
       texture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
       texture.baseTexture.mipmap = MIPMAP_MODES.OFF;
       texture.baseTexture.wrapMode = WRAP_MODES.CLAMP;
       texture.baseTexture.setSize(tileMinializedSize, tileMinializedSize);
-      texture.baseTexture.resolution = 0;
+      texture.baseTexture.resolution = 0.001;
 
-      newTileTextures.set(key, texture);
+      textureCache.set(key, texture);
     };
 
     // Textures for outer and inner tiles
-    for (let i = 0; i < 3; i++) {
-      createTileTexture(tileColors.outer[i][0], tileColors.outer[i][1]);
-      createTileTexture(tileColors.inner[i][0], tileColors.inner[i][1]);
+    for (let i = 0; i < outer.length; i++) {
+      createTileTexture(outer[i][0], outer[i][1]);
+      createTileTexture(inner[i][0], inner[i][1]);
     }
 
     // Boom texture
@@ -84,25 +107,20 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     const boomCtx = getContext(boomCanvas);
     if (boomCtx) {
       boomCtx.scale(zoom / boomMinimalized / 4, zoom / boomMinimalized / 4);
-      const inner = new Path2D(boomPaths[0]);
-      boomCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      boomCtx.fill(inner);
-      const outer = new Path2D(boomPaths[1]);
-      boomCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      boomCtx.fill(outer);
+      fillPathInCtx(boomCtx, makePath2d(boomPaths[0]), 'rgba(0, 0, 0, 0.6)'); // fill boom inner
+      fillPathInCtx(boomCtx, makePath2d(boomPaths[1]), 'rgba(0, 0, 0, 0.5)'); // fill boom outer
 
       const boomTexture = Texture.from(boomCanvas);
       boomTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
       boomTexture.baseTexture.mipmap = MIPMAP_MODES.OFF;
       boomTexture.baseTexture.setSize(tileSize / boomMinimalized, tileSize / boomMinimalized);
-      boomTexture.baseTexture.resolution = 0.1;
 
-      newTileTextures.set('boom', boomTexture);
+      textureCache.set('boom', boomTexture);
     }
 
     // Flag textures
-    const flagMinimalized = 3;
-    for (let i = 0; i < 4; i++) {
+    const flagMinimalized = 2;
+    for (let i = 0; i < CURSOR_COLORS.length; i++) {
       const flagCanvas = document.createElement('canvas');
       flagCanvas.width = flagCanvas.height = tileSize / flagMinimalized;
       const flagCtx = getContext(flagCanvas);
@@ -110,193 +128,337 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       const flagGradient = flagCtx.createLinearGradient(36.5, 212.5, 36.5, 259);
       flagGradient.addColorStop(0, '#E8E8E8');
       flagGradient.addColorStop(1, 'transparent');
-      flagCtx.translate(tileSize / flagMinimalized / 6, tileSize / flagMinimalized / 6);
+      flagCtx.translate(flagCanvas.width / 6, flagCanvas.height / 6);
       flagCtx.scale(zoom / flagMinimalized / 4.5, zoom / flagMinimalized / 4.5);
-      const flagPath = new Path2D(flagPaths[0]);
-      const polePath = new Path2D(flagPaths[1]);
-      flagCtx.fillStyle = cursorColors[i];
-      flagCtx.fill(flagPath);
-      flagCtx.fillStyle = flagGradient;
-      flagCtx.fill(polePath);
+
+      fillPathInCtx(flagCtx, makePath2d(flagPaths[0]), CURSOR_COLORS[i]); // fill flag color
+      fillPathInCtx(flagCtx, makePath2d(flagPaths[1]), flagGradient); // fill flag pole
 
       const flagTexture = Texture.from(flagCanvas);
       flagTexture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
       flagTexture.baseTexture.mipmap = MIPMAP_MODES.OFF;
       flagTexture.baseTexture.setSize(tileSize, tileSize);
-      flagTexture.baseTexture.resolution = 0.5;
 
-      newTileTextures.set(`flag-${i}`, flagTexture);
+      textureCache.set(`flag-${i}`, flagTexture);
     }
-    setInnerZoom(zoom);
-    setCachedTextures(newTileTextures);
-    return newTileTextures;
+    return textureCache;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileSize]);
 
-  // Cache text styles for numbers using useMemo
-  const cachedTextStyles = useMemo(
-    () =>
-      Array.from(
-        { length: 8 },
-        (_, i) =>
-          new TextStyle({
-            fontFamily: 'LOTTERIACHAB',
-            fontSize: 50 * zoom,
-            fill: countColors[i],
-          }),
-      ),
+  // Pre-render number textures (1-8)
+  const numberTextures = useMemo(() => {
+    const map = new Map<number, Texture>();
+    const size = tileSize;
+    for (let n = 1; n <= countColors.length; n++) {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const ctx = getContext(canvas);
+      if (!ctx) continue;
+      ctx.clearRect(0, 0, size, size);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `${Math.floor(size * 0.6)}px LOTTERIACHAB`;
+      ctx.fillStyle = String(countColors[n - 1]);
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillText(String(n), size / 2, size / 2);
+      const tex = Texture.from(canvas);
+      tex.baseTexture.scaleMode = SCALE_MODES.NEAREST;
+      tex.baseTexture.mipmap = MIPMAP_MODES.OFF;
+      tex.baseTexture.wrapMode = WRAP_MODES.CLAMP;
+      tex.baseTexture.setSize(size, size);
+      tex.baseTexture.resolution = 1;
+      map.set(n, tex);
+    }
+    return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [zoom],
-  );
+  }, [tileSize]);
+
+  // --------------------- Helper functions (pure) ---------------------
+  const computeVisibleBounds = (totalRows: number, totalCols: number, padW: number, padH: number, viewW: number, viewH: number, size: number) => {
+    const startCol = Math.max(0, Math.ceil(padW - 1));
+    const endCol = Math.min(totalCols - 1, Math.floor(padW + (viewW + size) / (size || 1)));
+    const startRow = Math.max(0, Math.ceil(padH - 1));
+    const endRow = Math.min(totalRows - 1, Math.floor(padH + (viewH + size) / (size || 1)));
+    return { startCol, endCol, startRow, endRow };
+  };
+
+  const makeNumericKeys = (ri: number, ci: number, size: number) => {
+    const tileKeyNum = ((ri * 131071 + ci) * 131 + (size | 0)) >>> 0;
+    const typeKeyBase = (tileKeyNum * 10) >>> 0;
+    return { tileKeyNum, typeKeyBase };
+  };
+
+  const isClosedOrFlag = (c: string | number) => c === TileContent.CLOSED || c === TileContent.FLAGGED;
+
+  const getTileTexturesForContent = (content: string | number, defaults: { outerTexture?: Texture; innerTexture?: Texture }) => {
+    const head0 = (typeof content === 'string' ? content[0] : content) as string | number;
+    if (isClosedOrFlag(head0)) {
+      const isEven = +String(content).slice(-1) % 2;
+      return {
+        outerTexture: textures.get(`${outer[isEven][0]}-${outer[isEven][1]}-${tileSize}`) || defaults.outerTexture,
+        innerTexture: textures.get(`${inner[isEven][0]}-${inner[isEven][1]}-${tileSize}`) || defaults.innerTexture,
+        closed: true,
+      } as const;
+    }
+    return { ...defaults, closed: false } as const;
+  };
+
+  const snapTileEdges = (ci: number, ri: number, padW: number, padH: number, size: number) => {
+    const xFloat = (ci - padW) * size;
+    const yFloat = (ri - padH) * size;
+    const xNextFloat = (ci + 1 - padW) * size;
+    const yNextFloat = (ri + 1 - padH) * size;
+    const x0 = Math.round(xFloat);
+    const y0 = Math.round(yFloat);
+    const x1 = Math.round(xNextFloat);
+    const y1 = Math.round(yNextFloat);
+    const w = x1 - x0;
+    const h = y1 - y0;
+    return { xFloat, yFloat, x0, y0, x1, y1, w, h };
+  };
+
+  // Ensure CLOSED/FLAGGED pool exists and size to approx visible tiles
+  useLayoutEffect(() => {
+    if (!closedLayerRef.current) return;
+    const layer = closedLayerRef.current;
+    const approxVisible = Math.ceil((windowWidth / (tileSize || 1) + 2) * (windowHeight / (tileSize || 1) + 2));
+    while (closedPoolRef.current.length < approxVisible) {
+      const outer = new PixiSprite();
+      outer.roundPixels = true;
+      outer.eventMode = 'none' as unknown as never;
+      outer.cullable = true;
+      const inner = new PixiSprite();
+      inner.roundPixels = true;
+      inner.eventMode = 'none' as unknown as never;
+      inner.cullable = true;
+      layer.addChild(outer);
+      layer.addChild(inner);
+      closedPoolRef.current.push({ outer, inner });
+    }
+    // hide extras (retain for reuse)
+    for (let i = approxVisible; i < closedPoolRef.current.length; i++) {
+      const p = closedPoolRef.current[i];
+      p.outer.visible = false;
+      p.inner.visible = false;
+    }
+  }, [windowWidth, windowHeight, tileSize]);
+
+  // Apply closed entries to pool each tiles update
+  useLayoutEffect(() => {
+    const pairs = closedPoolRef.current;
+    let used = 0;
+    for (let i = 0; i < (closedEntries?.length || 0) && used < pairs.length; i++) {
+      const e = closedEntries[i];
+      const p = pairs[used++];
+      // outer (snapped per-edge)
+      p.outer.texture = e.outerTexture;
+      p.outer.x = e.x0;
+      p.outer.y = e.y0;
+      p.outer.width = e.x1 - e.x0;
+      p.outer.height = e.y1 - e.y0;
+      p.outer.visible = true;
+      // inner with 5px padding
+      const pad = 5 * zoom;
+      const xi0 = Math.round(e.x0 + pad);
+      const yi0 = Math.round(e.y0 + pad);
+      const xi1 = Math.round(e.x1 - pad);
+      const yi1 = Math.round(e.y1 - pad);
+      p.inner.texture = e.innerTexture;
+      p.inner.x = xi0;
+      p.inner.y = yi0;
+      p.inner.width = Math.max(0, xi1 - xi0);
+      p.inner.height = Math.max(0, yi1 - yi0);
+      p.inner.visible = true;
+    }
+    for (let i = used; i < pairs.length; i++) {
+      pairs[i].outer.visible = false;
+      pairs[i].inner.visible = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom, tiles, tileSize, tilePaddingWidth, tilePaddingHeight, windowWidth, windowHeight]);
 
   // Memoize sprites creation using cached base sprites from useRef
-  const { outerSprites, innerSprites, boomSprites, flagSprites, textElements } = useMemo(() => {
-    const outerSpritesArr: JSX.Element[] = [];
-    const innerSpritesArr: JSX.Element[] = [];
-    const boomSpritesArr: JSX.Element[] = [];
-    const flagSpritesArr: JSX.Element[] = [];
-    const textElementsArr: JSX.Element[] = [];
+  const { outerSprites, innerSprites, boomSprites, flagSprites, textElements, closedEntries, bgKey } = useMemo(() => {
+    // Compute visible bounds once (avoid per-tile bounds check)
+    const totalRows = tiles.length;
+    const totalCols = tiles[0]?.length ?? 0;
+    const { startCol, endCol, startRow, endRow } = computeVisibleBounds(
+      totalRows,
+      totalCols,
+      tilePaddingWidth,
+      tilePaddingHeight,
+      windowWidth,
+      windowHeight,
+      tileSize,
+    );
+
+    if (startCol > endCol || startRow > endRow || !Number.isFinite(startCol + endCol + startRow + endRow)) {
+      return { outerSprites: [], innerSprites: [], boomSprites: [], flagSprites: [], textElements: [], closedEntries: [] };
+    }
+
+    // Preallocate arrays (upper bound)
+    const rowsCount = Math.max(0, (endRow - startRow + 1) | 0);
+    const colsCount = Math.max(0, (endCol - startCol + 1) | 0);
+    let maxVisibleTiles = rowsCount * colsCount;
+    if (!Number.isFinite(maxVisibleTiles) || maxVisibleTiles < 0) maxVisibleTiles = 0;
+    const outerSprites: JSX.Element[] = new Array(maxVisibleTiles);
+    const innerSprites: JSX.Element[] = new Array(maxVisibleTiles);
+    const boomSprites: JSX.Element[] = new Array(maxVisibleTiles);
+    const flagSprites: JSX.Element[] = new Array(maxVisibleTiles);
+    const textElements: JSX.Element[] = new Array(maxVisibleTiles);
+    const closedEntries: { x0: number; y0: number; x1: number; y1: number; outerTexture: Texture; innerTexture: Texture }[] = [];
+    let outerIdx = 0,
+      innerIdx = 0,
+      boomIdx = 0,
+      flagIdx = 0,
+      textIdx = 0;
+    let openedCount = 0;
+    let openedAccumulator = 0;
 
     const {
       outerCachedSprite: outerCache,
       innerCachedSprite: innerCache,
       boomCachedSprite: boomCache,
       flagCachedSprite: flagCache,
+      numberCachedSprite: numberCache,
     } = cachedSpritesRef.current;
 
-    for (let ri = 0; ri < tiles.length; ri++) {
-      for (let ci = 0; ci < tiles[ri].length; ci++) {
+    for (let ri = startRow; ri <= endRow; ri++) {
+      for (let ci = startCol; ci <= endCol; ci++) {
+        const { xFloat, yFloat, x0, y0, x1, y1, w, h } = snapTileEdges(ci, ri, tilePaddingWidth, tilePaddingHeight, tileSize);
         const content = tiles[ri][ci];
-        const x = (ci - tilePaddingWidth) * tileSize;
-        const y = (ri - tilePaddingHeight) * tileSize;
-        if (x < -tileSize || y < -tileSize || x > windowWidth + tileSize || y > windowHeight + tileSize) continue;
-        const tileKey = `${ri}-${ci}-${tileSize}`;
+        const { typeKeyBase } = makeNumericKeys(ri, ci, tileSize);
 
-        // Select textures based on tile content
-        let outerTexture = textures.get(`${tileColors.outer[2][0]}-${tileColors.outer[2][1]}-${tileSize}`);
-        let innerTexture = textures.get(`${tileColors.inner[2][0]}-${tileColors.inner[2][1]}-${tileSize}`);
-        if (['C', 'F'].includes(content[0])) {
-          const isEven = content.slice(-1) === '0' ? 0 : 1;
-          outerTexture = textures.get(`${tileColors.outer[isEven][0]}-${tileColors.outer[isEven][1]}-${tileSize}`);
-          innerTexture = textures.get(`${tileColors.inner[isEven][0]}-${tileColors.inner[isEven][1]}-${tileSize}`);
+        // Select textures based on tile content with bounds-safe defaults
+        const defaultTextures = {
+          outerTexture: textures.get(`${outer[2][0]}-${outer[2][1]}-${tileSize}`),
+          innerTexture: textures.get(`${inner[2][0]}-${inner[2][1]}-${tileSize}`),
+        } as const;
+        const { outerTexture, innerTexture, closed } = getTileTexturesForContent(content, defaultTextures);
+
+        // opened tiles accumulator for bgKey
+        if (!closed) {
+          openedCount++;
+          const hash = ((ri * 4099) ^ (ci * 131)) >>> 0;
+          const head = typeof content === 'number' ? content : content.charCodeAt ? content.charCodeAt(0) : 0;
+          openedAccumulator = (openedAccumulator + hash + (head | 0)) >>> 0;
         }
 
         // Outer sprite
         if (outerTexture) {
-          const outerKey = `${outerTexture.textureCacheIds || outerTexture}-${tileSize}`;
-          let baseOuter = outerCache.get(outerKey);
-          if (!baseOuter) {
-            baseOuter = (
-              <Sprite
-                cullable={true}
-                scale={0.1}
-                eventMode="none"
-                texture={outerTexture}
-                width={tileSize}
-                height={tileSize}
-                cacheAsBitmapResolution={0.0001}
-              />
-            );
-            outerCache.set(outerKey, baseOuter);
+          const outerKey = `${outerTexture.baseTexture.uid}-${tileSize}`;
+          const baseOuter = outerCache.get(outerKey) ?? <Sprite cullable={false} roundPixels={true} eventMode="none" texture={outerTexture} />;
+          outerCache.set(outerKey, baseOuter);
+          if (closed) {
+            // pooled path
+          } else {
+            const bw = outerTexture.width || 1;
+            const bh = outerTexture.height || 1;
+            outerSprites[outerIdx++] = cloneElement(baseOuter, {
+              key: typeKeyBase + 0,
+              x: x0,
+              y: y0,
+              scale: { x: w / bw, y: h / bh },
+            });
           }
-          outerSpritesArr.push(cloneElement(baseOuter, { key: `outer-${tileKey}`, x, y }));
         }
 
         // Inner sprite
         if (innerTexture) {
-          const innerKey = `${innerTexture.textureCacheIds || innerTexture}-${tileSize}`;
-          let baseInner = innerCache.get(innerKey);
-          if (!baseInner) {
-            const size = tileSize - 10 * zoom;
-            baseInner = (
-              <Sprite
-                cullable={true}
-                scale={0.1}
-                eventMode="none"
-                texture={innerTexture}
-                width={size}
-                height={size}
-                cacheAsBitmapResolution={0.001}
-              />
-            );
-            innerCache.set(innerKey, baseInner);
+          const innerKey = `${innerTexture.baseTexture.uid}-${tileSize}`;
+          // Inner padding: 5px on each side scaled by zoom, then snapped per-edge
+          const pad = 5 * zoom;
+          const xi0 = Math.round(xFloat + pad);
+          const yi0 = Math.round(yFloat + pad);
+          const xi1 = Math.round(x0 + w - pad);
+          const yi1 = Math.round(y0 + h - pad);
+          const iw = Math.max(0, xi1 - xi0);
+          const ih = Math.max(0, yi1 - yi0);
+          const baseInner = innerCache.get(innerKey) ?? <Sprite cullable={false} roundPixels={true} eventMode="none" texture={innerTexture} />;
+          innerCache.set(innerKey, baseInner);
+          if (closed) {
+            closedEntries.push({ x0, y0, x1, y1, outerTexture: outerTexture!, innerTexture: innerTexture! });
+          } else {
+            const bw = innerTexture.width || 1;
+            const bh = innerTexture.height || 1;
+            innerSprites[innerIdx++] = cloneElement(baseInner, {
+              key: typeKeyBase + 1,
+              x: xi0,
+              y: yi0,
+              scale: { x: iw / bw, y: ih / bh },
+            }); // snapped inner
           }
-          innerSpritesArr.push(cloneElement(baseInner, { key: `inner-${tileKey}`, x: x + 5 * zoom, y: y + 5 * zoom }));
         }
 
         // Boom sprite
-        if (content === 'B') {
+        if (content === TileContent.BOOM) {
           const boomKey = `boom-${tileSize}`;
-          let baseBoom = boomCache.get(boomKey);
-          if (!baseBoom) {
-            baseBoom = (
-              <Sprite
-                cullable={true}
-                scale={0.1}
-                eventMode="none"
-                texture={textures.get('boom')}
-                width={tileSize}
-                height={tileSize}
-                cacheAsBitmapResolution={0.1}
-              />
-            );
-            boomCache.set(boomKey, baseBoom);
-          }
-          boomSpritesArr.push(cloneElement(baseBoom, { key: `boom-${tileKey}`, x, y }));
+          const baseBoom = boomCache.get(boomKey) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={textures.get('boom')} />;
+          boomCache.set(boomKey, baseBoom);
+          const boomTex = textures.get('boom');
+          const bw = boomTex?.width || 1;
+          const bh = boomTex?.height || 1;
+          boomSprites[boomIdx++] = cloneElement(baseBoom, {
+            key: typeKeyBase + 2,
+            x: x0,
+            y: y0,
+            scale: { x: w / bw, y: h / bh },
+          });
         }
 
         // Flag sprite
-        if (content[0] === 'F') {
+        if (content[0] === TileContent.FLAGGED) {
           const flagIndex = content[1];
           const flagKey = `flag-${flagIndex}-${tileSize}`;
-          let baseFlag = flagCache.get(flagKey);
-          if (!baseFlag) {
-            baseFlag = (
-              <Sprite
-                cullable={true}
-                eventMode="none"
-                texture={textures.get(`flag-${flagIndex}`)}
-                anchor={0.5}
-                scale={0.1}
-                width={tileSize}
-                height={tileSize}
-                cacheAsBitmapResolution={0.1}
-              />
-            );
-            flagCache.set(flagKey, baseFlag);
-          }
-          flagSpritesArr.push(cloneElement(baseFlag, { key: `flag-${tileKey}`, x: x + tileSize / 2, y: y + tileSize / 2 }));
+          const baseFlag = flagCache.get(flagKey) ?? (
+            <Sprite cullable={true} roundPixels={true} eventMode="none" texture={textures.get(`flag-${flagIndex}`)} anchor={0.5} />
+          );
+          flagCache.set(flagKey, baseFlag);
+          const flagTex = textures.get(`flag-${flagIndex}`);
+          const fbw = flagTex?.width || 1;
+          const fbh = flagTex?.height || 1;
+          flagSprites[flagIdx++] = cloneElement(baseFlag, {
+            key: typeKeyBase + 3,
+            x: Math.round((x0 + x1) / 2),
+            y: Math.round((y0 + y1) / 2),
+            scale: { x: w / fbw, y: h / fbh },
+          });
         }
 
-        // Text elements
-        const num = parseInt(content);
-        if (num > 0) {
-          textElementsArr.push(
-            <Text
-              key={`text-${tileKey}`}
-              text={content}
-              x={x + tileSize / 2}
-              y={y + tileSize / 2}
-              resolution={0.5}
-              anchor={0.5}
-              style={cachedTextStyles[num - 1]}
-              cacheAsBitmapResolution={0.001}
-            />,
-          );
+        // Number sprite elements
+        if (+content > 0) {
+          const num = +content;
+          const tex = numberTextures.get(num);
+          if (tex) {
+            const keyNum = `num-${num}-${tileSize}`;
+            const baseNum = numberCache.get(keyNum) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={tex} anchor={0.5} />;
+            numberCache.set(keyNum, baseNum);
+            const nbw = tex.width || 1;
+            const nbh = tex.height || 1;
+            textElements[textIdx++] = cloneElement(baseNum, {
+              key: typeKeyBase + 4,
+              x: Math.round((x0 + x1) / 2),
+              y: Math.round((y0 + y1) / 2),
+              scale: { x: w / nbw, y: h / nbh },
+            });
+          }
         }
       }
     }
+    const bgKey = `${tileSize}-${openedCount}-${openedAccumulator}`;
     return {
-      outerSprites: outerSpritesArr,
-      innerSprites: innerSpritesArr,
-      boomSprites: boomSpritesArr,
-      flagSprites: flagSpritesArr,
-      textElements: textElementsArr,
+      outerSprites: outerSprites.slice(0, outerIdx),
+      innerSprites: innerSprites.slice(0, innerIdx),
+      boomSprites: boomSprites.slice(0, boomIdx),
+      flagSprites: flagSprites.slice(0, flagIdx),
+      textElements: textElements.slice(0, textIdx),
+      closedEntries,
+      bgKey,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles]);
 
-  if (!textures.size || !cachedTextStyles) return null;
+  if (!textures.size || !numberTextures.size) return null;
   return (
     <Stage
       id="Tilemap"
@@ -305,18 +467,24 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       height={windowHeight}
       options={{
         backgroundColor: 0x808080,
-        resolution: isMoving ? 0.3 : 0.8,
+        resolution: 1,
         antialias: false,
         powerPreference: 'high-performance',
         autoDensity: false,
+        preserveDrawingBuffer: false,
+        clearBeforeRender: true,
+        sharedTicker: true,
       }}
     >
-      <Container name={'container'} sortableChildren={false} eventMode="none" cacheAsBitmap={!isMoving && zoom !== innerZoom}>
-        {outerSprites}
-        {innerSprites}
+      <Container name={'container'} sortableChildren={false} eventMode="none" cacheAsBitmap={false} cullable={true}>
+        <Container name={'background'} eventMode="none" cacheAsBitmap={true} key={`bg-${bgKey}`}>
+          {outerSprites}
+          {innerSprites}
+        </Container>
+        <Container name={'closed-layer'} ref={closedLayerRef} eventMode="none" sortableChildren={false} />
+        {textElements}
         {boomSprites}
         {flagSprites}
-        {textElements}
       </Container>
     </Stage>
   );

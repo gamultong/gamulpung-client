@@ -17,20 +17,14 @@ type CanvasDashboardProps = {
 
 export default function CanvasDashboard({ tileSize, renderRange, maxTileCount }: CanvasDashboardProps) {
   const zoomScale = 1.5;
-  const { zoom, setZoom, originX: cursorOriginX, originY: cursorOriginY } = useCursorStore();
+  const { zoom, zoomDown, zoomUp, originX: cursorOriginX, originY: cursorOriginY } = useCursorStore();
   const { windowWidth: w, windowHeight: h } = useScreenSize();
   const { x: clickX, y: clickY } = useClickStore();
 
   const checkMaxTileCount = () => (w * renderRange) / (tileSize / zoomScale) + (h * renderRange) / (tileSize / zoomScale) > maxTileCount;
   const [bottomToggle, setBottomToggle] = useState(true);
   const toggleBottom = () => setBottomToggle(!bottomToggle);
-
-  const moreZoom = () => {
-    if (!(zoom * zoomScale > 1.7)) setZoom(zoom * zoomScale);
-  };
-  const lessZoom = () => {
-    if (!(zoom / zoomScale < 0.15 || checkMaxTileCount())) setZoom(zoom / zoomScale);
-  };
+  const lessZoom = () => !checkMaxTileCount() && zoomDown();
 
   return (
     <div className={S.dashboard}>
@@ -59,7 +53,7 @@ export default function CanvasDashboard({ tileSize, renderRange, maxTileCount }:
               </p>
               <div className={S.buttons}>
                 <button onPointerDown={lessZoom}>-</button>
-                <button onPointerDown={moreZoom}>+</button>
+                <button onPointerDown={zoomUp}>+</button>
               </div>
             </div>
           </>

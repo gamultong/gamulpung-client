@@ -16,24 +16,16 @@ export default function useScreenSize() {
 
   useEffect(() => {
     // Window resize event handler
-    if (typeof window === 'undefined') {
-      return;
-    }
-    setWindowSize({
-      windowWidth: window.innerWidth * magnification,
-      windowHeight: window.innerHeight * magnification,
-    });
-
+    if (typeof window === 'undefined') return;
     const handleResize = () => {
-      setWindowSize({
-        windowWidth: window.innerWidth * magnification,
-        windowHeight: window.innerHeight * magnification,
-      });
+      const windowWidth = window.innerWidth * magnification;
+      const windowHeight = window.innerHeight * magnification;
+      setWindowSize({ windowWidth, windowHeight });
     };
 
+    handleResize(); // Set initial size
     // resize event listener registration
     window.addEventListener('resize', handleResize);
-
     // Event listener removal when the component is unmounted
     return () => window.removeEventListener('resize', handleResize);
   }, []);

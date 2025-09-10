@@ -20,18 +20,15 @@ const useWebSocketStore = create<WebSocketState>(set => ({
     socket.onmessage = event => set({ message: event.data });
   },
   disconnect: () => {
-    set(state => {
-      state.socket?.close();
-      return { socket: null, isOpen: false };
-    });
+    const { socket } = useWebSocketStore.getState();
+    socket?.close();
+    set({ socket: null, isOpen: false });
   },
   sendMessage: (message: string) => {
     if (!message) return;
-    set(state => {
-      if (!state.isOpen) return {};
-      state.socket?.send(message);
-      return {};
-    });
+    const { socket, isOpen } = useWebSocketStore.getState();
+    if (isOpen && socket) socket.send(message);
+    // Removed unnecessary set({}) that was causing infinite loops
   },
 }));
 

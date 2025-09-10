@@ -14,8 +14,7 @@ export default function ScoreBoard() {
     <div className={S.scoreboard}>
       <div className={S.toggle} onPointerDown={toggleTop}>
         <span>RANKING</span>
-        {!topToggle && <DownArrowSVG />}
-        {topToggle && <UpArrowSVG />}
+        {topToggle ? <DownArrowSVG /> : <UpArrowSVG />}
       </div>
       {topToggle && (
         <div className={S.scoreList}>
