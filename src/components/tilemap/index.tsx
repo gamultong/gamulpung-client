@@ -173,6 +173,50 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileSize]);
 
+  // --------------------- Helper functions (pure) ---------------------
+  const computeVisibleBounds = (totalRows: number, totalCols: number, padW: number, padH: number, viewW: number, viewH: number, size: number) => {
+    const startCol = Math.max(0, Math.ceil(padW - 1));
+    const endCol = Math.min(totalCols - 1, Math.floor(padW + (viewW + size) / (size || 1)));
+    const startRow = Math.max(0, Math.ceil(padH - 1));
+    const endRow = Math.min(totalRows - 1, Math.floor(padH + (viewH + size) / (size || 1)));
+    return { startCol, endCol, startRow, endRow };
+  };
+
+  const makeNumericKeys = (ri: number, ci: number, size: number) => {
+    const tileKeyNum = ((ri * 131071 + ci) * 131 + (size | 0)) >>> 0;
+    const typeKeyBase = (tileKeyNum * 10) >>> 0;
+    return { tileKeyNum, typeKeyBase };
+  };
+
+  const isClosedOrFlag = (c: string | number) => c === TileContent.CLOSED || c === TileContent.FLAGGED;
+
+  const getTileTexturesForContent = (content: string | number, defaults: { outerTexture?: Texture; innerTexture?: Texture }) => {
+    const head0 = (typeof content === 'string' ? content[0] : content) as string | number;
+    if (isClosedOrFlag(head0)) {
+      const isEven = +String(content).slice(-1) % 2;
+      return {
+        outerTexture: textures.get(`${outer[isEven][0]}-${outer[isEven][1]}-${tileSize}`) || defaults.outerTexture,
+        innerTexture: textures.get(`${inner[isEven][0]}-${inner[isEven][1]}-${tileSize}`) || defaults.innerTexture,
+        closed: true,
+      } as const;
+    }
+    return { ...defaults, closed: false } as const;
+  };
+
+  const snapTileEdges = (ci: number, ri: number, padW: number, padH: number, size: number) => {
+    const xFloat = (ci - padW) * size;
+    const yFloat = (ri - padH) * size;
+    const xNextFloat = (ci + 1 - padW) * size;
+    const yNextFloat = (ri + 1 - padH) * size;
+    const x0 = Math.round(xFloat);
+    const y0 = Math.round(yFloat);
+    const x1 = Math.round(xNextFloat);
+    const y1 = Math.round(yNextFloat);
+    const w = x1 - x0;
+    const h = y1 - y0;
+    return { xFloat, yFloat, x0, y0, x1, y1, w, h };
+  };
+
   // Ensure CLOSED/FLAGGED pool exists and size to approx visible tiles
   useLayoutEffect(() => {
     if (!closedLayerRef.current) return;
@@ -238,10 +282,15 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     // Compute visible bounds once (avoid per-tile bounds check)
     const totalRows = tiles.length;
     const totalCols = tiles[0]?.length ?? 0;
-    const startCol = Math.max(0, Math.ceil(tilePaddingWidth - 1));
-    const endCol = Math.min(totalCols - 1, Math.floor(tilePaddingWidth + (windowWidth + tileSize) / (tileSize || 1)));
-    const startRow = Math.max(0, Math.ceil(tilePaddingHeight - 1));
-    const endRow = Math.min(totalRows - 1, Math.floor(tilePaddingHeight + (windowHeight + tileSize) / (tileSize || 1)));
+    const { startCol, endCol, startRow, endRow } = computeVisibleBounds(
+      totalRows,
+      totalCols,
+      tilePaddingWidth,
+      tilePaddingHeight,
+      windowWidth,
+      windowHeight,
+      tileSize,
+    );
 
     if (startCol > endCol || startRow > endRow || !Number.isFinite(startCol + endCol + startRow + endRow)) {
       return { outerSprites: [], innerSprites: [], boomSprites: [], flagSprites: [], textElements: [], closedEntries: [] };
@@ -276,35 +325,19 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
     for (let ri = startRow; ri <= endRow; ri++) {
       for (let ci = startCol; ci <= endCol; ci++) {
-        // Fractional tile sizes can cause seams if each tile rounds independently.
-        // Snap to an integer grid per edge and derive width/height from neighbors.
-        const xFloat = (ci - tilePaddingWidth) * tileSize;
-        const yFloat = (ri - tilePaddingHeight) * tileSize;
-        const xNextFloat = (ci + 1 - tilePaddingWidth) * tileSize;
-        const yNextFloat = (ri + 1 - tilePaddingHeight) * tileSize;
-        const x0 = Math.round(xFloat);
-        const y0 = Math.round(yFloat);
-        const x1 = Math.round(xNextFloat);
-        const y1 = Math.round(yNextFloat);
-        const w = x1 - x0;
-        const h = y1 - y0;
+        const { xFloat, yFloat, x0, y0, x1, y1, w, h } = snapTileEdges(ci, ri, tilePaddingWidth, tilePaddingHeight, tileSize);
         const content = tiles[ri][ci];
-        // numeric keys to avoid per-tile template strings and GC
-        const tileKeyNum = ((ri * 131071 + ci) * 131 + (tileSize | 0)) >>> 0;
-        const typeKeyBase = (tileKeyNum * 10) >>> 0;
+        const { typeKeyBase } = makeNumericKeys(ri, ci, tileSize);
 
         // Select textures based on tile content with bounds-safe defaults
-        let outerTexture = textures.get(`${outer[2][0]}-${outer[2][1]}-${tileSize}`);
-        let innerTexture = textures.get(`${inner[2][0]}-${inner[2][1]}-${tileSize}`);
-        const head0 = content[0] as string | number;
-        const isClosedOrFlag = head0 === TileContent.CLOSED || head0 === TileContent.FLAGGED;
-        if (isClosedOrFlag) {
-          const isEven = +content.slice(-1) % 2;
-          outerTexture = textures.get(`${outer[isEven][0]}-${outer[isEven][1]}-${tileSize}`);
-          innerTexture = textures.get(`${inner[isEven][0]}-${inner[isEven][1]}-${tileSize}`);
-        }
+        const defaultTextures = {
+          outerTexture: textures.get(`${outer[2][0]}-${outer[2][1]}-${tileSize}`),
+          innerTexture: textures.get(`${inner[2][0]}-${inner[2][1]}-${tileSize}`),
+        } as const;
+        const { outerTexture, innerTexture, closed } = getTileTexturesForContent(content, defaultTextures);
+
         // opened tiles accumulator for bgKey
-        if (!isClosedOrFlag) {
+        if (!closed) {
           openedCount++;
           const hash = ((ri * 4099) ^ (ci * 131)) >>> 0;
           const head = typeof content === 'number' ? content : content.charCodeAt ? content.charCodeAt(0) : 0;
@@ -316,7 +349,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           const outerKey = `${outerTexture.baseTexture.uid}-${tileSize}`;
           const baseOuter = outerCache.get(outerKey) ?? <Sprite cullable={false} roundPixels={true} eventMode="none" texture={outerTexture} />;
           outerCache.set(outerKey, baseOuter);
-          if ([TileContent.CLOSED, TileContent.FLAGGED].some(t => t === content[0])) {
+          if (closed) {
             // pooled path
           } else {
             const bw = outerTexture.width || 1;
@@ -337,13 +370,13 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           const pad = 5 * zoom;
           const xi0 = Math.round(xFloat + pad);
           const yi0 = Math.round(yFloat + pad);
-          const xi1 = Math.round(xNextFloat - pad);
-          const yi1 = Math.round(yNextFloat - pad);
+          const xi1 = Math.round(x0 + w - pad);
+          const yi1 = Math.round(y0 + h - pad);
           const iw = Math.max(0, xi1 - xi0);
           const ih = Math.max(0, yi1 - yi0);
           const baseInner = innerCache.get(innerKey) ?? <Sprite cullable={false} roundPixels={true} eventMode="none" texture={innerTexture} />;
           innerCache.set(innerKey, baseInner);
-          if ([TileContent.CLOSED, TileContent.FLAGGED].some(t => t === content[0])) {
+          if (closed) {
             closedEntries.push({ x0, y0, x1, y1, outerTexture: outerTexture!, innerTexture: innerTexture! });
           } else {
             const bw = innerTexture.width || 1;
