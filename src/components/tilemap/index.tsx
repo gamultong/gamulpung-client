@@ -6,7 +6,7 @@ import Paths from '@/assets/paths.json';
 import { useCursorStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
 import { TileContent } from '@/types';
-import { fillCtxAndPath as fillPathInCtx, makePath2d } from '@/utils';
+import { fillCtxAndPath as fillPathInCtx, makePath2d, hexToRgb, lerp } from '@/utils';
 
 interface TilemapProps {
   tiles: string[][];
@@ -16,9 +16,9 @@ interface TilemapProps {
   className?: string;
 }
 
+const CURSOR_COLORS = ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'];
 export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePaddingHeight, className }: TilemapProps) {
   // constants
-  const CURSOR_COLORS = useMemo(() => ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'], []);
   const { flagPaths, tileColors, countColors, boomPaths } = Paths;
   const { outer, inner } = tileColors;
 
@@ -51,7 +51,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     const textureCache = cachedTexturesRef.current;
 
     const createTileTexture = (color1: string, color2: string) => {
-      const key = `${color1}-${color2}-${tileSize}`;
+      const key = `${color1}${color2}${tileSize}`;
       if (textureCache.has(key)) return textureCache.get(key);
 
       const tempCanvas = document.createElement('canvas');
@@ -59,17 +59,6 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       tempCanvas.width = tempCanvas.height = tileMinializedSize;
       const ctx = getContext(tempCanvas);
       if (!ctx) return;
-
-      const hexToRgb = (hex: string) => {
-        const normalized = hex.replace('#', '');
-        const bigint = parseInt(normalized, 16);
-        const r = (bigint >> 16) & 255;
-        const g = (bigint >> 8) & 255;
-        const b = bigint & 255;
-        return { r, g, b };
-      };
-
-      const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
 
       const c1 = hexToRgb(color1);
       const c2 = hexToRgb(color2);
@@ -139,7 +128,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       flagTexture.baseTexture.mipmap = MIPMAP_MODES.OFF;
       flagTexture.baseTexture.setSize(tileSize, tileSize);
 
-      textureCache.set(`flag-${i}`, flagTexture);
+      textureCache.set(`flag${i}`, flagTexture);
     }
     return textureCache;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -195,8 +184,8 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     if (isClosedOrFlag(head0)) {
       const isEven = +String(content).slice(-1) % 2;
       return {
-        outerTexture: textures.get(`${outer[isEven][0]}-${outer[isEven][1]}-${tileSize}`) || defaults.outerTexture,
-        innerTexture: textures.get(`${inner[isEven][0]}-${inner[isEven][1]}-${tileSize}`) || defaults.innerTexture,
+        outerTexture: textures.get(`${outer[isEven][0]}${outer[isEven][1]}${tileSize}`) || defaults.outerTexture,
+        innerTexture: textures.get(`${inner[isEven][0]}${inner[isEven][1]}${tileSize}`) || defaults.innerTexture,
         closed: true,
       } as const;
     }
@@ -208,13 +197,13 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     const yFloat = (ri - padH) * size;
     const xNextFloat = (ci + 1 - padW) * size;
     const yNextFloat = (ri + 1 - padH) * size;
-    const x0 = Math.round(xFloat);
-    const y0 = Math.round(yFloat);
-    const x1 = Math.round(xNextFloat);
-    const y1 = Math.round(yNextFloat);
-    const w = x1 - x0;
-    const h = y1 - y0;
-    return { xFloat, yFloat, x0, y0, x1, y1, w, h };
+    const startX = Math.round(xFloat);
+    const startY = Math.round(yFloat);
+    const endX = Math.round(xNextFloat);
+    const endY = Math.round(yNextFloat);
+    const w = endX - startX;
+    const h = endY - startY;
+    return { xFloat, yFloat, startX, startY, endX, endY, w, h };
   };
 
   // Ensure CLOSED/FLAGGED pool exists and size to approx visible tiles
@@ -245,43 +234,42 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
   // Apply closed entries to pool each tiles update
   useLayoutEffect(() => {
-    const pairs = closedPoolRef.current;
+    const closedList = closedPoolRef.current;
     let used = 0;
-    for (let i = 0; i < (closedEntries?.length || 0) && used < pairs.length; i++) {
-      const e = closedEntries[i];
-      const p = pairs[used++];
+    for (; used < closedEntries.length && used < closedList.length; used++) {
+      const { outerTexture, innerTexture, startX, startY, endX, endY } = closedEntries[used];
+      const closed = closedList[used];
       // outer (snapped per-edge)
-      p.outer.texture = e.outerTexture;
-      p.outer.x = e.x0;
-      p.outer.y = e.y0;
-      p.outer.width = e.x1 - e.x0;
-      p.outer.height = e.y1 - e.y0;
-      p.outer.visible = true;
+      closed.outer.texture = outerTexture;
+      closed.outer.x = startX;
+      closed.outer.y = startY;
+      closed.outer.width = closed.outer.height = tileSize;
       // inner with 5px padding
       const pad = 5 * zoom;
-      const xi0 = Math.round(e.x0 + pad);
-      const yi0 = Math.round(e.y0 + pad);
-      const xi1 = Math.round(e.x1 - pad);
-      const yi1 = Math.round(e.y1 - pad);
-      p.inner.texture = e.innerTexture;
-      p.inner.x = xi0;
-      p.inner.y = yi0;
-      p.inner.width = Math.max(0, xi1 - xi0);
-      p.inner.height = Math.max(0, yi1 - yi0);
-      p.inner.visible = true;
+      const startXFloat = Math.round(startX + pad);
+      const startYFloat = Math.round(startY + pad);
+      const endXFloat = Math.round(endX - pad);
+      const endYFloat = Math.round(endY - pad);
+      closed.inner.texture = innerTexture;
+      closed.inner.x = startXFloat;
+      closed.inner.y = startYFloat;
+      closed.inner.width = Math.max(0, endXFloat - startXFloat);
+      closed.inner.height = Math.max(0, endYFloat - startYFloat);
+
+      closed.outer.visible = closed.inner.visible = true;
     }
-    for (let i = used; i < pairs.length; i++) {
-      pairs[i].outer.visible = false;
-      pairs[i].inner.visible = false;
-    }
+    for (; used < closedList.length; used++) closedList[used].outer.visible = closedList[used].inner.visible = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoom, tiles, tileSize, tilePaddingWidth, tilePaddingHeight, windowWidth, windowHeight]);
+  }, [tiles]);
 
   // Memoize sprites creation using cached base sprites from useRef
   const { outerSprites, innerSprites, boomSprites, flagSprites, textElements, closedEntries, bgKey } = useMemo(() => {
+    const emptySprites = { outerSprites: [], innerSprites: [], boomSprites: [], flagSprites: [], textElements: [], closedEntries: [], bgKey: '' };
     // Compute visible bounds once (avoid per-tile bounds check)
     const totalRows = tiles.length;
-    const totalCols = tiles[0]?.length ?? 0;
+    if (totalRows === 0) return emptySprites;
+    const totalCols = tiles[0].length;
+    if (totalCols === 0) return emptySprites;
     const { startCol, endCol, startRow, endRow } = computeVisibleBounds(
       totalRows,
       totalCols,
@@ -292,9 +280,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       tileSize,
     );
 
-    if (startCol > endCol || startRow > endRow || !Number.isFinite(startCol + endCol + startRow + endRow)) {
-      return { outerSprites: [], innerSprites: [], boomSprites: [], flagSprites: [], textElements: [], closedEntries: [] };
-    }
+    if (startCol > endCol || startRow > endRow || !Number.isFinite(startCol + endCol + startRow + endRow)) return emptySprites;
 
     // Preallocate arrays (upper bound)
     const rowsCount = Math.max(0, (endRow - startRow + 1) | 0);
@@ -306,14 +292,9 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     const boomSprites: JSX.Element[] = new Array(maxVisibleTiles);
     const flagSprites: JSX.Element[] = new Array(maxVisibleTiles);
     const textElements: JSX.Element[] = new Array(maxVisibleTiles);
-    const closedEntries: { x0: number; y0: number; x1: number; y1: number; outerTexture: Texture; innerTexture: Texture }[] = [];
-    let outerIdx = 0,
-      innerIdx = 0,
-      boomIdx = 0,
-      flagIdx = 0,
-      textIdx = 0;
-    let openedCount = 0;
-    let openedAccumulator = 0;
+    const closedEntries: { startX: number; startY: number; endX: number; endY: number; outerTexture: Texture; innerTexture: Texture }[] = [];
+    let [outerIdx, innerIdx, boomIdx, flagIdx, textIdx] = [0, 0, 0, 0, 0];
+    let [openedCount, openedAccumulator] = [0, 0];
 
     const {
       outerCachedSprite: outerCache,
@@ -325,14 +306,14 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
     for (let ri = startRow; ri <= endRow; ri++) {
       for (let ci = startCol; ci <= endCol; ci++) {
-        const { xFloat, yFloat, x0, y0, x1, y1, w, h } = snapTileEdges(ci, ri, tilePaddingWidth, tilePaddingHeight, tileSize);
+        const { xFloat, yFloat, startX, startY, endX, endY, w, h } = snapTileEdges(ci, ri, tilePaddingWidth, tilePaddingHeight, tileSize);
         const content = tiles[ri][ci];
         const { typeKeyBase } = makeNumericKeys(ri, ci, tileSize);
 
         // Select textures based on tile content with bounds-safe defaults
         const defaultTextures = {
-          outerTexture: textures.get(`${outer[2][0]}-${outer[2][1]}-${tileSize}`),
-          innerTexture: textures.get(`${inner[2][0]}-${inner[2][1]}-${tileSize}`),
+          outerTexture: textures.get(`${outer[2][0]}${outer[2][1]}${tileSize}`),
+          innerTexture: textures.get(`${inner[2][0]}${inner[2][1]}${tileSize}`),
         } as const;
         const { outerTexture, innerTexture, closed } = getTileTexturesForContent(content, defaultTextures);
 
@@ -340,89 +321,67 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         if (!closed) {
           openedCount++;
           const hash = ((ri * 4099) ^ (ci * 131)) >>> 0;
-          const head = typeof content === 'number' ? content : content.charCodeAt ? content.charCodeAt(0) : 0;
+          const head = +content[0];
           openedAccumulator = (openedAccumulator + hash + (head | 0)) >>> 0;
         }
 
         // Outer sprite
         if (outerTexture) {
-          const outerKey = `${outerTexture.baseTexture.uid}-${tileSize}`;
+          const outerKey = `${outerTexture.baseTexture.uid}${tileSize}`;
           const baseOuter = outerCache.get(outerKey) ?? <Sprite cullable={false} roundPixels={true} eventMode="none" texture={outerTexture} />;
           outerCache.set(outerKey, baseOuter);
-          if (closed) {
-            // pooled path
-          } else {
-            const bw = outerTexture.width || 1;
-            const bh = outerTexture.height || 1;
-            outerSprites[outerIdx++] = cloneElement(baseOuter, {
-              key: typeKeyBase + 0,
-              x: x0,
-              y: y0,
-              scale: { x: w / bw, y: h / bh },
-            });
+          if (!closed) {
+            const { width, height } = outerTexture;
+            const scale = { x: w / width, y: h / height };
+            outerSprites[outerIdx++] = cloneElement(baseOuter, { key: typeKeyBase, x: startX, y: startY, scale });
           }
         }
 
         // Inner sprite
         if (innerTexture) {
-          const innerKey = `${innerTexture.baseTexture.uid}-${tileSize}`;
+          const innerKey = `${innerTexture.baseTexture.uid}${tileSize}`;
           // Inner padding: 5px on each side scaled by zoom, then snapped per-edge
           const pad = 5 * zoom;
-          const xi0 = Math.round(xFloat + pad);
-          const yi0 = Math.round(yFloat + pad);
-          const xi1 = Math.round(x0 + w - pad);
-          const yi1 = Math.round(y0 + h - pad);
-          const iw = Math.max(0, xi1 - xi0);
-          const ih = Math.max(0, yi1 - yi0);
+          const startXFloat = Math.round(xFloat + pad);
+          const startYFloat = Math.round(yFloat + pad);
+          const endXFloat = Math.round(startX + w - pad);
+          const endYFloat = Math.round(startY + h - pad);
+          const iw = Math.max(0, endXFloat - startXFloat);
+          const ih = Math.max(0, endYFloat - startYFloat);
           const baseInner = innerCache.get(innerKey) ?? <Sprite cullable={false} roundPixels={true} eventMode="none" texture={innerTexture} />;
           innerCache.set(innerKey, baseInner);
-          if (closed) {
-            closedEntries.push({ x0, y0, x1, y1, outerTexture: outerTexture!, innerTexture: innerTexture! });
-          } else {
-            const bw = innerTexture.width || 1;
-            const bh = innerTexture.height || 1;
-            innerSprites[innerIdx++] = cloneElement(baseInner, {
-              key: typeKeyBase + 1,
-              x: xi0,
-              y: yi0,
-              scale: { x: iw / bw, y: ih / bh },
-            }); // snapped inner
-          }
+          if (!closed) {
+            const { width, height } = innerTexture;
+            const scale = { x: iw / width, y: ih / height };
+            innerSprites[innerIdx++] = cloneElement(baseInner, { key: typeKeyBase + 1, x: startXFloat, y: startYFloat, scale }); // snapped inner
+          } else closedEntries.push({ startX, startY, endX, endY, outerTexture: outerTexture!, innerTexture: innerTexture! });
         }
 
         // Boom sprite
         if (content === TileContent.BOOM) {
-          const boomKey = `boom-${tileSize}`;
+          const boomKey = `boom${tileSize}`;
           const baseBoom = boomCache.get(boomKey) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={textures.get('boom')} />;
           boomCache.set(boomKey, baseBoom);
           const boomTex = textures.get('boom');
-          const bw = boomTex?.width || 1;
-          const bh = boomTex?.height || 1;
-          boomSprites[boomIdx++] = cloneElement(baseBoom, {
-            key: typeKeyBase + 2,
-            x: x0,
-            y: y0,
-            scale: { x: w / bw, y: h / bh },
-          });
+          if (!boomTex) continue;
+          const { width, height } = boomTex;
+          const scale = { x: w / width, y: h / height };
+          boomSprites[boomIdx++] = cloneElement(baseBoom, { key: typeKeyBase + 2, x: startX, y: startY, scale });
         }
 
         // Flag sprite
         if (content[0] === TileContent.FLAGGED) {
           const flagIndex = content[1];
-          const flagKey = `flag-${flagIndex}-${tileSize}`;
+          const flagKey = `flag${flagIndex}${tileSize}`;
           const baseFlag = flagCache.get(flagKey) ?? (
-            <Sprite cullable={true} roundPixels={true} eventMode="none" texture={textures.get(`flag-${flagIndex}`)} anchor={0.5} />
+            <Sprite cullable={true} roundPixels={true} eventMode="none" texture={textures.get(`flag${flagIndex}`)} anchor={0.5} />
           );
           flagCache.set(flagKey, baseFlag);
-          const flagTex = textures.get(`flag-${flagIndex}`);
-          const fbw = flagTex?.width || 1;
-          const fbh = flagTex?.height || 1;
-          flagSprites[flagIdx++] = cloneElement(baseFlag, {
-            key: typeKeyBase + 3,
-            x: Math.round((x0 + x1) / 2),
-            y: Math.round((y0 + y1) / 2),
-            scale: { x: w / fbw, y: h / fbh },
-          });
+          const flagTex = textures.get(`flag${flagIndex}`);
+          if (!flagTex) continue;
+          const { width, height } = flagTex;
+          const scale = { x: w / width, y: h / height };
+          flagSprites[flagIdx++] = cloneElement(baseFlag, { key: typeKeyBase + 3, x: startX + tileSize / 2, y: startY + tileSize / 2, scale });
         }
 
         // Number sprite elements
@@ -430,22 +389,17 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
           const num = +content;
           const tex = numberTextures.get(num);
           if (tex) {
-            const keyNum = `num-${num}-${tileSize}`;
+            const keyNum = `num${num}${tileSize}`;
             const baseNum = numberCache.get(keyNum) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={tex} anchor={0.5} />;
             numberCache.set(keyNum, baseNum);
-            const nbw = tex.width || 1;
-            const nbh = tex.height || 1;
-            textElements[textIdx++] = cloneElement(baseNum, {
-              key: typeKeyBase + 4,
-              x: Math.round((x0 + x1) / 2),
-              y: Math.round((y0 + y1) / 2),
-              scale: { x: w / nbw, y: h / nbh },
-            });
+            const { width, height } = tex;
+            const scale = { x: w / width, y: h / height };
+            textElements[textIdx++] = cloneElement(baseNum, { key: typeKeyBase + 4, x: startX + tileSize / 2, y: startY + tileSize / 2, scale });
           }
         }
       }
     }
-    const bgKey = `${tileSize}-${openedCount}-${openedAccumulator}`;
+    const bgKey = `${tileSize}${openedCount}${openedAccumulator}`;
     return {
       outerSprites: outerSprites.slice(0, outerIdx),
       innerSprites: innerSprites.slice(0, innerIdx),
@@ -477,7 +431,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       }}
     >
       <Container name={'container'} sortableChildren={false} eventMode="none" cacheAsBitmap={false} cullable={true}>
-        <Container name={'background'} eventMode="none" cacheAsBitmap={true} key={`bg-${bgKey}`}>
+        <Container name={'background'} eventMode="none" cacheAsBitmap={true} key={`bg${bgKey}`}>
           {outerSprites}
           {innerSprites}
         </Container>
