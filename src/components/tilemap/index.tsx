@@ -183,11 +183,9 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     const head0 = (typeof content === 'string' ? content[0] : content) as string | number;
     if (isClosedOrFlag(head0)) {
       const isEven = +String(content).slice(-1) % 2;
-      return {
-        outerTexture: textures.get(`${outer[isEven][0]}${outer[isEven][1]}${tileSize}`) || defaults.outerTexture,
-        innerTexture: textures.get(`${inner[isEven][0]}${inner[isEven][1]}${tileSize}`) || defaults.innerTexture,
-        closed: true,
-      } as const;
+      const outerTexture = textures.get(`${outer[isEven][0]}${outer[isEven][1]}${tileSize}`) || defaults.outerTexture;
+      const innerTexture = textures.get(`${inner[isEven][0]}${inner[isEven][1]}${tileSize}`) || defaults.innerTexture;
+      return { outerTexture, innerTexture, closed: true } as const;
     }
     return { ...defaults, closed: false } as const;
   };
@@ -234,11 +232,11 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
   // Apply closed entries to pool each tiles update
   useLayoutEffect(() => {
-    const closedList = closedPoolRef.current;
+    const { current } = closedPoolRef;
     let used = 0;
-    for (; used < closedEntries.length && used < closedList.length; used++) {
+    for (; used < closedEntries.length && used < current.length; used++) {
       const { outerTexture, innerTexture, startX, startY, endX, endY } = closedEntries[used];
-      const closed = closedList[used];
+      const closed = current[used];
       // outer (snapped per-edge)
       closed.outer.texture = outerTexture;
       closed.outer.x = startX;
@@ -258,7 +256,7 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
       closed.outer.visible = closed.inner.visible = true;
     }
-    for (; used < closedList.length; used++) closedList[used].outer.visible = closedList[used].inner.visible = false;
+    for (; used < current.length; used++) current[used].outer.visible = current[used].inner.visible = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles]);
 
@@ -360,11 +358,11 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         // Boom sprite
         if (content === TileContent.BOOM) {
           const boomKey = `boom${tileSize}`;
-          const baseBoom = boomCache.get(boomKey) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={textures.get('boom')} />;
+          const texture = textures.get('boom');
+          const baseBoom = boomCache.get(boomKey) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={texture} />;
           boomCache.set(boomKey, baseBoom);
-          const boomTex = textures.get('boom');
-          if (!boomTex) continue;
-          const { width, height } = boomTex;
+          if (!texture) continue;
+          const { width, height } = texture;
           const scale = { x: w / width, y: h / height };
           boomSprites[boomIdx++] = cloneElement(baseBoom, { key: typeKeyBase + 2, x: startX, y: startY, scale });
         }
@@ -373,13 +371,11 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         if (content[0] === TileContent.FLAGGED) {
           const flagIndex = content[1];
           const flagKey = `flag${flagIndex}${tileSize}`;
-          const baseFlag = flagCache.get(flagKey) ?? (
-            <Sprite cullable={true} roundPixels={true} eventMode="none" texture={textures.get(`flag${flagIndex}`)} anchor={0.5} />
-          );
+          const texture = textures.get(`flag${flagIndex}`);
+          const baseFlag = flagCache.get(flagKey) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={texture} anchor={0.5} />;
           flagCache.set(flagKey, baseFlag);
-          const flagTex = textures.get(`flag${flagIndex}`);
-          if (!flagTex) continue;
-          const { width, height } = flagTex;
+          if (!texture) continue;
+          const { width, height } = texture;
           const scale = { x: w / width, y: h / height };
           flagSprites[flagIdx++] = cloneElement(baseFlag, { key: typeKeyBase + 3, x: startX + tileSize / 2, y: startY + tileSize / 2, scale });
         }
@@ -387,12 +383,12 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         // Number sprite elements
         if (+content > 0) {
           const num = +content;
-          const tex = numberTextures.get(num);
-          if (tex) {
+          const texture = numberTextures.get(num);
+          if (texture) {
             const keyNum = `num${num}${tileSize}`;
-            const baseNum = numberCache.get(keyNum) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={tex} anchor={0.5} />;
+            const baseNum = numberCache.get(keyNum) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={texture} anchor={0.5} />;
             numberCache.set(keyNum, baseNum);
-            const { width, height } = tex;
+            const { width, height } = texture;
             const scale = { x: w / width, y: h / height };
             textElements[textIdx++] = cloneElement(baseNum, { key: typeKeyBase + 4, x: startX + tileSize / 2, y: startY + tileSize / 2, scale });
           }
