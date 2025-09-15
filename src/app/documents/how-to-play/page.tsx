@@ -1,10 +1,6 @@
 import Document from '@/components/document';
+import f from '../files.json';
 
 export default function ContributeGuide() {
-  const files = ['rules_of_pung'];
-  return (
-    <>
-      <Document files={files} endpoint="How to Play" dir="play" />
-    </>
-  );
+  return <Document files={f['how-to-play']} endpoint="How to Play" dir="play" />;
 }

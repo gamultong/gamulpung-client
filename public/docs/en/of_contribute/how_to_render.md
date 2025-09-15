@@ -2,86 +2,109 @@
 
 This project uses three `<canvas>` elements to render graphics for animation efficiency:
 
-1. Tile Canvas: Renders tiles.
-2. Interaction Canvas: Draws your cursor's path and its range of interaction.
-3. Cursors Canvas: Draws user cursors.
+1. **Tile Canvas**: Renders the tiles.
+2. **Interaction Canvas**: Draws cursor paths and interaction ranges.
+3. **Cursor Canvas**: Draws the user cursor.
 
-## How to Make Frames
+---
 
-### 0. Initialize Start & End Points.
+## How to Generate Frames
 
-Initialize the tiles and set up the start & end point based on client's window size and tile size.
-They're calculated based on how many tiles can be rendered in client's window.
+### 0. Initialize Start and End Points
 
-More details can be found in play/page.tsx 
+Initialize the tiles based on the client's window size and initial tile size, and set the start and end points. This is calculated based on the number of tiles that can be rendered in the client's window. For more details, see `play/page.tsx`.
+
+---
+
 ### 1. Connect to the Server
 
-This hook attempts to reconnect the WebSocket using the specified URL and view dimensions whenever the WebSocket is not open and the start & end points are defined.
+This hook attempts to reconnect the WebSocket using the specified URL and view size if the WebSocket is not open and the start and end points are defined. For more details, see `play/page.tsx`.
 
-More details can be found in play/page.tsx 
-### 2. Get Tiles Data from Server Using WebSocket
+---
 
-To get the tiles and cursors data from the server, establish a WebSocket connection and listen for incoming messages. When a message is received, parse the data and update the state accordingly.
+### 2. Fetch Tile Data from the Server Using WebSocket
 
-Request all tiles based on start & end points and make all tiles to have dummy datas "??".
+Establish a WebSocket connection to fetch tile and cursor data from the server and listen for incoming messages. When a message is received, parse the data and update the state.
 
-Warning:
-- The `start_y` and `end_y` coordinates are reversed because the y-axis is inverted.
-- The received payload is destructured to extract specific values.
-- The extracted values are then used in the `replaceTiles` function to update the tiles.
+- Request all tiles based on the start and end points, initially setting all tiles to "??".
 
-If Requested tiles are delivered, replace dummy data tiles to delivered tiles.
+**Note**:
+- The `start_y` and `end_y` coordinates are inverted on the y-axis.
+Reason: The backend uses Cartesian coordinates, while the frontend is based on the browser's rendering direction.
 
-More details can be found in play/page.tsx 
-### 3. Caching Path2D Objects and a Font
+- Use the extracted values in the `replaceTiles` function to update the tiles.
+  1. Parse the received hex data string as follows:
+     0 - Open check, 1 - Mine check, 2 - Flag check, 3 ~ 4 Color (00 red, 01 yellow, 10 blue, 11 purple), 5 ~ 7 Number of mines (000 0, 010 2, ... 111 8)
+  2. Fill the next line if one line is complete.
+  3. If all lines are filled, invert the y-axis and replace only the requested tiles.
 
-To improve rendering performance, cache the Path2D objects and load the local font using fontface.load() function in Promise Object in states before rendering.
+When the requested tiles are delivered from the server, replace the dummy data tiles with the delivered tiles. For more details, see `play/page.tsx`.
 
-More details can be found in components/canvas/index.tsx 
-### 4. Render Tiles in Canvases
+---
 
-Once all properties are cached, set the loading state to `false` and render the tiles on the tile canvas. Rendering will depend on properties such as tile map, tile size, cursor positions, click position, color, and zoom.
+### 3. Path2D Object and Font Caching
 
-The tile canvas is rendered based on CanvasRenderingContext2D refer to Cached Path2D Objects.
-- Define Inner Coordinates: Set up the region where the gradient will be applied.
-- Create Gradient Objects: Use createLinearGradient to create and store gradient objects.
-- Add Colors: Assign start and end colors to each gradient using addColorStop.
-- Apply Gradient: Set the gradient as the fill style and render the tile using fill().
+Cache Path2D objects to improve rendering performance and use `fontface.load()` to load local fonts as a Promise object to prevent initial font application issues. For more details, see `components/canvas/index.tsx`.
 
-The interaction canvas is rendered based on the user's cursor position, pointer, and movement path.
-- Draw the Cursor: Render the user's cursor on the canvas.
-- Highlight the Clicked Tile: Draw a border around the clicked tile to provide visual feedback.
-- Draw the Path: If a path exists (paths.length > 0), draw the lines connecting each point, centered within tiles.
+---
 
-The cursor canvas is rendered based on other user cursors' position
-- Canvas Setup: Get the canvas for drawing other users' cursors.
-- Clear Previous Drawing: Use clearRect to clean the canvas.
-- Draw Cursors:
-  - Go through each cursor in the cursors array.
-  - Calculate the correct position for each cursor.
-  - Use the drawCursor function to draw the cursor with the right position and color.
+### 4. Render Tiles on Canvas
 
-More details can be found in components/canvas/index.tsx
-### 5. Update Canvases
+Once all properties are cached, set the loading state to `false` and render the tiles on the tile canvas. Rendering varies based on properties such as tile map, tile size, cursor position, click position, color, zoom, etc.
 
-Several events might trigger the need to update the canvas. Here's how to handle them:
+- **My Cursor Canvas**
+  A canvas used to simply display the client's cursor in the center of the client's screen.
 
-#### 5-1. When Client Cursor's Position Changes
+- **Tile Canvas**:
+  This canvas uses React-Pixi for graphics.
+  - Define internal coordinates: Set the area to apply the gradient.
+  - Tile Texture
+    1. Create tile texture: Create a virtual canvas to draw the vector path, then cache the canvas as a texture.
+    2. Cache tile texture: Retrieve the cached texture if the tile size changes.
+  - Tile Component
+    1. Create tile component: Render the created texture using PIXI.js's Sprite component.
+    2. Cache tile component: Clone the cached tile sprite.
+  - Rendering Optimization: Antialiasing is not used to smooth textures, and the resolution (quality) decreases when client movement is detected.
 
-Similar to how tiles were loaded previously, load the tiles based on the direction of movement. Push the tiles in the opposite direction of the movement, fill the empty spaces with "??", and then load and replace the tiles accordingly.
+- **Interaction Canvas**:
+  - Highlight clicked tile: Draw a border around the clicked tile to provide visual feedback.
+  - Draw client cursor path: If a path exists (`paths.length > 0`), draw a line connecting the centers of the tiles.
 
-Diagonal movements are handled similarly. When the cursor moves diagonally, load the tiles in the direction of the movement, push the tiles in the opposite direction, fill the empty spaces with "??", and then load and replace the tiles accordingly.
+- **Cursor Canvas**:
+  - Set up canvas: Get the canvas to draw other user cursors.
+  - Clear previous drawings: Use `clearRect` to clear the canvas.
+  - Draw cursors:
+    - Iterate through each cursor in the `cursors` array.
+    - Calculate the exact position of each cursor.
+    - Use the `drawCursor` function to draw the cursor with the correct position and color.
 
-And set start & end points, re-render all canvases based on cursor's position
+- **Canvas Animation Due to Client Movement (excluding less than 40%)**
+  - All canvases except my cursor canvas set a CSS transform effect towards the next path as the tile state changes with my cursor movement.
 
-#### 5-2. When Other Cursors' Status Changes
+For detailed code, see `components/canvas/index.tsx`.
 
-Re-render cursor canvas based on other cursors' position.
+---
 
-#### 5-3. When Any Tile Has Been Updated
+### 5. Update Canvas
 
-Replace that tile and Re-render all canvases.
+Update the canvas when the following events occur:
 
-#### 5-4. When Client Sets the Zoom Level
+#### 5-1. When the Client Cursor Position Changes
 
-And set start & end points, re-render all canvases based on cursor's position
+Load tiles in the direction of movement, similar to the previous tile loading method. Push tiles in the opposite direction and fill the empty space with "??", then load and replace the tiles.
+
+Diagonal movement is handled in the same way. Load tiles in the direction of movement, push tiles in the opposite direction, fill the empty space, and replace the tiles.
+
+Then set the start and end points and re-render all canvases based on the cursor position.
+
+#### 5-2. When the State of Other Cursors Changes
+
+Re-render the cursor canvas based on the position of other cursors.
+
+#### 5-3. When a Specific Tile is Updated
+
+Replace the tile and re-render all canvases. When replacing tiles, parse the hex value and apply it immediately without using dummy data like "??".
+
+#### 5-4. When the Client Adjusts the Tile Size
+
+Set the start and end points and re-render all canvases based on the cursor position.

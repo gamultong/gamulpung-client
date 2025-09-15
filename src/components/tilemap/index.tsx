@@ -1,17 +1,18 @@
 'use client';
-import { Container, Sprite, Stage, Text } from '@pixi/react';
-import { cloneElement, useMemo, useRef, useState } from 'react';
-import { Texture, TextStyle, SCALE_MODES } from 'pixi.js';
+import { Container, Sprite, Stage } from '@pixi/react';
+import { cloneElement, useLayoutEffect, useMemo, useRef } from 'react';
+import { Texture, SCALE_MODES, MIPMAP_MODES, WRAP_MODES, Container as PixiContainer, Sprite as PixiSprite } from 'pixi.js';
 import Paths from '@/assets/paths.json';
 import { useCursorStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
+import { TileContent } from '@/types';
+import { fillCtxAndPath as fillPathInCtx, makePath2d } from '@/utils';
 
 interface TilemapProps {
   tiles: string[][];
   tileSize: number;
   tilePaddingWidth: number;
   tilePaddingHeight: number;
-  isMoving: boolean;
   className?: string;
 }
 
@@ -27,16 +28,20 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
   const [innerZoom, setInnerZoom] = useState(zoom);
 
   // Generate textures for tiles, boom, and flags
-  const cachesRef = useRef({
-    outerCache: new Map<string, JSX.Element>(),
-    innerCache: new Map<string, JSX.Element>(),
-    boomCache: new Map<string, JSX.Element>(),
-    flagCache: new Map<string, JSX.Element>(),
+  const cachedSpritesRef = useRef({
+    outerCachedSprite: makeSpriteMap(),
+    innerCachedSprite: makeSpriteMap(),
+    boomCachedSprite: makeSpriteMap(),
+    flagCachedSprite: makeSpriteMap(),
+    numberCachedSprite: makeSpriteMap(),
   });
 
-  // Memoize textures creation
+  const getContext = (canvas: HTMLCanvasElement): CanvasRenderingContext2D =>
+    canvas.getContext('2d', { willReadFrequently: false, desynchronized: true })!;
+
+  // Memoize textures access/creation: create once and reuse from ref cache
   const textures = useMemo(() => {
-    const newTileTextures = new Map<string, Texture>();
+    const textureCache = cachedTexturesRef.current;
 
     const createTileTexture = (color0: string, color1: string) => {
       const key = `${color0}${color1}${tileSize}`;
@@ -65,8 +70,9 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
 
     // Boom texture
     const boomCanvas = document.createElement('canvas');
-    boomCanvas.width = boomCanvas.height = tileSize;
-    const boomCtx = boomCanvas.getContext('2d');
+    const boomMinimalized = 3;
+    boomCanvas.width = boomCanvas.height = tileSize / boomMinimalized;
+    const boomCtx = getContext(boomCanvas);
     if (boomCtx) {
       boomCtx.scale(zoom / 4, zoom / 4);
       const outer = new Path2D(boomPaths[1]);
@@ -82,8 +88,8 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
     // Flag textures
     for (let idx = 0; idx < 4; idx++) {
       const flagCanvas = document.createElement('canvas');
-      flagCanvas.width = flagCanvas.height = tileSize;
-      const flagCtx = flagCanvas.getContext('2d');
+      flagCanvas.width = flagCanvas.height = tileSize / flagMinimalized;
+      const flagCtx = getContext(flagCanvas);
       if (!flagCtx) continue;
       const flagGradient = flagCtx.createLinearGradient(36.5, 212.5, 36.5, 259);
       flagGradient.addColorStop(0, '#E8E8E8');
@@ -210,15 +216,21 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
         resolution: isMoving ? 0.5 : 0.8,
         antialias: false,
         powerPreference: 'high-performance',
-        autoDensity: true,
+        autoDensity: false,
+        preserveDrawingBuffer: false,
+        clearBeforeRender: true,
+        sharedTicker: true,
       }}
     >
-      <Container sortableChildren={false} interactiveChildren={false} cacheAsBitmap={!isMoving && zoom !== innerZoom}>
-        {outerSprites}
-        {innerSprites}
+      <Container name={'container'} sortableChildren={false} eventMode="none" cacheAsBitmap={false} cullable={true}>
+        <Container name={'background'} eventMode="none" cacheAsBitmap={true} key={`bg-${bgKey}`}>
+          {outerSprites}
+          {innerSprites}
+        </Container>
+        <Container name={'closed-layer'} ref={closedLayerRef} eventMode="none" sortableChildren={false} />
+        {textElements}
         {boomSprites}
         {flagSprites}
-        {textElements}
       </Container>
     </Stage>
   );
