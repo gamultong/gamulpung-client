@@ -2,7 +2,7 @@
 import { Container, Sprite, Stage } from '@pixi/react';
 import { cloneElement, useLayoutEffect, useMemo, useRef } from 'react';
 import { Texture, SCALE_MODES, MIPMAP_MODES, WRAP_MODES, Container as PixiContainer, Sprite as PixiSprite } from 'pixi.js';
-import Paths from '@/assets/paths.json';
+import RenderPaths from '@/assets/renderPaths.json';
 import { useCursorStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
 import { TileContent } from '@/types';
@@ -19,7 +19,7 @@ interface TilemapProps {
 const CURSOR_COLORS = ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'];
 export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePaddingHeight, className }: TilemapProps) {
   // constants
-  const { flagPaths, tileColors, countColors, boomPaths } = Paths;
+  const { flagPaths, tileColors, countColors, boomPaths } = RenderPaths;
   const { outer, inner } = tileColors;
 
   // stores

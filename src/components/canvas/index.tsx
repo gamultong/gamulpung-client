@@ -1,7 +1,7 @@
-'use client';
+﻿'use client';
 import S from './style.module.scss';
-import React, { useRef, useEffect, useState, useLayoutEffect, useCallback } from 'react';
-import Paths from '@/assets/paths.json';
+import React, { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
+import RenderPaths from '@/assets/renderPaths.json';
 
 import useScreenSize from '@/hooks/useScreenSize';
 import useClickStore from '@/store/clickStore';
@@ -58,7 +58,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const otherCursorPadding = 1 / (paddingTiles - 1); // padding for other cursors
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
   const [otherCursorPaddingWidth, otherCursorPaddingHeight] = [tilePaddingWidth * otherCursorPadding, tilePaddingHeight * otherCursorPadding];
-  const { boomPaths, cursorPaths, flagPaths, stunPaths } = Paths;
+  const { boomPaths, cursorPaths, flagPaths, stunPaths } = RenderPaths;
 
   /** stores */
   const { windowHeight, windowWidth } = useScreenSize();
@@ -251,18 +251,17 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       ctx.scale(adjustedScale, adjustedScale);
       ctx.fill(cachedVectorAssets?.cursor as Path2D);
       ctx.restore();
-      if (reviveAt > 0 && Date.now() < reviveAt && cachedVectorAssets?.stun) {
-        const stunScale = (zoom / 2) * scale;
-        ctx.save();
-        ctx.translate(x - tileSize / 2 / scale, y - tileSize / 2 / scale);
-        ctx.fillStyle = 'white';
-        ctx.strokeStyle = 'black';
-        ctx.scale(stunScale, stunScale);
-        for (const stunPath of cachedVectorAssets.stun) {
-          ctx.fill(stunPath);
-          ctx.stroke(stunPath);
-        }
-      }
+      if (!(reviveAt > 0 && Date.now() < reviveAt && cachedVectorAssets?.stun)) return;
+      const stunScale = (zoom / 2) * scale;
+      ctx.save();
+      ctx.translate(x - tileSize / 2 / scale, y - tileSize / 2 / scale);
+      ctx.fillStyle = 'white';
+      ctx.strokeStyle = 'black';
+      ctx.scale(stunScale, stunScale);
+      cachedVectorAssets.stun.forEach(stunPath => {
+        ctx.fill(stunPath);
+        ctx.stroke(stunPath);
+      });
       ctx.restore();
     },
     [zoom, tileSize, cachedVectorAssets],
@@ -433,18 +432,41 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     drawOtherUserCursors();
     drawOtherUserPointers(borderPixel);
 
-    if (paths.length > 0) {
-      const [x, y] = [paths[0].x + compensation.x, paths[0].y + compensation.y];
-      interactionCtx.beginPath();
-      interactionCtx.strokeStyle = 'black';
-      interactionCtx.lineWidth = tileSize / 6;
-      interactionCtx.moveTo(x * tileSize, y * tileSize); // start point
-      for (const vector of paths) {
-        const [lineX, lineY] = [(vector.x + compensation.x) * tileSize, (vector.y + compensation.y) * tileSize];
-        interactionCtx.lineTo(lineX, lineY);
+    // Draw Cursor Movement path
+    const scaledPoints = paths?.map(vec => {
+      const [vX, vY] = [vec.x + compensation.x, vec.y + compensation.y];
+      return { x: vX * tileSize, y: vY * tileSize };
+    });
+    if (scaledPoints.length <= 1) return;
+
+    interactionCtx.beginPath();
+    interactionCtx.strokeStyle = cursorColor;
+    interactionCtx.lineWidth = tileSize / 10;
+    interactionCtx.lineJoin = interactionCtx.lineCap = 'round';
+    interactionCtx.miterLimit = 2;
+
+    const baseCornerRadius = tileSize * 0.15;
+    interactionCtx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
+    for (let i = 1; i < scaledPoints.length - 1; i++) {
+      const [prev, curr, next] = [...scaledPoints.slice(i - 1, i + 2)];
+      const [prevVectorX, prevVectorY] = [curr.x - prev.x, curr.y - prev.y];
+      const [nextVectorX, nextVectorY] = [next.x - curr.x, next.y - curr.y];
+      const [len1, len2] = [Math.hypot(prevVectorX, prevVectorY), Math.hypot(nextVectorX, nextVectorY)];
+      const cross = prevVectorX * nextVectorY - prevVectorY * nextVectorX;
+      const dot = prevVectorX * nextVectorX + prevVectorY * nextVectorY;
+      // If angle is almost straight, do not round
+      const cosTheta = dot / (len1 * len2);
+      const isStraight = Math.abs(cross) < 1e-6 || cosTheta > 0.995;
+      if (isStraight) interactionCtx.lineTo(curr.x, curr.y);
+      else {
+        // Clamp radius to local segment lengths to avoid overshooting
+        const cornerRadius = Math.min(baseCornerRadius, 0.5 * Math.min(len1, len2));
+        interactionCtx.arcTo(curr.x, curr.y, next.x, next.y, cornerRadius);
       }
-      interactionCtx.stroke();
     }
+    const [beforeLast, last] = [...scaledPoints.slice(-2)];
+    interactionCtx.lineTo((last.x + beforeLast.x) / 2, (last.y + beforeLast.y) / 2);
+    interactionCtx.stroke();
   };
 
   /** Load Assets and Render (optimized) */
