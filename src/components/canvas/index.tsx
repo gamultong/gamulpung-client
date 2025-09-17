@@ -431,149 +431,129 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     drawPointer(interactionCtx, clickCanvasPosition.x, clickCanvasPosition.y, cursorColor, borderPixel);
     drawOtherUserCursors();
     drawOtherUserPointers(borderPixel);
+
     // Draw Cursor Movement path
-    if (paths.length > 0) {
-      interactionCtx.beginPath();
-      interactionCtx.strokeStyle = cursorColor;
-      interactionCtx.lineWidth = tileSize / 10;
-      interactionCtx.lineJoin = interactionCtx.lineCap = 'round';
-      interactionCtx.miterLimit = 2;
-      // Build path with rounded corners only at bends
-      const scaledPoints = paths.map(vector => {
-        const [vX, vY] = [vector.x + compensation.x + 0.5, vector.y + compensation.y + 0.5];
-        return { x: vX * tileSize, y: vY * tileSize };
-      });
+    const scaledPoints = paths?.map(vec => {
+      const [vX, vY] = [vec.x + compensation.x, vec.y + compensation.y];
+      return { x: vX * tileSize, y: vY * tileSize };
+    });
+    if (scaledPoints.length <= 1) return;
 
-      if (scaledPoints.length > 1) {
-        const baseCornerRadius = tileSize * 0.15;
-        interactionCtx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
-        for (let i = 1; i < scaledPoints.length - 1; i++) {
-          const [prev, curr, next] = [...scaledPoints.slice(i - 1, i + 2)];
-          const [prevVectorX, prevVectorY] = [curr.x - prev.x, curr.y - prev.y];
-          const [nextVectorX, nextVectorY] = [next.x - curr.x, next.y - curr.y];
-          const [len1, len2] = [Math.hypot(prevVectorX, prevVectorY), Math.hypot(nextVectorX, nextVectorY)];
-          const cross = prevVectorX * nextVectorY - prevVectorY * nextVectorX;
-          const dot = prevVectorX * nextVectorX + prevVectorY * nextVectorY;
-          // If angle is almost straight, do not round
-          const cosTheta = dot / (len1 * len2);
-          const isStraight = Math.abs(cross) < 1e-6 || cosTheta > 0.995;
-          if (isStraight) interactionCtx.lineTo(curr.x, curr.y);
-          else {
-            // Clamp radius to local segment lengths to avoid overshooting
-            const cornerRadius = Math.min(baseCornerRadius, 0.4 * Math.min(len1, len2));
-            interactionCtx.arcTo(curr.x, curr.y, next.x, next.y, cornerRadius);
-          }
-        }
-        const [beforeLast, last] = [...scaledPoints.slice(-2)];
-        interactionCtx.lineTo((last.x + beforeLast.x) / 2, (last.y + beforeLast.y) / 2);
+    interactionCtx.beginPath();
+    interactionCtx.strokeStyle = cursorColor;
+    interactionCtx.lineWidth = tileSize / 10;
+    interactionCtx.lineJoin = interactionCtx.lineCap = 'round';
+    interactionCtx.miterLimit = 2;
 
-        if (paths.length > 0) {
-          const [x, y] = [paths[0].x + compensation.x, paths[0].y + compensation.y];
-          interactionCtx.beginPath();
-          interactionCtx.strokeStyle = 'black';
-          interactionCtx.lineWidth = tileSize / 6;
-          interactionCtx.moveTo(x * tileSize, y * tileSize); // start point
-          for (const vector of paths) {
-            const [lineX, lineY] = [(vector.x + compensation.x) * tileSize, (vector.y + compensation.y) * tileSize];
-            interactionCtx.lineTo(lineX, lineY);
-          }
-          interactionCtx.stroke();
-        }
+    const baseCornerRadius = tileSize * 0.15;
+    interactionCtx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
+    for (let i = 1; i < scaledPoints.length - 1; i++) {
+      const [prev, curr, next] = [...scaledPoints.slice(i - 1, i + 2)];
+      const [prevVectorX, prevVectorY] = [curr.x - prev.x, curr.y - prev.y];
+      const [nextVectorX, nextVectorY] = [next.x - curr.x, next.y - curr.y];
+      const [len1, len2] = [Math.hypot(prevVectorX, prevVectorY), Math.hypot(nextVectorX, nextVectorY)];
+      const cross = prevVectorX * nextVectorY - prevVectorY * nextVectorX;
+      const dot = prevVectorX * nextVectorX + prevVectorY * nextVectorY;
+      // If angle is almost straight, do not round
+      const cosTheta = dot / (len1 * len2);
+      const isStraight = Math.abs(cross) < 1e-6 || cosTheta > 0.995;
+      if (isStraight) interactionCtx.lineTo(curr.x, curr.y);
+      else {
+        // Clamp radius to local segment lengths to avoid overshooting
+        const cornerRadius = Math.min(baseCornerRadius, 0.5 * Math.min(len1, len2));
+        interactionCtx.arcTo(curr.x, curr.y, next.x, next.y, cornerRadius);
       }
-
-      /** Load Assets and Render (optimized) */
-      useLayoutEffect(() => {
-        if (!isInitializing && tiles.length > 0) return;
-
-        // 폰트를 비동기로 로드하되, 실패해도 계속 진행
-        const loadFontOptional = async () => {
-          try {
-            const lotteriaChabFont = new FontFace(
-              'LOTTERIACHAB',
-              "url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2302@1.0/LOTTERIACHAB.woff2') format('woff2')",
-            );
-            await lotteriaChabFont.load();
-            document.fonts.add(lotteriaChabFont);
-          } catch {
-            console.warn('Font loading failed, using fallback font');
-          }
-        };
-
-        // 벡터 에셋은 즉시 생성 (폰트 로딩과 병렬)
-        const cursor = makePath2d(cursorPaths);
-        const stun = makePath2dFromArray(stunPaths);
-        const flag = { flag: makePath2d(flagPaths[0]), pole: makePath2d(flagPaths[1]) };
-        const boom = { inner: makePath2d(boomPaths[0]), outer: makePath2d(boomPaths[1]) };
-        setCachedVectorAssets({ cursor, stun, flag, boom });
-
-        // 폰트 로딩과 관계없이 초기화 완료
-        setIsInitializing(false);
-
-        // 폰트는 백그라운드에서 로드
-        loadFontOptional();
-
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [tiles, isInitializing]);
-
-      // Render Intreraction Objects
-      useEffect(() => {
-        if (!isInitializing) renderInteractionCanvas();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [cursorOriginX, cursorOriginY, startPoint, clickX, clickY, color, cursors]);
-
-      return (
-        <>
-          {isInitializing && (
-            <div className={S.loading}>
-              <h1>Assets Loading...</h1>
-              <div className={`${tiles.length < 1 ? S.loadingBar : S.loadComplete}`} />
-            </div>
-          )}
-          {!isInitializing && (
-            <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
-              <ChatComponent />
-              <Tilemap
-                className={S.canvas}
-                tilePaddingHeight={tilePaddingHeight}
-                tilePaddingWidth={tilePaddingWidth}
-                tileSize={tileSize}
-                tiles={tiles}
-              />
-              <canvas
-                className={S.canvas}
-                id="OtherCursors"
-                ref={canvasRefs.otherCursorsRef}
-                width={windowWidth * devicePixelRatio}
-                height={windowHeight * devicePixelRatio}
-              />
-              <canvas
-                className={S.canvas}
-                id="OtherPointer"
-                ref={canvasRefs.otherPointerRef}
-                width={windowWidth * devicePixelRatio}
-                height={windowHeight * devicePixelRatio}
-              />
-              <canvas
-                className={S.canvas}
-                id="MyCursor"
-                ref={canvasRefs.myCursorRef}
-                width={windowWidth * devicePixelRatio}
-                height={windowHeight * devicePixelRatio}
-              />
-              <canvas
-                className={S.canvas}
-                id="InteractionCanvas"
-                ref={canvasRefs.interactionCanvasRef}
-                width={windowWidth * devicePixelRatio}
-                height={windowHeight * devicePixelRatio}
-                onPointerDown={handleClick}
-              />
-            </div>
-          )}
-        </>
-      );
     }
+    const [beforeLast, last] = [...scaledPoints.slice(-2)];
+    interactionCtx.lineTo((last.x + beforeLast.x) / 2, (last.y + beforeLast.y) / 2);
+    interactionCtx.stroke();
   };
+
+  /** Load Assets and Render (optimized) */
+  useLayoutEffect(() => {
+    if (!isInitializing && tiles.length > 0) return;
+
+    // 폰트를 비동기로 로드하되, 실패해도 계속 진행
+    const loadFontOptional = async () => {
+      try {
+        const lotteriaChabFont = new FontFace(
+          'LOTTERIACHAB',
+          "url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2302@1.0/LOTTERIACHAB.woff2') format('woff2')",
+        );
+        await lotteriaChabFont.load();
+        document.fonts.add(lotteriaChabFont);
+      } catch {
+        console.warn('Font loading failed, using fallback font');
+      }
+    };
+
+    // 벡터 에셋은 즉시 생성 (폰트 로딩과 병렬)
+    const cursor = makePath2d(cursorPaths);
+    const stun = makePath2dFromArray(stunPaths);
+    const flag = { flag: makePath2d(flagPaths[0]), pole: makePath2d(flagPaths[1]) };
+    const boom = { inner: makePath2d(boomPaths[0]), outer: makePath2d(boomPaths[1]) };
+    setCachedVectorAssets({ cursor, stun, flag, boom });
+
+    // 폰트 로딩과 관계없이 초기화 완료
+    setIsInitializing(false);
+
+    // 폰트는 백그라운드에서 로드
+    loadFontOptional();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tiles, isInitializing]);
+
+  // Render Intreraction Objects
+  useEffect(() => {
+    if (!isInitializing) renderInteractionCanvas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cursorOriginX, cursorOriginY, startPoint, clickX, clickY, color, cursors]);
+
+  return (
+    <>
+      {isInitializing && (
+        <div className={S.loading}>
+          <h1>Assets Loading...</h1>
+          <div className={`${tiles.length < 1 ? S.loadingBar : S.loadComplete}`} />
+        </div>
+      )}
+      {!isInitializing && (
+        <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
+          <ChatComponent />
+          <Tilemap className={S.canvas} tilePaddingHeight={tilePaddingHeight} tilePaddingWidth={tilePaddingWidth} tileSize={tileSize} tiles={tiles} />
+          <canvas
+            className={S.canvas}
+            id="OtherCursors"
+            ref={canvasRefs.otherCursorsRef}
+            width={windowWidth * devicePixelRatio}
+            height={windowHeight * devicePixelRatio}
+          />
+          <canvas
+            className={S.canvas}
+            id="OtherPointer"
+            ref={canvasRefs.otherPointerRef}
+            width={windowWidth * devicePixelRatio}
+            height={windowHeight * devicePixelRatio}
+          />
+          <canvas
+            className={S.canvas}
+            id="MyCursor"
+            ref={canvasRefs.myCursorRef}
+            width={windowWidth * devicePixelRatio}
+            height={windowHeight * devicePixelRatio}
+          />
+          <canvas
+            className={S.canvas}
+            id="InteractionCanvas"
+            ref={canvasRefs.interactionCanvasRef}
+            width={windowWidth * devicePixelRatio}
+            height={windowHeight * devicePixelRatio}
+            onPointerDown={handleClick}
+          />
+        </div>
+      )}
+    </>
+  );
 };
 
 export default CanvasRenderComponent;
