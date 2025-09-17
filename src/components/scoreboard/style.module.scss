@@ -1,0 +1,63 @@
+@font-face {
+  font-family: 'GeekbleMalang2WOFF2';
+  src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2302_01@1.0/GeekbleMalang2WOFF2.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
+
+.scoreboard {
+  font-family: 'GeekbleMalang2WOFF2';
+  color: white;
+  font-size: 20px;
+  z-index: 1;
+  position: absolute;
+  right: 50px;
+  top: 80px;
+  width: 250px;
+  padding: 18px 25px;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background-color: rgba(0, 0, 0, 35%);
+
+  .scoreList {
+    width: 100%;
+    margin-top: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    .scoreItem {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      svg {
+        margin: 0;
+      }
+    }
+  }
+
+  .toggle {
+    width: 100%;
+    display: flex;
+    justify-content: left;
+    align-items: center;
+    padding-bottom: 16px;
+    border-bottom: 3px solid white;
+    cursor: pointer;
+    svg {
+      margin-left: 170px;
+    }
+  }
+  svg {
+    position: absolute;
+    margin-left: -30px;
+  }
+  p {
+    margin-left: 20px;
+    width: 80%;
+    text-align: left;
+  }
+}

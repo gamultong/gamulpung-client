@@ -31,7 +31,7 @@ export default function TutorialStep() {
       {step !== -1 && (
         <div className={S.tutorial}>
           <div className={S.button} onClick={up}>
-            {step > 0 && <Pageupsvg />}{' '}
+            {step > 0 && <Pageupsvg />}
           </div>
           <div className={S.step}>
             <Image src={`${host}${data.gif}`} alt={data.gif} width={400} height={225} />
