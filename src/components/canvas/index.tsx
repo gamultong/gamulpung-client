@@ -525,7 +525,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       {!isInitializing && (
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
           <ChatComponent />
-          <Tilemap className={S.canvas} tilePaddingHeight={tilePaddingHeight} tilePaddingWidth={tilePaddingWidth} tileSize={tileSize} tiles={tiles} />
+          <Tilemap className={S.canvas} tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} tileSize={tileSize} tiles={tiles} />
           <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="MyCursor" ref={canvasRefs.myCursorRef} width={windowWidth} height={windowHeight} />
