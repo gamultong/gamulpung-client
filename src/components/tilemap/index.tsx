@@ -233,10 +233,10 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
   // Apply closed entries to pool each tiles update
   useLayoutEffect(() => {
     const { current } = closedPoolRef;
-    let used = 0;
-    for (; used < closedEntries.length && used < current.length; used++) {
-      const { outerTexture, innerTexture, startX, startY, endX, endY } = closedEntries[used];
-      const closed = current[used];
+    let usedIdx = 0;
+    while (usedIdx < closedEntries.length && usedIdx < current.length) {
+      const { outerTexture, innerTexture, startX, startY, endX, endY } = closedEntries[usedIdx];
+      const closed = current[usedIdx++];
       // outer (snapped per-edge)
       closed.outer.texture = outerTexture;
       closed.outer.x = startX;
@@ -248,15 +248,14 @@ export default function Tilemap({ tiles, tileSize, tilePaddingWidth, tilePadding
       const startYFloat = Math.round(startY + pad);
       const endXFloat = Math.round(endX - pad);
       const endYFloat = Math.round(endY - pad);
-      closed.inner.texture = innerTexture;
       closed.inner.x = startXFloat;
       closed.inner.y = startYFloat;
+      closed.inner.texture = innerTexture;
       closed.inner.width = Math.max(0, endXFloat - startXFloat);
       closed.inner.height = Math.max(0, endYFloat - startYFloat);
-
       closed.outer.visible = closed.inner.visible = true;
     }
-    for (; used < current.length; used++) current[used].outer.visible = current[used].inner.visible = false;
+    while (usedIdx < current.length) current[usedIdx].outer.visible = current[usedIdx++].inner.visible = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles]);
 
