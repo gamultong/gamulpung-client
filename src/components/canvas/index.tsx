@@ -244,12 +244,25 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const adjustedScale = zoom * scale;
       ctx.save();
       ctx.fillStyle = color;
-      // What if the cursor is rotating. Then the cursor will rotate.
-      if (!rotated) ctx.translate(x + tileSize / 8, y + tileSize / 8);
-      else {
-        ctx.translate(x + tileSize / 2, y + tileSize / 2);
-        ctx.rotate(rotated - Math.PI / 4);
-      }
+      ctx.translate(x, y);
+      if (scale === 1) {
+        // 8방향 커서 오프셋 계산 (원래 로직 유지하면서 최적화)
+        // up 0, rightup 1, right 2, rightdown 3, down 4, leftdown 5, left 6, leftup 7
+        const angle = (Math.round((rotated + Math.PI) / (Math.PI / 4)) + 2) % 8;
+
+        // 패턴 기반 동적 계산 (최적화)
+        const baseOffset = tileSize >> 1; // tileSize / 2
+        const extendedOffset = baseOffset * 3; // (tileSize * 3) / 2
+
+        // X축 오프셋: right(2)일 때만 3배, left(6)일 때만 0, 나머지는 기본값
+        // Y축 오프셋: down(4)일 때만 3배, 나머지는 기본값
+        const offsetX = angle === 2 ? extendedOffset : angle === 6 ? 0 : baseOffset;
+        const offsetY = angle === 4 ? extendedOffset : baseOffset;
+        ctx.translate(offsetX, offsetY);
+      } else ctx.translate(tileSize / 2, tileSize / 2);
+
+      ctx.rotate(rotated - Math.PI / 4);
+
       ctx.scale(adjustedScale, adjustedScale);
       ctx.fill(cachedVectorAssets!.cursor);
       ctx.restore();

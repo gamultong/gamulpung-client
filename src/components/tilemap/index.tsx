@@ -202,38 +202,28 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
 
   // Ensure CLOSED/FLAGGED pool exists and size to approx visible tiles
   useLayoutEffect(() => {
-    let rafId = 0;
-    const ensurePool = () => {
-      const layer = closedLayerRef.current;
-      if (!layer) {
-        rafId = requestAnimationFrame(ensurePool);
-        return;
-      }
-      const approxVisible = Math.ceil((windowWidth / (tileSize || 1) + 2) * (windowHeight / (tileSize || 1) + 2));
-      while (closedPoolRef.current.length < approxVisible) {
-        const outer = new PixiSprite();
-        outer.roundPixels = true;
-        outer.eventMode = 'none' as unknown as never;
-        outer.cullable = true;
-        const inner = new PixiSprite();
-        inner.roundPixels = true;
-        inner.eventMode = 'none' as unknown as never;
-        inner.cullable = true;
-        layer.addChild(outer);
-        layer.addChild(inner);
-        closedPoolRef.current.push({ outer, inner });
-      }
-      // hide extras (retain for reuse)
-      for (let i = approxVisible; i < closedPoolRef.current.length; i++) {
-        const p = closedPoolRef.current[i];
-        p.outer.visible = p.inner.visible = false;
-      }
-    };
-    ensurePool();
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-    };
-  }, [windowWidth, windowHeight, tileSize, tiles]);
+    if (!closedLayerRef.current) return;
+    const layer = closedLayerRef.current;
+    const approxVisible = Math.ceil((windowWidth / (tileSize || 1) + 2) * (windowHeight / (tileSize || 1) + 2));
+    while (closedPoolRef.current.length < approxVisible) {
+      const outer = new PixiSprite();
+      outer.roundPixels = true;
+      outer.eventMode = 'none' as unknown as never;
+      outer.cullable = true;
+      const inner = new PixiSprite();
+      inner.roundPixels = true;
+      inner.eventMode = 'none' as unknown as never;
+      inner.cullable = true;
+      layer.addChild(outer);
+      layer.addChild(inner);
+      closedPoolRef.current.push({ outer, inner });
+    }
+    // hide extras (retain for reuse)
+    for (let i = approxVisible; i < closedPoolRef.current.length; i++) {
+      const p = closedPoolRef.current[i];
+      p.outer.visible = p.inner.visible = false;
+    }
+  }, [windowWidth, windowHeight, tileSize]);
 
   // Apply closed entries to pool each tiles update
   useLayoutEffect(() => {
@@ -262,7 +252,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     }
     while (usedIdx < current.length) current[usedIdx].outer.visible = current[usedIdx++].inner.visible = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles, tileSize, zoom]);
+  }, [tiles]);
 
   // Memoize sprites creation using cached base sprites from useRef
   const { outerSprites, innerSprites, boomSprites, flagSprites, textElements, closedEntries, bgKey } = useMemo(() => {
