@@ -177,20 +177,18 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
 
   const getTileTexturesForContent = (content: string | number, defaults: { outerTexture?: Texture; innerTexture?: Texture }) => {
     const head0 = (typeof content === 'string' ? content[0] : content) as string | number;
-    if (isClosedOrFlag(head0)) {
-      const isEven = +String(content).slice(-1) % 2;
-      const outerTexture = textures.get(`${outer[isEven][0]}${outer[isEven][1]}${tileSize}`) || defaults.outerTexture;
-      const innerTexture = textures.get(`${inner[isEven][0]}${inner[isEven][1]}${tileSize}`) || defaults.innerTexture;
-      return { outerTexture, innerTexture, closed: true } as const;
-    }
-    return { ...defaults, closed: false } as const;
+    if (!isClosedOrFlag(head0)) return { ...defaults, closed: false } as const;
+    const isEven = +String(content).slice(-1) % 2;
+    const outerTexture = textures.get(`${outer[isEven][0]}${outer[isEven][1]}${tileSize}`) || defaults.outerTexture;
+    const innerTexture = textures.get(`${inner[isEven][0]}${inner[isEven][1]}${tileSize}`) || defaults.innerTexture;
+    return { outerTexture, innerTexture, closed: true } as const;
   };
 
   const snapTileEdges = (ci: number, ri: number, padW: number, padH: number, size: number) => {
     const xFloat = (ci - padW) * size;
     const yFloat = (ri - padH) * size;
-    const xNextFloat = (ci + 1 - padW) * size;
-    const yNextFloat = (ri + 1 - padH) * size;
+    const xNextFloat = xFloat + size;
+    const yNextFloat = yFloat + size;
     const startX = Math.round(xFloat);
     const startY = Math.round(yFloat);
     const endX = Math.round(xNextFloat);
@@ -296,18 +294,19 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
       numberCachedSprite: numberCache,
     } = cachedSpritesRef.current;
 
+    // Select textures based on tile content with bounds-safe defaults
+    const defaultTextures = {
+      outerTexture: textures.get(`${outer[2][0]}${outer[2][1]}${tileSize}`),
+      innerTexture: textures.get(`${inner[2][0]}${inner[2][1]}${tileSize}`),
+    } as const;
+    if (!defaultTextures.outerTexture || !defaultTextures.innerTexture) return emptySprites;
+
     for (let ri = startRow; ri <= endRow; ri++) {
       for (let ci = startCol; ci <= endCol; ci++) {
         const { xFloat, yFloat, startX, startY, endX, endY, w, h } = snapTileEdges(ci, ri, tilePadWidth, tilePadHeight, tileSize);
         const content = tiles[ri][ci];
-        const { typeKeyBase } = makeNumericKeys(ri, ci, tileSize);
-
-        // Select textures based on tile content with bounds-safe defaults
-        const defaultTextures = {
-          outerTexture: textures.get(`${outer[2][0]}${outer[2][1]}${tileSize}`),
-          innerTexture: textures.get(`${inner[2][0]}${inner[2][1]}${tileSize}`),
-        } as const;
         const { outerTexture, innerTexture, closed } = getTileTexturesForContent(content, defaultTextures);
+        const { typeKeyBase } = makeNumericKeys(ri, ci, tileSize);
 
         // opened tiles accumulator for bgKey
         if (!closed) {
@@ -397,7 +396,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
       bgKey,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles]);
+  }, [tiles, textures]);
 
   if (!textures.size || !numberTextures.size) return null;
   return (
