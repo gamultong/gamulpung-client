@@ -244,12 +244,47 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const adjustedScale = zoom * scale;
       ctx.save();
       ctx.fillStyle = color;
-      // What if the cursor is rotating. Then the cursor will rotate.
-      if (!rotated) ctx.translate(x + tileSize / 8, y + tileSize / 8);
-      else {
-        ctx.translate(x + tileSize / 2, y + tileSize / 2);
-        ctx.rotate(rotated - Math.PI / 4);
-      }
+      ctx.translate(x, y);
+      if (scale === 1) {
+        // 8방향 커서 오프셋 계산 (원래 로직 유지하면서 최적화)
+        // up 0, rightup 1, right 2, rightdown 3, down 4, leftdown 5, left 6, leftup 7
+        const angle = (Math.round((rotated + Math.PI) / (Math.PI / 4)) + 2) % 8;
+
+        // 상수 기반 오프셋 계산 (switch)
+        const baseOffset = tileSize >> 1; // tileSize / 2
+        const centerOffset = baseOffset >> 2;
+
+        switch (angle) {
+          case 0: // up
+            ctx.translate(baseOffset, centerOffset);
+            break;
+          case 1: // rightup
+            ctx.translate(tileSize - centerOffset, centerOffset);
+            break;
+          case 2: // right
+            ctx.translate(tileSize - centerOffset, baseOffset);
+            break;
+          case 3: // rightdown
+            ctx.translate(tileSize - centerOffset, tileSize - centerOffset);
+            break;
+          case 4: // down
+            ctx.translate(baseOffset, tileSize - centerOffset);
+            break;
+          case 5: // leftdown
+            ctx.translate(centerOffset, tileSize - centerOffset);
+            break;
+          case 6: // left
+            ctx.translate(centerOffset, baseOffset);
+            break;
+          case 7: // leftup
+            ctx.translate(centerOffset, centerOffset);
+            break;
+        }
+        // ctx.translate(offsetX, offsetY);
+      } else ctx.translate(tileSize / 2, tileSize / 2);
+
+      ctx.rotate(rotated - Math.PI / 4);
+
       ctx.scale(adjustedScale, adjustedScale);
       ctx.fill(cachedVectorAssets!.cursor);
       ctx.restore();
