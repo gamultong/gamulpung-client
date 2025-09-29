@@ -250,15 +250,37 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         // up 0, rightup 1, right 2, rightdown 3, down 4, leftdown 5, left 6, leftup 7
         const angle = (Math.round((rotated + Math.PI) / (Math.PI / 4)) + 2) % 8;
 
-        // 패턴 기반 동적 계산 (최적화)
+        // 상수 기반 오프셋 계산 (switch)
         const baseOffset = tileSize >> 1; // tileSize / 2
-        const extendedOffset = baseOffset * 3; // (tileSize * 3) / 2
+        const centerOffset = baseOffset >> 2;
 
-        // X축 오프셋: right(2)일 때만 3배, left(6)일 때만 0, 나머지는 기본값
-        // Y축 오프셋: down(4)일 때만 3배, 나머지는 기본값
-        const offsetX = angle === 2 ? extendedOffset : angle === 6 ? 0 : baseOffset;
-        const offsetY = angle === 4 ? extendedOffset : baseOffset;
-        ctx.translate(offsetX, offsetY);
+        switch (angle) {
+          case 0: // up
+            ctx.translate(baseOffset, centerOffset);
+            break;
+          case 1: // rightup
+            ctx.translate(tileSize - centerOffset, centerOffset);
+            break;
+          case 2: // right
+            ctx.translate(tileSize - centerOffset, baseOffset);
+            break;
+          case 3: // rightdown
+            ctx.translate(tileSize - centerOffset, tileSize - centerOffset);
+            break;
+          case 4: // down
+            ctx.translate(baseOffset, tileSize - centerOffset);
+            break;
+          case 5: // leftdown
+            ctx.translate(centerOffset, tileSize - centerOffset);
+            break;
+          case 6: // left
+            ctx.translate(centerOffset, baseOffset);
+            break;
+          case 7: // leftup
+            ctx.translate(centerOffset, centerOffset);
+            break;
+        }
+        // ctx.translate(offsetX, offsetY);
       } else ctx.translate(tileSize / 2, tileSize / 2);
 
       ctx.rotate(rotated - Math.PI / 4);
