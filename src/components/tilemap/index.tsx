@@ -142,10 +142,10 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
       ctx.clearRect(0, 0, size, size);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = `${Math.floor(size * 0.6)}px LOTTERIACHAB`;
-      ctx.fillStyle = String(countColors[n - 1]);
+      ctx.font = `${(size * 0.6) >>> 0}px LOTTERIACHAB`;
+      ctx.fillStyle = countColors[n - 1];
       ctx.imageSmoothingEnabled = false;
-      ctx.fillText(String(n), size / 2, size / 2);
+      ctx.fillText(`${n}`, size / 2, size / 2);
       const tex = Texture.from(canvas);
       tex.baseTexture.scaleMode = SCALE_MODES.NEAREST;
       tex.baseTexture.mipmap = MIPMAP_MODES.OFF;
@@ -161,9 +161,9 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
   // --------------------- Helper functions (pure) ---------------------
   const computeVisibleBounds = (totalRows: number, totalCols: number, padW: number, padH: number, viewW: number, viewH: number, size: number) => {
     const startCol = Math.max(0, Math.ceil(padW - 1));
-    const endCol = Math.min(totalCols - 1, Math.floor(padW + (viewW + size) / (size || 1)));
+    const endCol = Math.min(totalCols - 1, (padW + (viewW + size) / (size || 1)) >>> 0);
     const startRow = Math.max(0, Math.ceil(padH - 1));
-    const endRow = Math.min(totalRows - 1, Math.floor(padH + (viewH + size) / (size || 1)));
+    const endRow = Math.min(totalRows - 1, (padH + (viewH + size) / (size || 1)) >>> 0);
     return { startCol, endCol, startRow, endRow };
   };
 
@@ -173,11 +173,11 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     return { tileKeyNum, typeKeyBase };
   };
 
-  const isClosedOrFlag = (c: string | number) => c === TileContent.CLOSED || c === TileContent.FLAGGED;
+  const isClosedOrFlag = (c: string) => c === TileContent.CLOSED || c === TileContent.FLAGGED;
 
   const getTileTexturesForContent = (content: string | number, defaults: { outerTexture?: Texture; innerTexture?: Texture }) => {
-    const head0 = (typeof content === 'string' ? content[0] : content) as string | number;
-    if (!isClosedOrFlag(head0)) return { ...defaults, closed: false } as const;
+    const head0 = typeof content === 'string' ? content[0] : `${content}`;
+    if (!isClosedOrFlag(head0)) return { ...defaults, closed: false };
     const isEven = +String(content).slice(-1) % 2;
     const outerTexture = textures.get(`${outer[isEven][0]}${outer[isEven][1]}${tileSize}`) || defaults.outerTexture;
     const innerTexture = textures.get(`${inner[isEven][0]}${inner[isEven][1]}${tileSize}`) || defaults.innerTexture;
@@ -396,7 +396,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
       bgKey,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles, textures]);
+  }, [tiles]);
 
   if (!textures.size || !numberTextures.size) return null;
   return (
@@ -417,12 +417,14 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
       }}
     >
       <Container name={'container'} sortableChildren={false} eventMode="none" cacheAsBitmap={false} cullable={true}>
-        <Container name={'background'} eventMode="none" cacheAsBitmap={true} key={`bg${bgKey}`}>
-          {outerSprites}
-          {innerSprites}
-        </Container>
+        {textures.size > 0 && (
+          <Container name={'background'} eventMode="none" cacheAsBitmap={true} key={`bg${bgKey}`}>
+            {outerSprites}
+            {innerSprites}
+            {textElements}
+          </Container>
+        )}
         <Container name={'closed-layer'} ref={closedLayerRef} eventMode="none" sortableChildren={false} />
-        {textElements}
         {boomSprites}
         {flagSprites}
       </Container>

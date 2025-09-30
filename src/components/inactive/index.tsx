@@ -10,7 +10,7 @@ export default function Inactive({ time }: { time: number }) {
         <p>You`re stunned!</p>
         <p>Try Again After</p>
         <p>
-          {Math.floor(time / 60)}:{(time % 60).toString().padStart(2, '0')}
+          {(time / 60) >>> 0}:{(time % 60).toString().padStart(2, '0')}
         </p>
       </div>
       {/* <Link target="_blank" href={'https://forms.gle/Aub94WBWSKrwq9ud6'} className={S.ad}>

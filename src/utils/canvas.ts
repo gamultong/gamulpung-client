@@ -27,9 +27,9 @@ export const computeVisibleBounds = (
   size: number,
 ) => {
   const startCol = Math.max(0, Math.ceil(padW - 1));
-  const endCol = Math.min(totalCols - 1, Math.floor(padW + (viewW + size) / (size || 1)));
+  const endCol = Math.min(totalCols - 1, (padW + (viewW + size) / (size || 1)) >>> 0);
   const startRow = Math.max(0, Math.ceil(padH - 1));
-  const endRow = Math.min(totalRows - 1, Math.floor(padH + (viewH + size) / (size || 1)));
+  const endRow = Math.min(totalRows - 1, (padH + (viewH + size) / (size || 1)) >>> 0);
   return { startCol, endCol, startRow, endRow };
 };
 
