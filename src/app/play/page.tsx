@@ -581,7 +581,7 @@ export default function Play() {
         /** Fetches information of other users. */
         case YOU_DIED: {
           const { revive_at } = payload;
-          const leftTime = Math.floor((new Date(revive_at)?.getTime() - Date.now()) / 1000);
+          const leftTime = ((new Date(revive_at)?.getTime() - Date.now()) / 1000) >>> 0;
           setLeftReviveTime(leftTime);
           break;
         }
@@ -722,8 +722,8 @@ export default function Play() {
   useLayoutEffect(() => {
     const newTileSize = ORIGIN_TILE_SIZE * zoom;
     const [tilePaddingWidth, tilePaddingHeight] = [
-      Math.floor((windowWidth * RENDER_RANGE) / newTileSize / 2),
-      Math.floor((windowHeight * RENDER_RANGE) / newTileSize / 2),
+      ((windowWidth * RENDER_RANGE) / newTileSize / 2) >>> 0,
+      ((windowHeight * RENDER_RANGE) / newTileSize / 2) >>> 0,
     ];
 
     if (tilePaddingHeight < 1 || tilePaddingWidth < 1) return;
@@ -748,14 +748,14 @@ export default function Play() {
   useLayoutEffect(() => {
     if (!isInitialized) return;
     const newTileSize = ORIGIN_TILE_SIZE * zoom;
-    const tileVisibleWidth = Math.floor((windowWidth * RENDER_RANGE) / newTileSize);
-    const tileVisibleHeight = Math.floor((windowHeight * RENDER_RANGE) / newTileSize);
-    const [tilePaddingWidth, tilePaddingHeight] = [Math.floor(tileVisibleWidth / 2), Math.floor(tileVisibleHeight / 2)];
+    const tileVisibleWidth = ((windowWidth * RENDER_RANGE) / newTileSize) >>> 0;
+    const tileVisibleHeight = ((windowHeight * RENDER_RANGE) / newTileSize) >>> 0;
+    const [tilePaddingWidth, tilePaddingHeight] = [(tileVisibleWidth / 2) >>> 0, (tileVisibleHeight / 2) >>> 0];
     let [heightReductionLength, widthReductionLength] = [0, 0];
 
     /** For Extending */
     if (tileVisibleWidth > endPoint.x - startPoint.x + 1 || tileVisibleHeight > endPoint.y - startPoint.y + 1) {
-      heightReductionLength = Math.floor(tilePaddingHeight - (endPoint.y - startPoint.y) / 2);
+      heightReductionLength = (tilePaddingHeight - (endPoint.y - startPoint.y) / 2) >>> 0;
       widthReductionLength = Math.round(tilePaddingWidth - (endPoint.x - startPoint.x) / 2);
     } else {
       /** For reducing */
@@ -770,8 +770,8 @@ export default function Play() {
       Direction.ALL,
     );
     // setting view size
-    const width = Math.floor((windowWidth * RENDER_RANGE) / newTileSize);
-    const height = Math.floor((windowHeight * RENDER_RANGE) / newTileSize);
+    const width = ((windowWidth * RENDER_RANGE) / newTileSize) >>> 0;
+    const height = ((windowHeight * RENDER_RANGE) / newTileSize) >>> 0;
     const payload = { width, height };
     const body = JSON.stringify({ event: SendMessageEvent.SET_VIEW_SIZE, payload });
     sendMessage(body);
