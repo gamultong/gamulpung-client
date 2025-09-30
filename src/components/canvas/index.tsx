@@ -196,7 +196,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const [clickX, clickY] = [event.clientX - rectLeft, event.clientY - rectTop];
 
     // Transform canvas coordinate to relative and absolute coordinate
-    const [tileArrayX, tileArrayY] = [Math.floor(clickX / tileSize + tilePaddingWidth), Math.floor(clickY / tileSize + tilePaddingHeight)];
+    const [tileArrayX, tileArrayY] = [(clickX / tileSize + tilePaddingWidth) >>> 0, (clickY / tileSize + tilePaddingHeight) >>> 0];
     const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
     // Setting content of clicked tile
     const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
@@ -337,24 +337,20 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     [tileSize],
   );
 
-  const drawOtherUserPointers = useCallback(
-    (borderPixel: number) => {
-      const canvas = canvasRefs.otherPointerRef.current;
-      if (!canvas) return;
-      const otherPointerCtx = canvas.getContext('2d');
-      if (!otherPointerCtx) return;
+  const drawOtherUserPointers = (borderPixel: number) => {
+    const canvas = canvasRefs.otherPointerRef.current;
+    if (!canvas) return;
+    const otherPointerCtx = canvas.getContext('2d');
+    if (!otherPointerCtx) return;
 
-      setupHighResCanvas(canvas, otherPointerCtx);
-      otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
-      cursors.forEach(({ pointer, color }) => {
-        const { x, y } = pointer ?? { x: 0, y: 0 };
-        const [drawX, drawY] = [x - cursorOriginX + otherCursorPaddingWidth, y - cursorOriginY + otherCursorPaddingHeight];
-        drawPointer(otherPointerCtx, drawX * tileSize, drawY * tileSize, OtherCursorColors[color], borderPixel);
-      });
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cursors, cursorOriginX, cursorOriginY, tilePaddingWidth, tilePaddingHeight, tileSize, windowWidth, windowHeight, canvasRefs.otherPointerRef],
-  );
+    setupHighResCanvas(canvas, otherPointerCtx);
+    otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
+    cursors.forEach(({ pointer, color }) => {
+      const { x, y } = pointer ?? { x: 0, y: 0 };
+      const [drawX, drawY] = [x - cursorOriginX + otherCursorPaddingWidth, y - cursorOriginY + otherCursorPaddingHeight];
+      drawPointer(otherPointerCtx, drawX * tileSize, drawY * tileSize, OtherCursorColors[color], borderPixel);
+    });
+  };
 
   // Check if the other cursor is on the tile
   const checkIsOtherCursorOnTile = (tileX: number, tileY: number) => cursors.some(c => c.x === tileX + startPoint.x && c.y === tileY + startPoint.y);
