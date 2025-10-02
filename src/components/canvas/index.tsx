@@ -11,7 +11,7 @@ import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
 import { XYType, VectorImagesType, TileContent, SendMessageEvent } from '@/types';
 import { Click, ClickType, CursorColors, CursorDirections, OtherCursorColors } from '@/constants';
-import { makePath2d, makePath2dFromArray } from '@/utils';
+import { makePath2d as makePath2D, makePath2dFromArray } from '@/utils';
 
 class TileNode {
   x: number;
@@ -59,6 +59,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
   const [otherCursorPaddingWidth, otherCursorPaddingHeight] = [tilePaddingWidth * otherCursorPadding, tilePaddingHeight * otherCursorPadding];
   const { boomPaths, cursorPaths, flagPaths, stunPaths } = RenderPaths;
+  const halfTile = tileSize >> 1; // tileSize / 2
 
   /** stores */
   const { windowHeight, windowWidth } = useScreenSize();
@@ -70,10 +71,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   /** References */
   const movementInterval = useRef<NodeJS.Timeout | null>(null);
   const canvasRefs = {
-    interactionCanvasRef: useRef<HTMLCanvasElement>(null),
+    myCursorRef: useRef<HTMLCanvasElement>(null),
     otherCursorsRef: useRef<HTMLCanvasElement>(null),
     otherPointerRef: useRef<HTMLCanvasElement>(null),
-    myCursorRef: useRef<HTMLCanvasElement>(null),
+    interactionCanvasRef: useRef<HTMLCanvasElement>(null),
   };
 
   /** States */
@@ -85,22 +86,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   /** Cancel interval function for animation. */
   const cancelCurrentMovement = () => {
-    if (!movementInterval.current) return;
-    clearInterval(movementInterval.current);
+    clearInterval(movementInterval.current!);
     movementInterval.current = null;
-  };
-
-  /** 🚀 HIGH QUALITY: Setup high-resolution canvas */
-  const setupHighResCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-    canvas.style.width = rect.width + 'px';
-    canvas.style.height = rect.height + 'px';
-
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    if ('textRenderingOptimization' in ctx) ctx.textRenderingOptimization = 'optimizeQuality';
   };
 
   /** Prevent default right click event */
@@ -114,9 +101,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   }, []);
 
   /** Check if the tile has been opened */
-  const checkTileHasOpened = (tile: string) => {
-    const type = tile[0];
-    return type !== TileContent.CLOSED && type !== TileContent.FLAGGED;
+  const isOpened = (tile: string) => {
+    const { CLOSED, FLAGGED } = TileContent;
+    return tile[0] !== CLOSED && tile[0] !== FLAGGED;
   };
 
   /**
@@ -127,13 +114,15 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
    * */
   const moveCursor = (relativeTileX: number, relativetileY: number, clickedX: number, clickedY: number, type: ClickType) => {
     if (movementInterval.current) return;
-    let index = 0;
     const foundPaths = findPathUsingAStar(relativeX, relativeY, relativeTileX, relativetileY);
-    let currentPath = foundPaths[index];
-    if (currentPath?.x === undefined || currentPath?.y === undefined) return;
-    let [innerCursorX, innerCursorY] = [cursorOriginX, cursorOriginY];
+    let currentPath = foundPaths[0];
+    if (!currentPath) return;
+
+    // start moving
     setMovecost(foundPaths.length - 1);
     setCursorPosition(relativeTileX + startPoint.x, relativetileY + startPoint.y);
+    let index = 0;
+    let [innerCursorX, innerCursorY] = [cursorOriginX, cursorOriginY];
 
     const moveAnimation = (dx: number, dy: number) => {
       const { interactionCanvasRef: I_canvas, otherCursorsRef: C_canvas, otherPointerRef: P_canvas } = canvasRefs;
@@ -153,8 +142,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     };
 
     movementInterval.current = setInterval(() => {
+      // Done Move Cursor
       if (++index >= foundPaths.length) {
-        clickEvent(clickedX, clickedY, type);
+        clickEvent(clickedX, clickedY, type); // Send last click point.
         setPaths([]);
         cancelCurrentMovement();
         return;
@@ -162,7 +152,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const path = foundPaths[index];
       if (!path) return;
       const [dx, dy] = [Math.sign(path.x - currentPath.x), Math.sign(path.y - currentPath.y)];
-      setForwardPath({ x: dx, y: dy });
+      setForwardPath({ x: dx, y: dy }); // Set forward path for cursor rotation.
 
       // if the other cursor is on the tile, find another path
       // if (checkIsOtherCursorOnTile(dx + innerCursorX, dy + innerCursorY)) {
@@ -182,8 +172,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   };
 
   const clickEvent = (x: number, y: number, click_type: ClickType) => {
-    const position = { x, y };
-    const payload = { position, click_type };
+    const payload = { position: { x, y }, click_type };
     const body = JSON.stringify({ event: SendMessageEvent.POINTING, payload });
     sendMessage(body);
   };
@@ -202,9 +191,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
     setClickPosition(tileX, tileY, clickedTileContent);
 
-    const clickType: ClickType = event.buttons === 2 ? Click.SPECIAL_CLICK : Click.GENERAL_CLICK;
-    if (movementInterval.current) cancelCurrentMovement();
-
+    const clickType: ClickType = event.buttons & 0b10 ? Click.SPECIAL_CLICK : Click.GENERAL_CLICK;
+    // Prevent double click and heading another path when moving.
+    if (movementInterval.current) return;
     clickEvent(tileX, tileY, clickType);
 
     if (clickType === Click.SPECIAL_CLICK && !clickedTileContent.includes(TileContent.CLOSED)) return;
@@ -222,7 +211,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const x = currentX + dx;
       const y = currentY + dy;
       if (!tiles[y] || !tiles[y][x]) return false;
-      if (!checkTileHasOpened(tiles[y][x])) return false;
+      if (!isOpened(tiles[y][x])) return false;
       result = { x, y };
       return true;
     });
@@ -241,47 +230,44 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
    */
   const drawCursor = useCallback(
     (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, reviveAt: number = 0, rotated: number = 0, scale: number = 1) => {
-      const adjustedScale = zoom * scale;
       ctx.save();
-      ctx.fillStyle = color;
       ctx.translate(x, y);
+      ctx.fillStyle = color;
+      const adjustedScale = zoom * scale;
+      const centerOffset = halfTile >> 2;
+
+      // if the cursor is player's cursor.
       if (scale === 1) {
         // 8방향 커서 오프셋 계산 (원래 로직 유지하면서 최적화)
         // up 0, rightup 1, right 2, rightdown 3, down 4, leftdown 5, left 6, leftup 7
         const angle = (Math.round((rotated + Math.PI) / (Math.PI / 4)) + 2) % 8;
-
-        // 상수 기반 오프셋 계산 (switch)
-        const baseOffset = tileSize >> 1; // tileSize / 2
-        const centerOffset = baseOffset >> 2;
-
         switch (angle) {
           case 0: // up
-            ctx.translate(baseOffset, centerOffset);
+            ctx.translate(halfTile, centerOffset);
             break;
           case 1: // rightup
             ctx.translate(tileSize - centerOffset, centerOffset);
             break;
           case 2: // right
-            ctx.translate(tileSize - centerOffset, baseOffset);
+            ctx.translate(tileSize - centerOffset, halfTile);
             break;
           case 3: // rightdown
             ctx.translate(tileSize - centerOffset, tileSize - centerOffset);
             break;
           case 4: // down
-            ctx.translate(baseOffset, tileSize - centerOffset);
+            ctx.translate(halfTile, tileSize - centerOffset);
             break;
           case 5: // leftdown
             ctx.translate(centerOffset, tileSize - centerOffset);
             break;
           case 6: // left
-            ctx.translate(centerOffset, baseOffset);
+            ctx.translate(centerOffset, halfTile);
             break;
           case 7: // leftup
             ctx.translate(centerOffset, centerOffset);
             break;
         }
-        // ctx.translate(offsetX, offsetY);
-      } else ctx.translate(tileSize / 2, tileSize / 2);
+      } else ctx.translate(halfTile, halfTile);
 
       ctx.rotate(rotated - Math.PI / 4);
 
@@ -289,9 +275,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       ctx.fill(cachedVectorAssets!.cursor);
       ctx.restore();
       if (!(reviveAt > 0 && Date.now() < reviveAt && cachedVectorAssets?.stun)) return;
-      const stunScale = zoom / 2;
+      const stunScale = zoom >> 1;
       ctx.save();
-      ctx.translate(x - tileSize / 2, y - tileSize / 2);
+      ctx.translate(x - halfTile, y - halfTile);
       ctx.fillStyle = 'white';
       ctx.strokeStyle = 'black';
       ctx.scale(stunScale, stunScale);
@@ -311,15 +297,12 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const otherCursorsCtx = canvas.getContext('2d');
     if (!otherCursorsCtx) return;
 
-    // 🚀 HIGH QUALITY: Setup high-resolution rendering
-    setupHighResCanvas(canvas, otherCursorsCtx);
     otherCursorsCtx.clearRect(0, 0, windowWidth, windowHeight);
     cursors.forEach(cursor => {
       const { x, y, color, revive_at } = cursor;
       const { x: pointerX, y: pointerY } = cursor?.pointer ?? { x, y };
       const [drawX, drawY] = [x - cursorOriginX + otherCursorPaddingWidth, y - cursorOriginY + otherCursorPaddingHeight];
-      const [distanceX, distanceY] = [x - pointerX, y - pointerY];
-      const rotate = distanceX !== 0 || distanceY !== 0 ? Math.atan2(distanceY, distanceX) : 0;
+      const rotate = Math.atan2(x - pointerX, y - pointerY);
       drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CursorColors[color], revive_at, rotate);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -328,22 +311,21 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const drawPointer = useCallback(
     (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, border: number) => {
       if (!ctx) return;
+      const half = border >> 1;
       ctx.beginPath();
       ctx.strokeStyle = color;
       ctx.lineWidth = border;
-      ctx.strokeRect(x + border / 2, y + border / 2, tileSize - border, tileSize - border);
+      ctx.strokeRect(x + half, y + half, tileSize - border, tileSize - border);
       ctx.closePath();
     },
     [tileSize],
   );
 
   const drawOtherUserPointers = (borderPixel: number) => {
-    const canvas = canvasRefs.otherPointerRef.current;
-    if (!canvas) return;
+    const canvas = canvasRefs.otherPointerRef.current!;
     const otherPointerCtx = canvas.getContext('2d');
     if (!otherPointerCtx) return;
 
-    setupHighResCanvas(canvas, otherPointerCtx);
     otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
     cursors.forEach(({ pointer, color }) => {
       const { x, y } = pointer ?? { x: 0, y: 0 };
@@ -367,9 +349,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const getNeighbors = (grid: (TileNode | null)[][], node: TileNode) => {
       const neighbors = [];
       for (const [dx, dy] of CursorDirections) {
-        // Check if the neighbor is within bounds and not a flag or other cursor
+        // Check if the neighbor is within range of grid and not a flag or other cursor
         const [x, y] = [node.x + dx, node.y + dy];
-        // Check if the neighbor is within bounds
+        // Check if the neighbor is within range of grid
         if (y < 0 || y >= grid.length || x < 0 || x >= grid[y].length) continue;
         // Check if the tile is opened and not occupied by another cursor
         if (grid[y][x] === null || checkIsOtherCursorOnTile(x, y)) continue;
@@ -384,34 +366,35 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
     /** initialize tiles */
     const [start, target] = [new TileNode(startX, startY), new TileNode(targetX, targetY)];
-    // 추후 범위를 좁힐 것
-    const grid = tiles.map((row, i) => row.map((tile, j) => (checkTileHasOpened(tile) ? new TileNode(j, i) : null)));
+    // Get range of grid
+    const grid = tiles.map((row, i) => row.map((tile, j) => (isOpened(tile) ? new TileNode(j, i) : null)));
 
     /** initialize open and close list */
-    let openNodeList = [start];
-    const closedList = [];
+    let openNodes = [start];
+    const closedNodes = [];
     start.gScore = 0;
     start.fTotal = start.gScore + start.heuristic;
 
-    while (openNodeList.length > 0) {
-      const nowNode = openNodeList.reduce((a, b) => (a.fTotal < b.fTotal ? a : b));
+    while (openNodes.length > 0) {
+      const nowNode = openNodes.reduce((a, b) => (a.fTotal < b.fTotal ? a : b));
       if (nowNode.x === target.x && nowNode.y === target.y) {
         setLeftPaths(getLeftPaths(nowNode, startX, startY));
         const path = [];
         for (let temp = nowNode; temp; temp = temp.parent!) path.unshift({ x: temp.x - startX, y: temp.y - startY });
         return path;
       }
-      openNodeList = openNodeList.filter(node => node !== nowNode);
-      closedList.push(nowNode);
+
+      openNodes = openNodes.filter(node => node !== nowNode);
+      closedNodes.push(nowNode);
 
       /** Find neighbor nodes from current node. */
       const neighbors = getNeighbors(grid, nowNode);
       for (const { node, isDiagonal } of neighbors) {
-        if (closedList.includes(node)) continue;
+        if (closedNodes.includes(node)) continue;
         // Apply different cost for diagonal movement
         const tempG = nowNode.gScore + (isDiagonal ? 14 : 10);
         if (tempG >= node.gScore) continue;
-        if (!openNodeList.includes(node)) openNodeList.push(node);
+        if (!openNodes.includes(node)) openNodes.push(node);
         node.parent = nowNode;
         node.gScore = tempG;
         node.heuristic = Math.abs(node.x - target.x) + Math.abs(node.y - target.y);
@@ -423,18 +406,14 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   const renderInteractionCanvas = () => {
     const { interactionCanvasRef, myCursorRef, otherCursorsRef, otherPointerRef } = canvasRefs;
-    const { current: interactionCanvas } = interactionCanvasRef;
     const { current: myCursorCanvas } = myCursorRef;
     const { current: otherCursorsCanvas } = otherCursorsRef;
     const { current: otherPointerCanvas } = otherPointerRef;
+    const { current: interactionCanvas } = interactionCanvasRef;
 
     if (!interactionCanvas || !myCursorCanvas || !otherCursorsCanvas || !otherPointerCanvas) return;
     const [interactionCtx, myCursorCtx] = [interactionCanvas.getContext('2d'), myCursorCanvas.getContext('2d')];
     if (!interactionCtx || !myCursorCtx) return;
-
-    // 🚀 HIGH QUALITY: Setup high-resolution rendering for all canvases
-    setupHighResCanvas(interactionCanvas, interactionCtx);
-    setupHighResCanvas(myCursorCanvas, myCursorCtx);
 
     // intialize canvases
     myCursorCtx.clearRect(0, 0, windowWidth, windowHeight);
@@ -478,30 +457,30 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     interactionCtx.lineJoin = interactionCtx.lineCap = 'round';
     interactionCtx.miterLimit = 2;
 
-    const baseCornerRadius = tileSize * 0.15;
+    const baseRadius = tileSize * 0.15;
     interactionCtx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
     for (let i = 1; i < scaledPoints.length - 1; i++) {
-      const [prev, curr, next] = [...scaledPoints.slice(i - 1, i + 2)];
-      const [prevVectorX, prevVectorY] = [curr.x - prev.x, curr.y - prev.y];
-      const [nextVectorX, nextVectorY] = [next.x - curr.x, next.y - curr.y];
-      const [len1, len2] = [Math.hypot(prevVectorX, prevVectorY), Math.hypot(nextVectorX, nextVectorY)];
-      const cross = prevVectorX * nextVectorY - prevVectorY * nextVectorX;
-      const dot = prevVectorX * nextVectorX + prevVectorY * nextVectorY;
+      const [ex, now, next] = [...scaledPoints.slice(i - 1, i + 2)];
+      const [exVectorX, exVectorY] = [now.x - ex.x, now.y - ex.y];
+      const [nextVectorX, nextVectorY] = [next.x - now.x, next.y - now.y];
+      const [len1, len2] = [Math.hypot(exVectorX, exVectorY), Math.hypot(nextVectorX, nextVectorY)];
+      const dot = exVectorX * nextVectorX + exVectorY * nextVectorY;
+      const cross = exVectorX * nextVectorY - exVectorY * nextVectorX;
       // If angle is almost straight, do not round
       const cosTheta = dot / (len1 * len2);
       const isStraight = Math.abs(cross) < 1e-6 || cosTheta > 0.995;
-      if (isStraight) interactionCtx.lineTo(curr.x, curr.y);
+      if (isStraight) interactionCtx.lineTo(now.x, now.y);
       else {
         // Clamp radius to local segment lengths to avoid overshooting
-        const cornerRadius = Math.min(baseCornerRadius, 0.5 * Math.min(len1, len2));
-        interactionCtx.arcTo(curr.x, curr.y, next.x, next.y, cornerRadius);
+        const cornerRadius = Math.min(baseRadius, 0.5 * Math.min(len1, len2));
+        interactionCtx.arcTo(now.x, now.y, next.x, next.y, cornerRadius);
       }
     }
     const [beforeLast, last] = [...scaledPoints.slice(-2)];
-    const [lastPointX, lastPointY] = [(last.x + beforeLast.x) / 2, (last.y + beforeLast.y) / 2];
+    const [lastPointX, lastPointY] = [(last.x + beforeLast.x) >> 1, (last.y + beforeLast.y) >> 1];
     const pathRotate = Math.PI + Math.atan2(last.y - beforeLast.y, last.x - beforeLast.x);
     interactionCtx.lineTo(lastPointX, lastPointY);
-    drawCursor(interactionCtx, lastPointX - tileSize / 2, lastPointY - tileSize / 2, cursorColor, 0, pathRotate, 0.6);
+    drawCursor(interactionCtx, lastPointX - halfTile, lastPointY - halfTile, cursorColor, 0, pathRotate, 0.6);
     interactionCtx.stroke();
   };
 
@@ -524,10 +503,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     };
 
     // 벡터 에셋은 즉시 생성 (폰트 로딩과 병렬)
-    const cursor = makePath2d(cursorPaths);
+    const cursor = makePath2D(cursorPaths);
     const stun = makePath2dFromArray(stunPaths);
-    const flag = { flag: makePath2d(flagPaths[0]), pole: makePath2d(flagPaths[1]) };
-    const boom = { inner: makePath2d(boomPaths[0]), outer: makePath2d(boomPaths[1]) };
+    const flag = { flag: makePath2D(flagPaths[0]), pole: makePath2D(flagPaths[1]) };
+    const boom = { inner: makePath2D(boomPaths[0]), outer: makePath2D(boomPaths[1]) };
     setCachedVectorAssets({ cursor, stun, flag, boom });
 
     // 폰트 로딩과 관계없이 초기화 완료
