@@ -160,11 +160,11 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
 
   // --------------------- Helper functions (pure) ---------------------
   const computeVisibleBounds = (totalRows: number, totalCols: number, padW: number, padH: number, viewW: number, viewH: number, size: number) => {
-    const startCol = Math.max(0, Math.ceil(padW - 1));
-    const endCol = Math.min(totalCols - 1, (padW + (viewW + size) / (size || 1)) >>> 0);
     const startRow = Math.max(0, Math.ceil(padH - 1));
+    const startCol = Math.max(0, Math.ceil(padW - 1));
     const endRow = Math.min(totalRows - 1, (padH + (viewH + size) / (size || 1)) >>> 0);
-    return { startCol, endCol, startRow, endRow };
+    const endCol = Math.min(totalCols - 1, (padW + (viewW + size) / (size || 1)) >>> 0);
+    return { startRow, endRow, startCol, endCol };
   };
 
   const makeNumericKeys = (ri: number, ci: number, size: number) => {
@@ -181,7 +181,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     const isEven = +String(content).slice(-1) % 2;
     const outerTexture = textures.get(`${outer[isEven][0]}${outer[isEven][1]}${tileSize}`) || defaults.outerTexture;
     const innerTexture = textures.get(`${inner[isEven][0]}${inner[isEven][1]}${tileSize}`) || defaults.innerTexture;
-    return { outerTexture, innerTexture, closed: true } as const;
+    return { outerTexture, innerTexture, closed: true };
   };
 
   const snapTileEdges = (ci: number, ri: number, padW: number, padH: number, size: number) => {
@@ -353,16 +353,17 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     while (closedPoolRef.current.length < approxVisible) {
       const outer = new PixiSprite();
       const inner = new PixiSprite();
-      outer.roundPixels = inner.roundPixels = true;
-      outer.eventMode = inner.eventMode = 'none';
       outer.cullable = inner.cullable = true;
+      outer.eventMode = inner.eventMode = 'none';
+      outer.roundPixels = inner.roundPixels = true;
+
       layer.addChild(outer);
       layer.addChild(inner);
       closedPoolRef.current.push({ outer, inner });
     }
     for (let i = approxVisible; i < closedPoolRef.current.length; i++) {
-      const p = closedPoolRef.current[i];
-      p.outer.visible = p.inner.visible = false;
+      const { outer, inner } = closedPoolRef.current[i];
+      outer.visible = inner.visible = false;
     }
 
     const { current } = closedPoolRef;
