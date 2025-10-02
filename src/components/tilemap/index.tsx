@@ -1,6 +1,6 @@
 'use client';
 import { Container, Sprite, Stage } from '@pixi/react';
-import { cloneElement, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { cloneElement, useLayoutEffect, useMemo, useRef } from 'react';
 import { Texture, SCALE_MODES, MIPMAP_MODES, WRAP_MODES, Container as PixiContainer, Sprite as PixiSprite } from 'pixi.js';
 import RenderPaths from '@/assets/renderPaths.json';
 import { useCursorStore } from '@/store/cursorStore';
@@ -198,57 +198,6 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     return { xFloat, yFloat, startX, startY, endX, endY, w, h };
   };
 
-  const [closedLayerReady, setClosedLayerReady] = useState(false);
-
-  // Ensure CLOSED/FLAGGED pool exists and then apply entries in a single pass
-  useLayoutEffect(() => {
-    const layer = closedLayerRef.current;
-    if (!layer) return;
-
-    const approxVisible = Math.ceil((windowWidth / (tileSize || 1) + 2) * (windowHeight / (tileSize || 1) + 2));
-    while (closedPoolRef.current.length < approxVisible) {
-      const outer = new PixiSprite();
-      outer.roundPixels = true;
-      outer.eventMode = 'none' as unknown as never;
-      outer.cullable = true;
-      const inner = new PixiSprite();
-      inner.roundPixels = true;
-      inner.eventMode = 'none' as unknown as never;
-      inner.cullable = true;
-      layer.addChild(outer);
-      layer.addChild(inner);
-      closedPoolRef.current.push({ outer, inner });
-    }
-    for (let i = approxVisible; i < closedPoolRef.current.length; i++) {
-      const p = closedPoolRef.current[i];
-      p.outer.visible = p.inner.visible = false;
-    }
-
-    const { current } = closedPoolRef;
-    let usedIdx = 0;
-    while (usedIdx < closedEntries.length && usedIdx < current.length) {
-      const { outerTexture, innerTexture, startX, startY, endX, endY } = closedEntries[usedIdx];
-      const closed = current[usedIdx++];
-      closed.outer.texture = outerTexture;
-      closed.outer.x = startX;
-      closed.outer.y = startY;
-      closed.outer.width = closed.outer.height = tileSize;
-      const pad = 5 * zoom;
-      const startXFloat = Math.round(startX + pad);
-      const startYFloat = Math.round(startY + pad);
-      const endXFloat = Math.round(endX - pad);
-      const endYFloat = Math.round(endY - pad);
-      closed.inner.x = startXFloat;
-      closed.inner.y = startYFloat;
-      closed.inner.texture = innerTexture;
-      closed.inner.width = Math.max(0, endXFloat - startXFloat);
-      closed.inner.height = Math.max(0, endYFloat - startYFloat);
-      closed.outer.visible = closed.inner.visible = true;
-    }
-    while (usedIdx < current.length) current[usedIdx].outer.visible = current[usedIdx++].inner.visible = false;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles, windowWidth, windowHeight, tileSize, zoom, closedLayerReady]);
-
   // Memoize sprites creation using cached base sprites from useRef
   const { outerSprites, innerSprites, boomSprites, flagSprites, textElements, closedEntries, bgKey } = useMemo(() => {
     const emptySprites = { outerSprites: [], innerSprites: [], boomSprites: [], flagSprites: [], textElements: [], closedEntries: [], bgKey: '' };
@@ -395,6 +344,77 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles]);
 
+  // Ensure CLOSED/FLAGGED pool exists and then apply entries in a single pass
+  useLayoutEffect(() => {
+    const layer = closedLayerRef.current;
+    if (!layer) return;
+
+    const approxVisible = Math.ceil((windowWidth / (tileSize || 1) + 2) * (windowHeight / (tileSize || 1) + 2));
+    while (closedPoolRef.current.length < approxVisible) {
+      const outer = new PixiSprite();
+      const inner = new PixiSprite();
+      outer.roundPixels = inner.roundPixels = true;
+      outer.eventMode = inner.eventMode = 'none';
+      outer.cullable = inner.cullable = true;
+      layer.addChild(outer);
+      layer.addChild(inner);
+      closedPoolRef.current.push({ outer, inner });
+    }
+    for (let i = approxVisible; i < closedPoolRef.current.length; i++) {
+      const p = closedPoolRef.current[i];
+      p.outer.visible = p.inner.visible = false;
+    }
+
+    const { current } = closedPoolRef;
+    let usedIdx = 0;
+    while (usedIdx < closedEntries.length && usedIdx < current.length) {
+      const { outerTexture, innerTexture, startX, startY, endX, endY } = closedEntries[usedIdx];
+      const closed = current[usedIdx++];
+
+      // Only update if texture changed
+      if (closed.outer.texture !== outerTexture) closed.outer.texture = outerTexture;
+      if (closed.inner.texture !== innerTexture) closed.inner.texture = innerTexture;
+
+      // Only update position if changed
+      if (closed.outer.x !== startX || closed.outer.y !== startY) {
+        closed.outer.x = startX;
+        closed.outer.y = startY;
+      }
+
+      // Only update size if changed
+      if (closed.outer.width !== tileSize || closed.outer.height !== tileSize) closed.outer.width = closed.outer.height = tileSize;
+
+      const pad = 5 * zoom;
+      const startXFloat = Math.round(startX + pad);
+      const startYFloat = Math.round(startY + pad);
+      const endXFloat = Math.round(endX - pad);
+      const endYFloat = Math.round(endY - pad);
+
+      // Only update inner position if changed
+      if (closed.inner.x !== startXFloat || closed.inner.y !== startYFloat) {
+        closed.inner.x = startXFloat;
+        closed.inner.y = startYFloat;
+      }
+
+      const newWidth = Math.max(0, endXFloat - startXFloat);
+      const newHeight = Math.max(0, endYFloat - startYFloat);
+
+      // Only update inner size if changed
+      if (closed.inner.width !== newWidth || closed.inner.height !== newHeight) {
+        closed.inner.width = newWidth;
+        closed.inner.height = newHeight;
+      }
+
+      // Only set visible if not already visible
+      if (!closed.outer.visible || !closed.inner.visible) closed.outer.visible = closed.inner.visible = true;
+    }
+    // Hide remaining unused sprites
+    while (usedIdx < current.length) {
+      const { outer, inner } = current[usedIdx++];
+      if (outer.visible || inner.visible) outer.visible = inner.visible = false;
+    }
+  }, [closedEntries, tileSize, zoom, windowWidth, windowHeight]);
+
   if (!textures.size || !numberTextures.size) return null;
   return (
     <Stage
@@ -421,15 +441,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
             {textElements}
           </Container>
         )}
-        <Container
-          name={'closed-layer'}
-          ref={node => {
-            closedLayerRef.current = node;
-            if (node) setClosedLayerReady(true);
-          }}
-          eventMode="none"
-          sortableChildren={false}
-        />
+        <Container name={'closed-layer'} ref={closedLayerRef} eventMode="none" sortableChildren={false} />
         {boomSprites}
         {flagSprites}
       </Container>
