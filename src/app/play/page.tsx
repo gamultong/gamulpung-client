@@ -280,22 +280,6 @@ export default function Play() {
         e.preventDefault();
         zoomUp();
         break;
-      // case 'w':
-      //   e.preventDefault();
-      //   moveUp();
-      //   break;
-      // case 's':
-      //   e.preventDefault();
-      //   moveDown();
-      //   break;
-      // case 'a':
-      //   e.preventDefault();
-      //   moveLeft();
-      //   break;
-      // case 'd':
-      //   e.preventDefault();
-      //   moveRight();
-      //   break;
     }
   };
 
@@ -391,61 +375,49 @@ export default function Play() {
       worker!.onmessage = (e: MessageEvent) => {
         const { id: respId, rows } = e.data as { id: number; rows: Array<{ rowIndex: number; tStart: number; values: string[]; xOffset: number }> };
         if (respId !== generationRef.current) return; // stale
-        let tiles = cachingTiles as string[][];
+        const tiles = cachingTiles;
         let anyChanged = false;
-        let outerDone = false;
         for (const r of rows) {
-          const existingRow = tiles[r.rowIndex] || [];
+          const existingRow = tiles[r.rowIndex];
           let row = existingRow;
           let rowCloned = false;
-          const startCol = r.tStart + xOffset;
+          let startCol = r.tStart + xOffset;
           const endCol = startCol + r.values.length;
           if (startCol < 0 || endCol <= 0) continue;
           // ensure bounds
           const needLen = endCol;
-          if (!outerDone) {
-            tiles = [...tiles];
-            outerDone = true;
-          }
           if (row.length < needLen) {
             row = existingRow.slice();
             row.length = needLen;
             rowCloned = true;
             tiles[r.rowIndex] = row;
           }
-          let col = startCol;
-          for (let k = 0; k < r.values.length; k++, col++) {
-            const v = r.values[k];
-            if (row[col] !== v) {
-              if (!rowCloned) {
-                row = existingRow.slice();
-                tiles[r.rowIndex] = row;
-                rowCloned = true;
-              }
-              row[col] = v;
-              anyChanged = true;
+          for (let k = 0; k < r.values.length; k++, startCol++) {
+            const newRow = r.values[k];
+            if (row[startCol] === newRow) continue;
+            if (!rowCloned) {
+              row = existingRow.slice();
+              tiles[r.rowIndex] = row;
+              rowCloned = true;
             }
+            row[startCol] = newRow;
+            anyChanged = true;
           }
         }
-        if (outerDone && anyChanged) setCachingTiles(tiles);
+        if (anyChanged) setCachingTiles(tiles);
       };
       return;
     }
 
     // Existing optimized CPU path
-    const OPEN = OPEN_LUT;
-    const CL0 = CLOSED0_LUT;
-    const CL1 = CLOSED1_LUT;
     let anyChanged = false;
     for (let i = 0; i < columnlength; i++) {
       const reversedI = columnlength - 1 - i;
       const rowIndex = reversedI + yOffset;
       // Vertical clipping: skip parsing whole row if offscreen
-      if (rowIndex < 0 || rowIndex >= newTiles.length) {
-        continue;
-      }
+      if (rowIndex < 0 || rowIndex >= newTiles.length) continue;
 
-      const existingRow = newTiles[rowIndex] || [];
+      const existingRow = newTiles[rowIndex];
       let row = existingRow;
       let rowCloned = false;
       const rowLen = existingRow.length;
@@ -462,20 +434,19 @@ export default function Play() {
       if (tEnd > maxVisible) tEnd = maxVisible;
       if (tStart >= tEnd) continue;
 
-      let p = i * rowlengthBytes + (tStart << 1); // pointer in hex string (input is top->bottom)
+      let pointerHex = i * rowlengthBytes + (tStart << 1); // pointer in hex string (input is top->bottom)
       let checker = rowParityBase ^ (tStart & 1);
-      let t = tStart;
-      while (t < tEnd) {
+      while (tStart < tEnd) {
         // First tile
-        let c0 = unsortedTiles.charCodeAt(p);
-        let c1 = unsortedTiles.charCodeAt(p + 1);
+        let c0 = unsortedTiles.charCodeAt(pointerHex);
+        let c1 = unsortedTiles.charCodeAt(pointerHex + 1);
         let n0 = c0 <= 57 ? c0 - 48 : c0 <= 70 ? c0 - 55 : c0 - 87;
         let n1 = c1 <= 57 ? c1 - 48 : c1 <= 70 ? c1 - 55 : c1 - 87;
         let byte = (n0 << 4) | n1;
-        p += 2;
-        let colIndex = t + xOffset;
-        let opened = OPEN[byte];
-        let nextValue = opened !== null ? opened : checker === 0 ? CL0[byte] : CL1[byte];
+        pointerHex += 2;
+        let colIndex = tStart + xOffset;
+        let opened = OPEN_LUT[byte];
+        let nextValue = opened !== null ? opened : checker === 0 ? CLOSED0_LUT[byte] : CLOSED1_LUT[byte];
         if (!outerCloned) {
           newTiles = [...newTiles];
           outerCloned = true;
@@ -490,25 +461,24 @@ export default function Play() {
           anyChanged = true;
         }
         checker ^= 1;
-        t++;
-        if (t >= tEnd) break;
+        if (++tStart >= tEnd) break;
 
         // Second tile (unrolled)
-        c0 = unsortedTiles.charCodeAt(p);
-        c1 = unsortedTiles.charCodeAt(p + 1);
+        c0 = unsortedTiles.charCodeAt(pointerHex);
+        c1 = unsortedTiles.charCodeAt(pointerHex + 1);
         n0 = c0 <= 57 ? c0 - 48 : c0 <= 70 ? c0 - 55 : c0 - 87;
         n1 = c1 <= 57 ? c1 - 48 : c1 <= 70 ? c1 - 55 : c1 - 87;
         byte = (n0 << 4) | n1;
-        p += 2;
-        colIndex = t + xOffset;
-        opened = OPEN[byte];
-        nextValue = opened !== null ? opened : checker === 0 ? CL0[byte] : CL1[byte];
+        pointerHex += 2;
+        colIndex = tStart + xOffset;
+        opened = OPEN_LUT[byte];
+        nextValue = opened !== null ? opened : checker === 0 ? CLOSED0_LUT[byte] : CLOSED1_LUT[byte];
         if (row[colIndex] !== nextValue) {
           row[colIndex] = nextValue;
           anyChanged = true;
         }
         checker ^= 1;
-        t++;
+        tStart++;
       }
     }
     if (outerCloned && anyChanged) setCachingTiles(newTiles);
