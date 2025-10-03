@@ -243,13 +243,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       ctx.translate(x, y);
       ctx.fillStyle = color;
       const adjustedScale = zoom * scale;
-      const centerOffset = halfTile >> 2;
 
       // if the cursor is player's cursor.
       if (scale === 1) {
         // 8방향 커서 오프셋 계산 (원래 로직 유지하면서 최적화)
         // up 0, rightup 1, right 2, rightdown 3, down 4, leftdown 5, left 6, leftup 7
         const angle = (Math.round((rotated + Math.PI) / (Math.PI / 4)) + 2) % 8;
+        const centerOffset = halfTile >> 3; // tilesize / 16
         switch (angle) {
           case 0: // up
             ctx.translate(halfTile, centerOffset);
