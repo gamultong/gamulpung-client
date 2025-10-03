@@ -6,7 +6,7 @@ import RenderPaths from '@/assets/renderPaths.json';
 import { useCursorStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
 import { TileContent } from '@/types';
-import { fillCtxAndPath as fillPathInCtx, makePath2d, hexToRgb, lerp } from '@/utils';
+import { fillCtxAndPath as fillPathInCtx, makePath2d, hexToRgb, lerp, getCtx } from '@/utils';
 
 interface TilemapProps {
   tiles: string[][];
@@ -39,9 +39,6 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     numberCachedSprite: makeSpriteMap(),
   });
 
-  const getCtx = (canvas: HTMLCanvasElement): CanvasRenderingContext2D =>
-    canvas.getContext('2d', { willReadFrequently: false, desynchronized: true })!;
-
   // Memoize textures access/creation: create once and reuse from ref cache
   const textures = useMemo(() => {
     const textureCache = cachedTexturesRef.current;
@@ -51,8 +48,8 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
       if (textureCache.has(key)) return textureCache.get(key);
 
       const tempCanvas = document.createElement('canvas');
-      const tileMinializedSize = 4; // fixed small size for pixelated look
-      tempCanvas.width = tempCanvas.height = tileMinializedSize;
+      const tileOptimizedSize = 4; // fixed small size for pixelated look
+      tempCanvas.width = tempCanvas.height = tileOptimizedSize;
       const ctx = getCtx(tempCanvas);
       if (!ctx) return;
 
@@ -60,20 +57,20 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
       const c2 = hexToRgb(color2);
 
       // draw vertical stepped bands
-      for (let x = 0; x < tileMinializedSize; x++) {
-        const t = x / (tileMinializedSize - 1);
+      for (let x = 0; x < tileOptimizedSize; x++) {
+        const t = x / (tileOptimizedSize - 1);
         const r = lerp(c1.r, c2.r, t);
         const g = lerp(c1.g, c2.g, t);
         const b = lerp(c1.b, c2.b, t);
         ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-        ctx.fillRect(x, 0, 1, tileMinializedSize);
+        ctx.fillRect(x, 0, 1, tileOptimizedSize);
       }
 
       const texture = Texture.from(tempCanvas);
       texture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
       texture.baseTexture.mipmap = MIPMAP_MODES.OFF;
       texture.baseTexture.wrapMode = WRAP_MODES.CLAMP;
-      texture.baseTexture.setSize(tileMinializedSize, tileMinializedSize);
+      texture.baseTexture.setSize(tileOptimizedSize, tileOptimizedSize);
       texture.baseTexture.resolution = 0.001;
 
       textureCache.set(key, texture);
@@ -160,11 +157,11 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
 
   // --------------------- Helper functions (pure) ---------------------
   const computeVisibleBounds = (totalRows: number, totalCols: number, padW: number, padH: number, viewW: number, viewH: number, size: number) => {
-    const startRow = Math.max(0, Math.ceil(padH - 1));
     const startCol = Math.max(0, Math.ceil(padW - 1));
-    const endRow = Math.min(totalRows - 1, (padH + (viewH + size) / (size || 1)) >>> 0);
     const endCol = Math.min(totalCols - 1, (padW + (viewW + size) / (size || 1)) >>> 0);
-    return { startRow, endRow, startCol, endCol };
+    const startRow = Math.max(0, Math.ceil(padH - 1));
+    const endRow = Math.min(totalRows - 1, (padH + (viewH + size) / (size || 1)) >>> 0);
+    return { startCol, endCol, startRow, endRow };
   };
 
   const makeNumericKeys = (ri: number, ci: number, size: number) => {
@@ -181,7 +178,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     const isEven = +String(content).slice(-1) % 2;
     const outerTexture = textures.get(`${outer[isEven][0]}${outer[isEven][1]}${tileSize}`) || defaults.outerTexture;
     const innerTexture = textures.get(`${inner[isEven][0]}${inner[isEven][1]}${tileSize}`) || defaults.innerTexture;
-    return { outerTexture, innerTexture, closed: true };
+    return { outerTexture, innerTexture, closed: true } as const;
   };
 
   const snapTileEdges = (ci: number, ri: number, padW: number, padH: number, size: number) => {
@@ -353,17 +350,16 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     while (closedPoolRef.current.length < approxVisible) {
       const outer = new PixiSprite();
       const inner = new PixiSprite();
-      outer.cullable = inner.cullable = true;
-      outer.eventMode = inner.eventMode = 'none';
       outer.roundPixels = inner.roundPixels = true;
-
+      outer.eventMode = inner.eventMode = 'none';
+      outer.cullable = inner.cullable = true;
       layer.addChild(outer);
       layer.addChild(inner);
       closedPoolRef.current.push({ outer, inner });
     }
     for (let i = approxVisible; i < closedPoolRef.current.length; i++) {
-      const { outer, inner } = closedPoolRef.current[i];
-      outer.visible = inner.visible = false;
+      const p = closedPoolRef.current[i];
+      p.outer.visible = p.inner.visible = false;
     }
 
     const { current } = closedPoolRef;

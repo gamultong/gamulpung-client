@@ -11,7 +11,7 @@ import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
 import { XYType, VectorImagesType, TileContent, SendMessageEvent } from '@/types';
 import { Click, ClickType, CursorColors, CursorDirections, OtherCursorColors } from '@/constants';
-import { makePath2d as makePath2D, makePath2dFromArray } from '@/utils';
+import { getCtx, makePath2d as makePath2D, makePath2dFromArray } from '@/utils';
 
 class TileNode {
   x: number;
@@ -294,7 +294,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const drawOtherUserCursors = useCallback(() => {
     const canvas = canvasRefs.otherCursorsRef.current;
     if (!canvas) return;
-    const otherCursorsCtx = canvas.getContext('2d');
+    const otherCursorsCtx = getCtx(canvas);
     if (!otherCursorsCtx) return;
 
     otherCursorsCtx.clearRect(0, 0, windowWidth, windowHeight);
@@ -323,7 +323,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   const drawOtherUserPointers = (borderPixel: number) => {
     const canvas = canvasRefs.otherPointerRef.current!;
-    const otherPointerCtx = canvas.getContext('2d');
+    const otherPointerCtx = getCtx(canvas);
     if (!otherPointerCtx) return;
 
     otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
@@ -412,7 +412,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const { current: interactionCanvas } = interactionCanvasRef;
 
     if (!interactionCanvas || !myCursorCanvas || !otherCursorsCanvas || !otherPointerCanvas) return;
-    const [interactionCtx, myCursorCtx] = [interactionCanvas.getContext('2d'), myCursorCanvas.getContext('2d')];
+    const [interactionCtx, myCursorCtx] = [getCtx(interactionCanvas), getCtx(myCursorCanvas)];
     if (!interactionCtx || !myCursorCtx) return;
 
     // intialize canvases

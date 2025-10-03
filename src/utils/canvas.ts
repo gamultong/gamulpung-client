@@ -15,6 +15,8 @@ export const hexToRgb = (hex: string) => {
   return { r, g, b };
 };
 
+export const getCtx = (canvas: HTMLCanvasElement): CanvasRenderingContext2D =>
+  canvas.getContext('2d', { willReadFrequently: false, desynchronized: true })!;
 export const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
 
 export const computeVisibleBounds = (
