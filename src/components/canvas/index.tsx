@@ -53,7 +53,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 }) => {
   /** constants */
   const MOVE_SPEED = 200; // ms
-  const ANIMATABLE_ZOOM_MIN = 0.4; // min zoom level
+  const ANIMATABLE_ZOOM_MIN = 0.2; // min zoom level
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
   const otherCursorPadding = 1 / (paddingTiles - 1); // padding for other cursors
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
@@ -94,6 +94,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   useEffect(() => {
     const preventContextMenu = (event: MouseEvent) => event.preventDefault();
     window.addEventListener('contextmenu', preventContextMenu);
+
     return () => {
       window.removeEventListener('contextmenu', preventContextMenu);
       cancelCurrentMovement();
@@ -103,7 +104,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   /** Check if the tile has been opened */
   const isOpened = (tile: string) => {
     const { CLOSED, FLAGGED } = TileContent;
-    return tile[0] !== CLOSED && tile[0] !== FLAGGED;
+    return ![CLOSED, FLAGGED].some(c => tile[0] === c);
   };
 
   /**
@@ -132,11 +133,11 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const animate = (now: number) => {
         const elapsed = now - start;
         const progress = Math.min(elapsed / MOVE_SPEED, 1);
-        const translate = tileSize * (1 - progress);
-        const [translateX, translateY] = [translate * dx, translate * dy];
-        currentRefs.forEach(c => (c!.style.transform = `translate(${translateX}px, ${translateY}px)`));
+        const trans = tileSize * (1 - progress);
+        const [transX, transY] = [trans * dx, trans * dy];
+        currentRefs.forEach(c => (c!.style.transform = `translate(${transX}px, ${transY}px)`));
         if (progress < 1) requestAnimationFrame(animate);
-        else currentRefs.forEach(c => (c!.style.transform = 'translate(0, 0)'));
+        else currentRefs.forEach(c => (c!.style.transform = 'translate(0px, 0px)'));
       };
       requestAnimationFrame(animate);
     };
@@ -184,22 +185,31 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const { left: rectLeft, top: rectTop } = interactionCanvas.getBoundingClientRect();
     const [clickX, clickY] = [event.clientX - rectLeft, event.clientY - rectTop];
 
-    // Transform canvas coordinate to relative and absolute coordinate
+    // Transform canvas float coordinate to integer coordinate
     const [tileArrayX, tileArrayY] = [(clickX / tileSize + tilePaddingWidth) >>> 0, (clickY / tileSize + tilePaddingHeight) >>> 0];
     const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
-    // Setting content of clicked tile
-    const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
+    // Setting content of clicked tile's content
+    const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? null;
     setClickPosition(tileX, tileY, clickedTileContent);
 
+    // Send Click Event
     const clickType: ClickType = event.buttons & 0b10 ? Click.SPECIAL_CLICK : Click.GENERAL_CLICK;
-    // Prevent double click and heading another path when moving.
-    if (movementInterval.current) return;
     clickEvent(tileX, tileY, clickType);
 
-    if (clickType === Click.SPECIAL_CLICK && !clickedTileContent.includes(TileContent.CLOSED)) return;
-    let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
-    if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];
-    moveCursor(targetTileX, targetTileY, tileX, tileY, clickType);
+    // Prevent double click if moving.
+    if (movementInterval.current) return;
+
+    // Processing in Local.
+    switch (clickType) {
+      case Click.SPECIAL_CLICK:
+        if (clickedTileContent.includes(TileContent.CLOSED)) return;
+        break;
+      case Click.GENERAL_CLICK:
+        let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
+        if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];
+        moveCursor(targetTileX, targetTileY, tileX, tileY, clickType);
+        break;
+    }
   };
 
   /** Check if the clicked tile is already a neighbor of the cursor */
@@ -208,10 +218,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const findOpenedNeighbors = (currentX: number, currentY: number) => {
     let result = { x: Infinity, y: Infinity };
     [[0, 0], ...CursorDirections].some(([dx, dy]) => {
-      const x = currentX + dx;
-      const y = currentY + dy;
-      if (!tiles[y] || !tiles[y][x]) return false;
-      if (!isOpened(tiles[y][x])) return false;
+      const [x, y] = [currentX + dx, currentY + dy];
+      const tileContent = tiles[y]?.[x];
+      if (!tileContent || !isOpened(tileContent)) return false;
       result = { x, y };
       return true;
     });
@@ -392,7 +401,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       for (const { node, isDiagonal } of neighbors) {
         if (closedNodes.includes(node)) continue;
         // Apply different cost for diagonal movement
-        const tempG = nowNode.gScore + (isDiagonal ? 14 : 10);
+        const tempG = nowNode.gScore + (isDiagonal ? 3 : 2);
         if (tempG >= node.gScore) continue;
         if (!openNodes.includes(node)) openNodes.push(node);
         node.parent = nowNode;
@@ -445,7 +454,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     drawOtherUserPointers(borderPixel);
 
     // Draw Cursor Movement path
-    const scaledPoints = paths?.map(vec => {
+    const scaledPoints = paths.map(vec => {
       const [vX, vY] = [vec.x + compensation.x, vec.y + compensation.y];
       return { x: vX * tileSize, y: vY * tileSize };
     });
