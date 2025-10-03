@@ -279,10 +279,11 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       } else ctx.translate(halfTile, halfTile);
 
       ctx.rotate(rotated - Math.PI / 4);
-
       ctx.scale(adjustedScale, adjustedScale);
       ctx.fill(cachedVectorAssets!.cursor);
       ctx.restore();
+
+      // Draw Stun Effect
       if (!(reviveAt > 0 && Date.now() < reviveAt && cachedVectorAssets?.stun)) return;
       const stunScale = zoom >> 1;
       ctx.save();
@@ -544,12 +545,12 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       {!isInitializing && (
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
           <ChatComponent />
-          <Tilemap className={S.canvas + ' z-10'} {...{ tilePadHeight: tilePaddingHeight, tilePadWidth: tilePaddingWidth, tileSize, tiles }} />
-          <canvas className={S.canvas + ' z-20'} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
-          <canvas className={S.canvas + ' z-30'} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />
-          <canvas className={S.canvas + ' z-40'} id="MyCursor" ref={canvasRefs.myCursorRef} width={windowWidth} height={windowHeight} />
+          <Tilemap className={S.canvas} {...{ tilePadHeight: tilePaddingHeight, tilePadWidth: tilePaddingWidth, tileSize, tiles }} />
+          <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
+          <canvas className={S.canvas} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />
+          <canvas className={S.canvas} id="MyCursor" ref={canvasRefs.myCursorRef} width={windowWidth} height={windowHeight} />
           <canvas
-            className={S.canvas + ' z-50'}
+            className={S.canvas}
             id="InteractionCanvas"
             ref={canvasRefs.interactionCanvasRef}
             {...{ width: windowWidth, height: windowHeight, onPointerDown: handleClick }}

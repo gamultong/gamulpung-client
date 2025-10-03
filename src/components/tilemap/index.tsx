@@ -382,19 +382,19 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
       if (closed.outer.width !== tileSize || closed.outer.height !== tileSize) closed.outer.width = closed.outer.height = tileSize;
 
       const pad = 5 * zoom;
-      const startXFloat = Math.round(startX + pad);
-      const startYFloat = Math.round(startY + pad);
-      const endXFloat = Math.round(endX - pad);
-      const endYFloat = Math.round(endY - pad);
+      const startPadX = startX + pad;
+      const startPadY = startY + pad;
+      const endPadX = endX - pad;
+      const endPadY = endY - pad;
 
       // Only update inner position if changed
-      if (closed.inner.x !== startXFloat || closed.inner.y !== startYFloat) {
-        closed.inner.x = startXFloat;
-        closed.inner.y = startYFloat;
+      if (closed.inner.x !== startPadX || closed.inner.y !== startPadY) {
+        closed.inner.x = startPadX;
+        closed.inner.y = startPadY;
       }
 
-      const newWidth = Math.max(0, endXFloat - startXFloat);
-      const newHeight = Math.max(0, endYFloat - startYFloat);
+      const newWidth = endPadX - startPadX;
+      const newHeight = endPadY - startPadY;
 
       // Only update inner size if changed
       if (closed.inner.width !== newWidth || closed.inner.height !== newHeight) {
