@@ -176,6 +176,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
   const isClosedOrFlag = (c: string) => c === TileContent.CLOSED || c === TileContent.FLAGGED;
 
   const getTileTexturesForContent = (content: string | number, defaults: { outerTexture?: Texture; innerTexture?: Texture }) => {
+    if (!content) return { ...defaults, closed: true };
     const head0 = typeof content === 'string' ? content[0] : `${content}`;
     if (!isClosedOrFlag(head0)) return { ...defaults, closed: false };
     const isEven = +String(content).slice(-1) % 2;
