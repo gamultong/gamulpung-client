@@ -10,7 +10,7 @@ import useWebSocketStore from '@/store/websocketStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
 import { XYType, VectorImagesType, TileContent, SendMessageEvent } from '@/types';
-import { Click, ClickType, CursorColors, CursorDirections, OtherCursorColors } from '@/constants';
+import { Click, ClickType, CURSOR_COLORS, CURSOR_DIRECTIONS, OTHER_CURSOR_COLORS } from '@/constants';
 import { makePath2d, makePath2dFromArray } from '@/utils';
 
 class TileNode {
@@ -53,7 +53,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 }) => {
   /** constants */
   const MOVE_SPEED = 200; // ms
-  const ZOOM_MIN = 0.4; // min zoom level
+  const ANIMATION_ZOOM_MIN = 0.4; // min zoom level
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
   const otherCursorPadding = 1 / (paddingTiles - 1); // padding for other cursors
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
@@ -88,6 +88,35 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     if (!movementInterval.current) return;
     clearInterval(movementInterval.current);
     movementInterval.current = null;
+  };
+
+  /** Cleanup canvas contexts and resources */
+  const cleanupCanvasResources = () => {
+    // Canvas 컨텍스트 정리
+    Object.values(canvasRefs).forEach(ref => {
+      if (ref.current) {
+        const ctx = ref.current.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, ref.current.width, ref.current.height);
+        }
+      }
+    });
+
+    // 벡터 에셋 정리
+    setCachedVectorAssets(undefined);
+  };
+
+  /** Cleanup font resources */
+  const cleanupFontResources = () => {
+    try {
+      // 폰트가 로드되어 있는지 확인 후 정리
+      if (document.fonts.check('1em LOTTERIACHAB')) {
+        // 폰트 정리는 브라우저가 자동으로 처리하므로 별도 작업 불필요
+        // document.fonts.delete()는 지원되지 않으므로 스킵
+      }
+    } catch (error) {
+      console.warn('Font cleanup failed:', error);
+    }
   };
 
   /** 🚀 HIGH QUALITY: Setup high-resolution canvas */
@@ -176,7 +205,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       currentPath = path;
       setPaths(foundPaths.slice(index));
-      if (zoom < ZOOM_MIN) return;
+      if (zoom < ANIMATION_ZOOM_MIN) return;
       moveAnimation(dx, dy);
     }, MOVE_SPEED);
   };
@@ -214,11 +243,12 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   };
 
   /** Check if the clicked tile is already a neighbor of the cursor */
-  const isAlreadyCursorNeighbor = (x: number, y: number) => CursorDirections.some(([dx, dy]) => cursorOriginX + dx === x && cursorOriginY + dy === y);
+  const isAlreadyCursorNeighbor = (x: number, y: number) =>
+    CURSOR_DIRECTIONS.some(([dx, dy]) => cursorOriginX + dx === x && cursorOriginY + dy === y);
 
   const findOpenedNeighbors = (currentX: number, currentY: number) => {
     let result = { x: Infinity, y: Infinity };
-    [[0, 0], ...CursorDirections].some(([dx, dy]) => {
+    [[0, 0], ...CURSOR_DIRECTIONS].some(([dx, dy]) => {
       const x = currentX + dx;
       const y = currentY + dy;
       if (!tiles[y] || !tiles[y][x]) return false;
@@ -320,7 +350,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const [drawX, drawY] = [x - cursorOriginX + otherCursorPaddingWidth, y - cursorOriginY + otherCursorPaddingHeight];
       const [distanceX, distanceY] = [x - pointerX, y - pointerY];
       const rotate = distanceX !== 0 || distanceY !== 0 ? Math.atan2(distanceY, distanceX) : 0;
-      drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CursorColors[color], revive_at, rotate);
+      drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CURSOR_COLORS[color], revive_at, rotate);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursors, cursorOriginX, cursorOriginY, tilePaddingWidth, tilePaddingHeight, tileSize, windowWidth, windowHeight, canvasRefs.otherCursorsRef]);
@@ -348,7 +378,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     cursors.forEach(({ pointer, color }) => {
       const { x, y } = pointer ?? { x: 0, y: 0 };
       const [drawX, drawY] = [x - cursorOriginX + otherCursorPaddingWidth, y - cursorOriginY + otherCursorPaddingHeight];
-      drawPointer(otherPointerCtx, drawX * tileSize, drawY * tileSize, OtherCursorColors[color], borderPixel);
+      drawPointer(otherPointerCtx, drawX * tileSize, drawY * tileSize, OTHER_CURSOR_COLORS[color], borderPixel);
     });
   };
 
@@ -366,7 +396,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     // Function to get neighbors of a node
     const getNeighbors = (grid: (TileNode | null)[][], node: TileNode) => {
       const neighbors = [];
-      for (const [dx, dy] of CursorDirections) {
+      for (const [dx, dy] of CURSOR_DIRECTIONS) {
         // Check if the neighbor is within bounds and not a flag or other cursor
         const [x, y] = [node.x + dx, node.y + dy];
         // Check if the neighbor is within bounds
@@ -441,7 +471,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     interactionCtx.clearRect(0, 0, windowWidth, windowHeight);
 
     // setting cursor color
-    const cursorColor = CursorColors[color];
+    const cursorColor = CURSOR_COLORS[color];
     const borderPixel = 5 * zoom;
 
     const cursorPosition = {
@@ -512,6 +542,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     // 폰트를 비동기로 로드하되, 실패해도 계속 진행
     const loadFontOptional = async () => {
       try {
+        // 폰트가 이미 로드되었는지 확인
+        if (document.fonts.check('1em LOTTERIACHAB')) return;
+
         const lotteriaChabFont = new FontFace(
           'LOTTERIACHAB',
           "url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2302@1.0/LOTTERIACHAB.woff2') format('woff2')",
@@ -530,20 +563,27 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const boom = { inner: makePath2d(boomPaths[0]), outer: makePath2d(boomPaths[1]) };
     setCachedVectorAssets({ cursor, stun, flag, boom });
 
-    // 폰트 로딩과 관계없이 초기화 완료
     setIsInitializing(false);
-
-    // 폰트는 백그라운드에서 로드
     loadFontOptional();
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles, isInitializing]);
 
-  // Render Intreraction Objects
+  // Render Intreraction Objects When Cursor is Moving, Clicking, or other cursor sets.
   useEffect(() => {
     if (!isInitializing) renderInteractionCanvas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursorOriginX, cursorOriginY, startPoint, clickX, clickY, color, cursors]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cancelCurrentMovement();
+      cleanupCanvasResources();
+      cleanupFontResources();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <>
