@@ -53,7 +53,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 }) => {
   /** constants */
   const MOVE_SPEED = 200; // ms
-  const ZOOM_MIN = 0.4; // min zoom level
+  const ANIMATION_ZOOM_MIN = 0.4; // min zoom level
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
   const otherCursorPadding = 1 / (paddingTiles - 1); // padding for other cursors
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
@@ -205,7 +205,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       currentPath = path;
       setPaths(foundPaths.slice(index));
-      if (zoom < ZOOM_MIN) return;
+      if (zoom < ANIMATION_ZOOM_MIN) return;
       moveAnimation(dx, dy);
     }, MOVE_SPEED);
   };

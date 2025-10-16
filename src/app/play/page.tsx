@@ -218,8 +218,6 @@ export default function Play() {
     }
   };
 
-  // WebGPU initialization removed - using simple CPU processing only
-
   /** Disconnect websocket when Component has been unmounted */
   useLayoutEffect(() => {
     document.documentElement.style.overflow = 'hidden';
@@ -230,24 +228,20 @@ export default function Play() {
       document.documentElement.style.overflow = 'auto';
       document.removeEventListener('keydown', zoomHandler);
 
-      // 모든 타이머 정리
+      // clear all timers
       if (reviveTimerRef.current) {
         clearTimeout(reviveTimerRef.current);
         reviveTimerRef.current = null;
       }
 
-      // WebSocket 강제 정리
+      // force disconnect
       disconnect();
 
-      // 상태 초기화
+      // reset states
       setCachingTiles([]);
       setRenderTiles([]);
       setIsInitialized(false);
       setLeftReviveTime(-1);
-
-      // Clean up worker to prevent memory leaks
-      // Note: We don't terminate the global worker here as it might be used by other components
-      // The global worker will be cleaned up when the entire app unmounts
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -289,12 +283,6 @@ export default function Play() {
     return 'C' + checkerboard;
   };
 
-  // Deprecated: parsing into 2D array created extra allocations.
-  // Direct streaming parse is used in replaceTiles.
-
-  // WebGPU conversion function removed - using simple CPU processing only
-
-  // SharedArrayBuffer + Atomics를 활용한 최고 수준 병렬 타일 교체 함수
   const replaceTiles = async (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
     if (unsortedTiles.length === 0) return;
 
