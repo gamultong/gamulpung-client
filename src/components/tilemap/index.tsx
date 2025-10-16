@@ -1,6 +1,6 @@
 'use client';
 import { Container, Sprite, Stage } from '@pixi/react';
-import { cloneElement, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { cloneElement, useLayoutEffect, useMemo, useRef, useState, useEffect } from 'react';
 import { Texture, SCALE_MODES, MIPMAP_MODES, WRAP_MODES, Container as PixiContainer, Sprite as PixiSprite } from 'pixi.js';
 import RenderPaths from '@/assets/renderPaths.json';
 import { useCursorStore } from '@/store/cursorStore';
@@ -169,8 +169,8 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
 
   const makeNumericKeys = (ri: number, ci: number, size: number) => {
     const tileKeyNum = ((ri * 131071 + ci) * 131 + (size | 0)) >>> 0;
-    const typeKeyBase = (tileKeyNum * 10) >>> 0;
-    return { tileKeyNum, typeKeyBase };
+    const key = (tileKeyNum * 10) >>> 0;
+    return { tileKeyNum, key };
   };
 
   const isClosedOrFlag = (c: string) => c === TileContent.CLOSED || c === TileContent.FLAGGED;
@@ -199,7 +199,28 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     return { xFloat, yFloat, startX, startY, endX, endY, w, h };
   };
 
-  const [closedLayerReady, setClosedLayerReady] = useState(false);
+  // Cleanup Pixi.js resources on unmount
+  useEffect(() => {
+    const textures = cachedTexturesRef.current;
+    const closedPool = closedPoolRef.current;
+    const sprites = cachedSpritesRef.current;
+
+    return () => {
+      // Destroy all textures
+      textures.forEach(texture => texture.destroy());
+      textures.clear();
+
+      // Destroy all sprites in the closed pool
+      closedPool.forEach(({ outer, inner }) => {
+        outer.destroy();
+        inner.destroy();
+      });
+      closedPoolRef.current = [];
+
+      // Remove all sprites from the cache
+      Object.values(sprites).forEach(map => map.clear());
+    };
+  }, []);
 
   // Ensure CLOSED/FLAGGED pool exists and then apply entries in a single pass
   useLayoutEffect(() => {
@@ -248,7 +269,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     }
     while (usedIdx < current.length) current[usedIdx].outer.visible = current[usedIdx++].inner.visible = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles, windowWidth, windowHeight, tileSize, zoom, closedLayerReady]);
+  }, [tiles]);
 
   // Memoize sprites creation using cached base sprites from useRef
   const { outerSprites, innerSprites, boomSprites, flagSprites, textElements, closedEntries, bgKey } = useMemo(() => {
@@ -304,14 +325,14 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
         const { xFloat, yFloat, startX, startY, endX, endY, w, h } = snapTileEdges(ci, ri, tilePadWidth, tilePadHeight, tileSize);
         const content = tiles[ri][ci];
         const { outerTexture, innerTexture, closed } = getTileTexturesForContent(content, defaultTextures);
-        const { typeKeyBase } = makeNumericKeys(ri, ci, tileSize);
+        const { key } = makeNumericKeys(ri, ci, tileSize);
 
         // opened tiles accumulator for bgKey
         if (!closed) {
           openedCount++;
-          const hash = ((ri * 4099) ^ (ci * 131)) >>> 0;
+          const hash = ((ri * 4099) ^ (ci * 131)) >>> 0; // make it to unsigned integer number
           const head = +content[0];
-          openedAccumulator = (openedAccumulator + hash + (head | 0)) >>> 0;
+          openedAccumulator = (openedAccumulator + hash + (head | 0)) >>> 0; // make it to unsigned integer number
         }
 
         // Outer sprite
@@ -322,7 +343,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
           if (!closed) {
             const { width, height } = outerTexture;
             const scale = { x: w / width, y: h / height };
-            outerSprites[outerIdx++] = cloneElement(baseOuter, { key: typeKeyBase, x: startX, y: startY, scale });
+            outerSprites[outerIdx++] = cloneElement(baseOuter, { key, x: startX, y: startY, scale });
           }
         }
 
@@ -343,7 +364,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
           else {
             const { width, height } = innerTexture;
             const scale = { x: iw / width, y: ih / height };
-            innerSprites[innerIdx++] = cloneElement(baseInner, { key: typeKeyBase + 1, x: startXFloat, y: startYFloat, scale }); // snapped inner
+            innerSprites[innerIdx++] = cloneElement(baseInner, { key, x: startXFloat, y: startYFloat, scale }); // snapped inner
           }
         }
 
@@ -356,7 +377,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
           if (!texture) continue;
           const { width, height } = texture;
           const scale = { x: w / width, y: h / height };
-          boomSprites[boomIdx++] = cloneElement(baseBoom, { key: typeKeyBase + 2, x: startX, y: startY, scale });
+          boomSprites[boomIdx++] = cloneElement(baseBoom, { key, x: startX, y: startY, scale });
         }
 
         // Flag sprite
@@ -369,7 +390,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
           if (!texture) continue;
           const { width, height } = texture;
           const scale = { x: w / width, y: h / height };
-          flagSprites[flagIdx++] = cloneElement(baseFlag, { key: typeKeyBase + 3, x: startX + tileSize / 2, y: startY + tileSize / 2, scale });
+          flagSprites[flagIdx++] = cloneElement(baseFlag, { key, x: startX + tileSize / 2, y: startY + tileSize / 2, scale });
         }
 
         const texture = numberTextures.get(+content);
@@ -380,7 +401,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
         numberCache.set(keyNum, baseNum);
         const { width, height } = texture;
         const scale = { x: w / width, y: h / height };
-        textElements[textIdx++] = cloneElement(baseNum, { key: typeKeyBase + 4, x: startX + tileSize / 2, y: startY + tileSize / 2, scale });
+        textElements[textIdx++] = cloneElement(baseNum, { key: key + 4, x: startX + tileSize / 2, y: startY + tileSize / 2, scale });
       }
     }
     const bgKey = `${tileSize}${openedCount}${openedAccumulator}`;
@@ -422,15 +443,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
             {textElements}
           </Container>
         )}
-        <Container
-          name={'closed-layer'}
-          ref={node => {
-            closedLayerRef.current = node;
-            if (node) setClosedLayerReady(true);
-          }}
-          eventMode="none"
-          sortableChildren={false}
-        />
+        <Container name={'closed-layer'} ref={closedLayerRef} eventMode="none" sortableChildren={false} />
         {boomSprites}
         {flagSprites}
       </Container>

@@ -90,6 +90,35 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     movementInterval.current = null;
   };
 
+  /** Cleanup canvas contexts and resources */
+  const cleanupCanvasResources = () => {
+    // Canvas 컨텍스트 정리
+    Object.values(canvasRefs).forEach(ref => {
+      if (ref.current) {
+        const ctx = ref.current.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, ref.current.width, ref.current.height);
+        }
+      }
+    });
+
+    // 벡터 에셋 정리
+    setCachedVectorAssets(undefined);
+  };
+
+  /** Cleanup font resources */
+  const cleanupFontResources = () => {
+    try {
+      // 폰트가 로드되어 있는지 확인 후 정리
+      if (document.fonts.check('1em LOTTERIACHAB')) {
+        // 폰트 정리는 브라우저가 자동으로 처리하므로 별도 작업 불필요
+        // document.fonts.delete()는 지원되지 않으므로 스킵
+      }
+    } catch (error) {
+      console.warn('Font cleanup failed:', error);
+    }
+  };
+
   /** 🚀 HIGH QUALITY: Setup high-resolution canvas */
   const setupHighResCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
     const rect = canvas.getBoundingClientRect();
@@ -512,6 +541,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     // 폰트를 비동기로 로드하되, 실패해도 계속 진행
     const loadFontOptional = async () => {
       try {
+        // 폰트가 이미 로드되었는지 확인
+        if (document.fonts.check('1em LOTTERIACHAB')) return;
+
         const lotteriaChabFont = new FontFace(
           'LOTTERIACHAB',
           "url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2302@1.0/LOTTERIACHAB.woff2') format('woff2')",
@@ -530,20 +562,27 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const boom = { inner: makePath2d(boomPaths[0]), outer: makePath2d(boomPaths[1]) };
     setCachedVectorAssets({ cursor, stun, flag, boom });
 
-    // 폰트 로딩과 관계없이 초기화 완료
     setIsInitializing(false);
-
-    // 폰트는 백그라운드에서 로드
     loadFontOptional();
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles, isInitializing]);
 
-  // Render Intreraction Objects
+  // Render Intreraction Objects When Cursor is Moving, Clicking, or other cursor sets.
   useEffect(() => {
     if (!isInitializing) renderInteractionCanvas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursorOriginX, cursorOriginY, startPoint, clickX, clickY, color, cursors]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cancelCurrentMovement();
+      cleanupCanvasResources();
+      cleanupFontResources();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <>

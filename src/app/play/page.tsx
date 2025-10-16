@@ -101,6 +101,7 @@ export default function Play() {
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
   const requestedTilesTimeRef = useRef<number>(0);
+  const reviveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   /**
    * Request Tiles
@@ -188,7 +189,21 @@ export default function Play() {
     return () => {
       document.documentElement.style.overflow = 'auto';
       document.removeEventListener('keydown', zoomHandler);
+
+      // 모든 타이머 정리
+      if (reviveTimerRef.current) {
+        clearTimeout(reviveTimerRef.current);
+        reviveTimerRef.current = null;
+      }
+
+      // WebSocket 강제 정리
       disconnect();
+
+      // 상태 초기화
+      setCachingTiles([]);
+      setRenderTiles([]);
+      setIsInitialized(false);
+      setLeftReviveTime(-1);
 
       // Clean up worker to prevent memory leaks
       // Note: We don't terminate the global worker here as it might be used by other components
@@ -639,7 +654,15 @@ export default function Play() {
   }, [cursorOriginX, cursorOriginY]);
 
   useEffect(() => {
-    setTimeout(() => setLeftReviveTime(e => (e > 0 ? e - 1 : e)), 1000);
+    if (leftReviveTime > 0) {
+      reviveTimerRef.current = setTimeout(() => setLeftReviveTime(e => (e > 0 ? e - 1 : e)), 1000);
+    }
+    return () => {
+      if (reviveTimerRef.current) {
+        clearTimeout(reviveTimerRef.current);
+        reviveTimerRef.current = null;
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leftReviveTime]);
 
