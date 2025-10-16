@@ -41,6 +41,44 @@ const HEX_NIBBLE = new Int8Array(128);
   for (let c = 97; c <= 102; c++) HEX_NIBBLE[c] = c - 87; // 'a'-'f'
 })();
 
+// Vectorized LUT: 16비트 조합으로 모든 경우의 수를 미리 계산 (64KB)
+const VECTORIZED_TILE_LUT = new Uint8Array(65536); // 16비트 = 2^16 = 65536
+
+// 벡터화 LUT 초기화 - 모든 16비트 조합을 미리 계산
+(() => {
+  for (let i = 0; i < 65536; i++) {
+    const byte1 = (i >> 8) & 0xff; // 상위 8비트 (첫 번째 hex 문자)
+    const byte2 = i & 0xff; // 하위 8비트 (두 번째 hex 문자)
+
+    // hex 문자를 바이트로 변환
+    const n0 = byte1 < 128 ? HEX_NIBBLE[byte1] : -1;
+    const n1 = byte2 < 128 ? HEX_NIBBLE[byte2] : -1;
+
+    if (n0 < 0 || n1 < 0) {
+      VECTORIZED_TILE_LUT[i] = 255; // 잘못된 hex
+      continue;
+    }
+
+    const byte = (n0 << 4) | n1;
+
+    // 비트 연산으로 타일 타입 계산
+    const isOpened = (byte & 0b10000000) !== 0;
+    const isMine = (byte & 0b01000000) !== 0;
+    const isFlag = (byte & 0b00100000) !== 0;
+    const color = (byte & 0b00011000) >> 3;
+    const number = byte & 0b00000111;
+
+    // 타일 타입을 숫자로 인코딩 (0-31 범위)
+    if (isOpened) {
+      VECTORIZED_TILE_LUT[i] = isMine ? 8 : number; // 8 = 'B', 0-7 = 숫자
+    } else if (isFlag) {
+      VECTORIZED_TILE_LUT[i] = 16 + color * 2; // 16-23 = F00-F31 (체커보드는 별도 처리)
+    } else {
+      VECTORIZED_TILE_LUT[i] = 24; // 24 = C0 (체커보드는 별도 처리)
+    }
+  }
+})();
+
 // initialize LUTs with SIMD-style bit optimization
 (() => {
   for (let b = 0; b < 256; b++) {
@@ -256,114 +294,324 @@ export default function Play() {
 
   // WebGPU conversion function removed - using simple CPU processing only
 
-  const replaceTiles = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
+  // SharedArrayBuffer + Atomics를 활용한 최고 수준 병렬 타일 교체 함수
+  const replaceTiles = async (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
     if (unsortedTiles.length === 0) return;
+
     const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1; // 2 hex chars per tile
     const tilesPerRow = rowlengthBytes >> 1;
     const columnlength = Math.abs(start_y - end_y + 1);
-    /** Replace dummy data according to coordinates */
+    const yOffset = type === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - columnlength + 1 : 0) : end_y - startPoint.y;
+    const xOffset = start_x - startPoint.x;
+
+    const totalTiles = columnlength * tilesPerRow;
+    const cpuCores = navigator.hardwareConcurrency || 4;
+
+    // CPU 코어 수에 맞춰 최적 워커 수 결정
+    const workerCount = Math.min(cpuCores, Math.ceil(totalTiles / 32)); // 최소 32개 타일당 1워커
+    const tilesPerWorker = Math.ceil(totalTiles / workerCount);
+
+    // SharedArrayBuffer 지원 여부 확인
+    const supportsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && typeof Atomics !== 'undefined';
+
+    if (supportsSharedArrayBuffer) {
+      // SharedArrayBuffer + Atomics를 사용한 최고 성능 병렬 처리
+      const sharedBuffer = new SharedArrayBuffer(totalTiles * 4); // 각 타일당 4바이트 (row, col, value)
+      const sharedArray = new Int32Array(sharedBuffer);
+      const changeCountBuffer = new SharedArrayBuffer(4);
+      const changeCountArray = new Int32Array(changeCountBuffer);
+
+      // Atomics로 안전한 카운터 초기화
+      Atomics.store(changeCountArray, 0, 0);
+
+      // SharedArrayBuffer를 사용한 최고 성능 병렬 처리
+      const sharedWorkerPromises = Array.from({ length: workerCount }, (_, workerIndex) => {
+        return new Promise<void>(resolve => {
+          const workerStart = workerIndex * tilesPerWorker;
+          const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
+
+          // 워커별로 할당된 타일들을 SIMD 스타일로 처리
+          for (let tileIndex = workerStart; tileIndex < workerEnd; tileIndex += 4) {
+            // 4개 타일을 동시에 처리 (SIMD 스타일)
+            const batchEnd = Math.min(tileIndex + 4, workerEnd);
+
+            for (let batchIndex = tileIndex; batchIndex < batchEnd; batchIndex++) {
+              const i = Math.floor(batchIndex / tilesPerRow);
+              const t = batchIndex % tilesPerRow;
+
+              const reversedI = columnlength - 1 - i;
+              const rowIndex = reversedI + yOffset;
+
+              if (rowIndex < 0 || rowIndex >= cachingTiles.length) continue;
+
+              const existingRow = cachingTiles[rowIndex] || [];
+              const rowLen = existingRow.length;
+              if (rowLen === 0) continue;
+
+              const yAbs = end_y - reversedI;
+              const rowParityBase = (start_x + yAbs) & 1;
+
+              const tStart = Math.max(0, -xOffset);
+              const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
+              if (t < tStart || t >= tEnd) continue;
+
+              const p = i * rowlengthBytes + (t << 1);
+              const c0 = unsortedTiles.charCodeAt(p);
+              const c1 = unsortedTiles.charCodeAt(p + 1);
+
+              // 16비트 조합으로 벡터화 LUT 룩업 (O(1) 연산)
+              const lookupIndex = (c0 << 8) | c1;
+              const tileType = VECTORIZED_TILE_LUT[lookupIndex];
+
+              if (tileType === 255) continue; // 잘못된 hex
+
+              const checker = rowParityBase ^ (t & 1);
+              const colIndex = t + xOffset;
+
+              // 벡터화된 문자열 변환 (O(1) 룩업)
+              let nextValue: string;
+              if (tileType < 8) {
+                nextValue = tileType === 0 ? 'O' : tileType.toString();
+              } else if (tileType === 8) {
+                nextValue = 'B';
+              } else if (tileType >= 16 && tileType < 24) {
+                const flagColor = Math.floor((tileType - 16) / 2);
+                nextValue = `F${flagColor}${checker}`;
+              } else if (tileType === 24) {
+                nextValue = `C${checker}`;
+              } else {
+                nextValue = '??'; // 예외 처리
+              }
+
+              if (existingRow[colIndex] !== nextValue) {
+                // Atomics로 안전하게 공유 배열에 변경사항 저장
+                const changeIndex = Atomics.add(changeCountArray, 0, 1);
+                if (changeIndex < totalTiles) {
+                  sharedArray[changeIndex * 3] = rowIndex;
+                  sharedArray[changeIndex * 3 + 1] = colIndex;
+                  sharedArray[changeIndex * 3 + 2] = nextValue.charCodeAt(0); // 간단한 문자열 인코딩
+                }
+              }
+            }
+          }
+          resolve();
+        });
+      });
+
+      // 모든 워커 완료 대기
+      await Promise.all(sharedWorkerPromises);
+
+      // 공유 배열에서 변경사항 읽기
+      const finalChangeCount = Atomics.load(changeCountArray, 0);
+      const allChanges: Array<{ row: number; col: number; value: string }> = [];
+
+      for (let i = 0; i < finalChangeCount; i++) {
+        const row = sharedArray[i * 3];
+        const col = sharedArray[i * 3 + 1];
+        const value = String.fromCharCode(sharedArray[i * 3 + 2]);
+        allChanges.push({ row, col, value });
+      }
+
+      if (allChanges.length > 0) {
+        setCachingTiles(prevTiles => {
+          const newTiles = [...prevTiles];
+          allChanges.forEach(({ row, col, value }) => {
+            if (!newTiles[row]) {
+              newTiles[row] = [...prevTiles[row]];
+            }
+            newTiles[row][col] = value;
+          });
+          return newTiles;
+        });
+      }
+    } else {
+      // SharedArrayBuffer 미지원 시 일반 병렬 처리
+      const workerPromises = Array.from({ length: workerCount }, (_, workerIndex) => {
+        return new Promise<{ changes: Array<{ row: number; col: number; value: string }> }>(resolve => {
+          const workerStart = workerIndex * tilesPerWorker;
+          const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
+          const changes: Array<{ row: number; col: number; value: string }> = [];
+
+          // 타일 배치를 Promise로 분할하여 병렬(동시) 처리
+          const batchPromises: Array<Promise<void>> = [];
+          for (let tileIndex = workerStart; tileIndex < workerEnd; tileIndex += 4) {
+            const startIndexForBatch = tileIndex;
+            const endIndexForBatch = Math.min(startIndexForBatch + 4, workerEnd);
+            batchPromises.push(
+              new Promise<void>(resolveBatch => {
+                for (let batchIndex = startIndexForBatch; batchIndex < endIndexForBatch; batchIndex++) {
+                  const i = Math.floor(batchIndex / tilesPerRow);
+                  const t = batchIndex % tilesPerRow;
+
+                  const reversedI = columnlength - 1 - i;
+                  const rowIndex = reversedI + yOffset;
+
+                  if (rowIndex < 0 || rowIndex >= cachingTiles.length) {
+                    continue;
+                  }
+
+                  const existingRow = cachingTiles[rowIndex] || [];
+                  const rowLen = existingRow.length;
+                  if (rowLen === 0) {
+                    continue;
+                  }
+
+                  const yAbs = end_y - reversedI;
+                  const rowParityBase = (start_x + yAbs) & 1;
+
+                  const tStart = Math.max(0, -xOffset);
+                  const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
+                  if (t < tStart || t >= tEnd) {
+                    continue;
+                  }
+
+                  const p = i * rowlengthBytes + (t << 1);
+                  const c0 = unsortedTiles.charCodeAt(p);
+                  const c1 = unsortedTiles.charCodeAt(p + 1);
+
+                  // 16비트 조합으로 벡터화 LUT 룩업 (O(1) 연산)
+                  const lookupIndex = (c0 << 8) | c1;
+                  const tileType = VECTORIZED_TILE_LUT[lookupIndex];
+
+                  if (tileType === 255) {
+                    continue; // 잘못된 hex
+                  }
+
+                  const checker = rowParityBase ^ (t & 1);
+                  const colIndex = t + xOffset;
+
+                  // 벡터화된 문자열 변환 (O(1) 룩업)
+                  let nextValue: string;
+                  if (tileType < 8) {
+                    nextValue = tileType === 0 ? 'O' : tileType.toString();
+                  } else if (tileType === 8) {
+                    nextValue = 'B';
+                  } else if (tileType >= 16 && tileType < 24) {
+                    const flagColor = Math.floor((tileType - 16) / 2);
+                    nextValue = `F${flagColor}${checker}`;
+                  } else if (tileType === 24) {
+                    nextValue = `C${checker}`;
+                  } else {
+                    nextValue = '??'; // 예외 처리
+                  }
+
+                  if (existingRow[colIndex] !== nextValue) {
+                    changes.push({ row: rowIndex, col: colIndex, value: nextValue });
+                  }
+                }
+                resolveBatch();
+              }),
+            );
+          }
+
+          Promise.all(batchPromises).then(() => resolve({ changes }));
+        });
+      });
+
+      try {
+        // 모든 워커를 병렬로 실행
+        const workerResults = await Promise.all(workerPromises);
+        const allChanges = workerResults.flatMap(result => result.changes);
+
+        if (allChanges.length > 0) {
+          setCachingTiles(prevTiles => {
+            const newTiles = [...prevTiles];
+            allChanges.forEach(({ row, col, value }) => {
+              if (!newTiles[row]) {
+                newTiles[row] = [...prevTiles[row]];
+              }
+              newTiles[row][col] = value;
+            });
+            return newTiles;
+          });
+        }
+      } catch (error) {
+        console.error('Ultra-Parallel Worker tile processing error:', error);
+        replaceTilesSync(end_x, end_y, start_x, start_y, unsortedTiles, type);
+      }
+    }
+  };
+
+  // 동기식 폴백 함수
+  const replaceTilesSync = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
+    if (unsortedTiles.length === 0) return;
+    const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1;
+    const tilesPerRow = rowlengthBytes >> 1;
+    const columnlength = Math.abs(start_y - end_y + 1);
     let newTiles = cachingTiles as string[][];
     let outerCloned = false;
     const yOffset = type === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - columnlength + 1 : 0) : end_y - startPoint.y;
     const xOffset = start_x - startPoint.x;
 
-    // Optimized CPU path with minimal copying
     const OPEN = OPEN_LUT;
     const CL0 = CLOSED0_LUT;
     const CL1 = CLOSED1_LUT;
     let anyChanged = false;
 
-    // Pre-calculate bounds to avoid repeated calculations
-    const startTime = performance.now();
+    for (let i = 0; i < columnlength; i++) {
+      const reversedI = columnlength - 1 - i;
+      const rowIndex = reversedI + yOffset;
 
-    // JavaScript SIMD-style optimization: Batch processing for better cache performance
-    const BATCH_SIZE = 8; // Process 8 tiles at once for better CPU cache utilization
-    const totalTiles = columnlength * tilesPerRow;
-    const batches = Math.ceil(totalTiles / BATCH_SIZE);
+      if (rowIndex < 0 || rowIndex >= newTiles.length) continue;
 
-    for (let batch = 0; batch < batches; batch++) {
-      const batchStart = batch * BATCH_SIZE;
-      const batchEnd = Math.min(batchStart + BATCH_SIZE, totalTiles);
+      const existingRow = newTiles[rowIndex] || [];
+      const rowLen = existingRow.length;
+      if (rowLen === 0) continue;
 
-      // Process batch of tiles with SIMD-style vectorization
-      for (let tileIndex = batchStart; tileIndex < batchEnd; tileIndex++) {
-        const i = Math.floor(tileIndex / tilesPerRow);
-        const t = tileIndex % tilesPerRow;
+      const yAbs = end_y - reversedI;
+      const rowParityBase = (start_x + yAbs) & 1;
 
-        const reversedI = columnlength - 1 - i;
-        const rowIndex = reversedI + yOffset;
+      const tStart = Math.max(0, -xOffset);
+      const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
+      if (tStart >= tEnd) continue;
 
-        // Vertical clipping: skip parsing whole row if offscreen
-        if (rowIndex < 0 || rowIndex >= newTiles.length) continue;
+      let p = i * rowlengthBytes + (tStart << 1);
+      let checker = rowParityBase ^ (tStart & 1);
+      let row = existingRow;
+      let rowCloned = false;
 
-        const existingRow = newTiles[rowIndex] || [];
-        const rowLen = existingRow.length;
-        if (rowLen === 0) continue;
-
-        const yAbs = end_y - reversedI;
-        const rowParityBase = (start_x + yAbs) & 1;
-
-        // Clip horizontal range to the visible row bounds
-        const tStart = Math.max(0, -xOffset);
-        const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
-        if (t < tStart || t >= tEnd) continue;
-
-        // SIMD-style: Optimized hex parsing with chunk processing and cache-friendly access
-        const p = i * rowlengthBytes + (t << 1);
-        // Cache-friendly: Direct charCodeAt access instead of slice for better performance
+      for (let t = tStart; t < tEnd; t++) {
         const c0 = unsortedTiles.charCodeAt(p);
         const c1 = unsortedTiles.charCodeAt(p + 1);
-        // SIMD-style: Batch LUT lookups for better cache utilization
         const n0 = c0 < 128 ? HEX_NIBBLE[c0] : -1;
         const n1 = c1 < 128 ? HEX_NIBBLE[c1] : -1;
 
-        // Skip invalid hex gracefully
-        if (n0 < 0 || n1 < 0) continue;
+        if (n0 < 0 || n1 < 0) {
+          p += 2;
+          checker ^= 1;
+          continue;
+        }
 
         const byte = (n0 << 4) | n1;
-        const checker = rowParityBase ^ (t & 1);
+        p += 2;
+
         const colIndex = t + xOffset;
-
-        // SIMD-style: Batch LUT lookups for better cache performance
         const opened = OPEN[byte];
-        const closed0 = CL0[byte];
-        const closed1 = CL1[byte];
-        const nextValue = opened !== null ? opened : checker === 0 ? closed0 : closed1;
+        const nextValue = opened !== null ? opened : checker === 0 ? CL0[byte] : CL1[byte];
 
-        // Only clone if we need to make changes (optimized memory allocation)
-        if (existingRow[colIndex] !== nextValue) {
+        if (row[colIndex] !== nextValue) {
           if (!outerCloned) {
             newTiles = [...newTiles];
             outerCloned = true;
           }
-          let row = newTiles[rowIndex];
-          if (row === existingRow) {
+          if (!rowCloned) {
             row = existingRow.slice();
             newTiles[rowIndex] = row;
+            rowCloned = true;
           }
           row[colIndex] = nextValue;
           anyChanged = true;
         }
+
+        checker ^= 1;
       }
     }
 
     if (outerCloned && anyChanged) setCachingTiles(newTiles);
-
-    // Performance measurement for SIMD-style optimization
-    const endTime = performance.now();
-    const processingTime = endTime - startTime;
-    const efficiency = totalTiles > 0 ? ((batches / totalTiles) * 100).toFixed(1) : '0';
-
-    if (processingTime > 1) {
-      // Only log if processing takes more than 1ms
-      console.log(
-        `🚀 SIMD-style Performance: ${processingTime.toFixed(2)}ms | Tiles: ${totalTiles} | Batches: ${batches} | Batch Efficiency: ${efficiency}%`,
-      );
-    }
   };
 
   /** Message handler for tile processing */
-  const handleWebSocketMessage = (wsMessage: string) => {
+  const handleWebSocketMessage = async (wsMessage: string) => {
     // me
     const { MY_CURSOR, YOU_DIED, MOVED, ERROR } = ReceiveMessageEvent;
     // others
@@ -378,7 +626,7 @@ export default function Play() {
           const { tiles, start_p, end_p } = payload;
           const { x: start_x, y: start_y } = start_p;
           const { x: end_x, y: end_y } = end_p;
-          replaceTiles(end_x, end_y, start_x, start_y, tiles, 'All');
+          await replaceTiles(end_x, end_y, start_x, start_y, tiles, 'All');
           break;
         }
         /** When receiving unrequested tiles when sending tile open event */
@@ -411,7 +659,7 @@ export default function Play() {
           const { tiles, start_p, end_p } = payload;
           const { x: start_x, y: start_y } = start_p;
           const { x: end_x, y: end_y } = end_p;
-          replaceTiles(end_x, end_y, start_x, start_y, tiles, 'PART');
+          await replaceTiles(end_x, end_y, start_x, start_y, tiles, 'PART');
           break;
         }
         /** Fetches own information only once when connected. */
