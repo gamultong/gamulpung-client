@@ -56,29 +56,22 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
       activeCount++;
       nextTask();
     };
-    return function limit<T>(task: () => Promise<T>): Promise<T> {
-      return new Promise<T>((resolve, reject) => {
+    return <T,>(task: () => Promise<T>): Promise<T> =>
+      new Promise<T>((resolve, reject) => {
         const execute = () => {
           task()
-            .then(result => {
+            .then(resolve)
+            .catch(reject)
+            .finally(() => {
               activeCount--;
               runNext();
-              resolve(result);
-            })
-            .catch(error => {
-              activeCount--;
-              runNext();
-              reject(error);
             });
         };
         if (activeCount < maxConcurrent) {
           activeCount++;
           execute();
-        } else {
-          queue.push(execute);
-        }
+        } else queue.push(execute);
       });
-    };
   };
 
   // Build textures (boom/flags + gradient tiles) and cache; heavy parts are parallelized
@@ -159,8 +152,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     );
     // flags 0..3
     const flagMinimalized = 2;
-    for (let idx = 0; idx < 4; idx++) {
-      const flagIndex = idx;
+    [0, 1, 2, 3].forEach(idx =>
       promises.push(
         limit(async () => {
           const flagCanvas = document.createElement('canvas');
@@ -172,13 +164,13 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
           flagGradient.addColorStop(1, 'transparent');
           flagCtx.translate(flagCanvas.width / 6, flagCanvas.height / 6);
           flagCtx.scale(zoom / flagMinimalized / 4.5, zoom / flagMinimalized / 4.5);
-          fillPathInCtx(flagCtx, makePath2d(flagPaths[0]), CURSOR_COLORS[flagIndex]);
+          fillPathInCtx(flagCtx, makePath2d(flagPaths[0]), CURSOR_COLORS[idx]);
           fillPathInCtx(flagCtx, makePath2d(flagPaths[1]), flagGradient);
           const tex = await canvasToTexture(flagCanvas, tileSize, tileSize);
-          textureCache.set(`flag${flagIndex}`, tex);
+          textureCache.set(`flag${idx}`, tex);
         }),
-      );
-    }
+      ),
+    );
 
     Promise.all(promises).finally(() => setTexturesReady(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -212,8 +204,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
         t.baseTexture.resolution = 1;
         return t;
       };
-      for (let n = 1; n <= countColors.length; n++) {
-        const num = n;
+      for (let num = 1; num <= countColors.length; num++) {
         promises.push(
           limit(async () => {
             const canvas = document.createElement('canvas');
@@ -240,7 +231,6 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileSize]);
 
-  // --------------------- Helper functions (pure) ---------------------
   const computeVisibleBounds = (totalRows: number, totalCols: number, padW: number, padH: number, viewW: number, viewH: number, size: number) => {
     const startCol = Math.max(0, Math.ceil(padW - 1));
     const endCol = Math.min(totalCols - 1, (padW + (viewW + size) / (size || 1)) >>> 0);
@@ -249,13 +239,14 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     return { startCol, endCol, startRow, endRow };
   };
 
+  // make numeric keys for number textures based on row and column and tile size
   const makeNumericKeys = (ri: number, ci: number, size: number) => {
     const tileKeyNum = ((ri * 131071 + ci) * 131 + (size | 0)) >>> 0;
     const key = (tileKeyNum * 10) >>> 0;
     return { tileKeyNum, key };
   };
 
-  const isClosedOrFlag = (c: string) => c === TileContent.CLOSED || c === TileContent.FLAGGED;
+  const isClosedOrFlag = (t: string) => [TileContent.CLOSED, TileContent.FLAGGED].some(f => f === t);
 
   const getTileTexturesForContent = (content: string | number, defaults: { outerTexture?: Texture; innerTexture?: Texture }) => {
     if (!content) return { ...defaults, closed: true };
@@ -325,8 +316,8 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
       closedPoolRef.current.push({ outer, inner });
     }
     for (let i = approxVisible; i < closedPoolRef.current.length; i++) {
-      const p = closedPoolRef.current[i];
-      p.outer.visible = p.inner.visible = false;
+      const { outer, inner } = closedPoolRef.current[i];
+      outer.visible = inner.visible = false;
     }
 
     const { current } = closedPoolRef;
@@ -404,17 +395,17 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     } as const;
     if (!defaultTextures.outerTexture || !defaultTextures.innerTexture) return emptySprites;
 
-    for (let ri = startRow; ri <= endRow; ri++) {
-      for (let ci = startCol; ci <= endCol; ci++) {
-        const { xFloat, yFloat, startX, startY, endX, endY, w, h } = snapTileEdges(ci, ri, tilePadWidth, tilePadHeight, tileSize);
-        const content = tiles[ri][ci];
+    for (let rowIdx = startRow; rowIdx <= endRow; rowIdx++) {
+      for (let colIdx = startCol; colIdx <= endCol; colIdx++) {
+        const { xFloat, yFloat, startX, startY, endX, endY, w, h } = snapTileEdges(colIdx, rowIdx, tilePadWidth, tilePadHeight, tileSize);
+        const content = tiles[rowIdx][colIdx];
         const { outerTexture, innerTexture, closed } = getTileTexturesForContent(content, defaultTextures);
-        const { key } = makeNumericKeys(ri, ci, tileSize);
+        const { key } = makeNumericKeys(rowIdx, colIdx, tileSize);
 
         // opened tiles accumulator for bgKey
         if (!closed) {
           openedCount++;
-          const hash = ((ri * 4099) ^ (ci * 131)) >>> 0; // make it to unsigned integer number
+          const hash = ((rowIdx * 4099) ^ (colIdx * 131)) >>> 0; // make it to unsigned integer number
           const head = +content[0];
           openedAccumulator = (openedAccumulator + hash + (head | 0)) >>> 0; // make it to unsigned integer number
         }
@@ -480,7 +471,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
         const texture = numbersReady ? numberTexturesRef.current.get(+content) : undefined;
         if (!texture) continue;
         // Number sprite elements
-        const keyNum = `num${+content}${tileSize}`;
+        const keyNum = `num${content}${tileSize}`;
         const baseNum = numberCache.get(keyNum) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={texture} anchor={0.5} />;
         numberCache.set(keyNum, baseNum);
         const { width, height } = texture;
