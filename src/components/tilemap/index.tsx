@@ -1,12 +1,13 @@
 'use client';
 import { Container, Sprite, Stage } from '@pixi/react';
-import { cloneElement, useLayoutEffect, useMemo, useRef, useState, useEffect } from 'react';
+import { cloneElement, useLayoutEffect, useMemo, useRef, useEffect } from 'react';
 import { Texture, SCALE_MODES, MIPMAP_MODES, WRAP_MODES, Container as PixiContainer, Sprite as PixiSprite } from 'pixi.js';
 import RenderPaths from '@/assets/renderPaths.json';
 import { useCursorStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
 import { TileContent } from '@/types';
 import { fillCtxAndPath as fillPathInCtx, makePath2d, hexToRgb, lerp } from '@/utils';
+import { CURSOR_COLORS } from '@/constants';
 
 interface TilemapProps {
   tiles: string[][];
@@ -16,7 +17,6 @@ interface TilemapProps {
   className?: string;
 }
 
-const CURSOR_COLORS = ['#FF4D00', '#F0C800', '#0094FF', '#BC3FDC'];
 export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, className }: TilemapProps) {
   // constants
   const { flagPaths, tileColors, countColors, boomPaths } = RenderPaths;
@@ -105,7 +105,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
 
     // Flag textures
     const flagMinimalized = 2;
-    for (let i = 0; i < CURSOR_COLORS.length; i++) {
+    for (let idx = 0; idx < 4; idx++) {
       const flagCanvas = document.createElement('canvas');
       flagCanvas.width = flagCanvas.height = tileSize / flagMinimalized;
       const flagCtx = getCtx(flagCanvas);
@@ -116,7 +116,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
       flagCtx.translate(flagCanvas.width / 6, flagCanvas.height / 6);
       flagCtx.scale(zoom / flagMinimalized / 4.5, zoom / flagMinimalized / 4.5);
 
-      fillPathInCtx(flagCtx, makePath2d(flagPaths[0]), CURSOR_COLORS[i]); // fill flag color
+      fillPathInCtx(flagCtx, makePath2d(flagPaths[0]), CURSOR_COLORS[idx]); // fill flag color
       fillPathInCtx(flagCtx, makePath2d(flagPaths[1]), flagGradient); // fill flag pole
 
       const flagTexture = Texture.from(flagCanvas);
@@ -124,7 +124,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
       flagTexture.baseTexture.mipmap = MIPMAP_MODES.OFF;
       flagTexture.baseTexture.setSize(tileSize, tileSize);
 
-      textureCache.set(`flag${i}`, flagTexture);
+      textureCache.set(`flag${idx}`, flagTexture);
     }
     return textureCache;
     // eslint-disable-next-line react-hooks/exhaustive-deps

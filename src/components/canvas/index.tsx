@@ -10,7 +10,7 @@ import useWebSocketStore from '@/store/websocketStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
 import { XYType, VectorImagesType, TileContent, SendMessageEvent } from '@/types';
-import { Click, ClickType, CursorColors, CursorDirections, OtherCursorColors } from '@/constants';
+import { Click, ClickType, CURSOR_COLORS, CURSOR_DIRECTIONS, OTHER_CURSOR_COLORS } from '@/constants';
 import { makePath2d, makePath2dFromArray } from '@/utils';
 
 class TileNode {
@@ -243,11 +243,12 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   };
 
   /** Check if the clicked tile is already a neighbor of the cursor */
-  const isAlreadyCursorNeighbor = (x: number, y: number) => CursorDirections.some(([dx, dy]) => cursorOriginX + dx === x && cursorOriginY + dy === y);
+  const isAlreadyCursorNeighbor = (x: number, y: number) =>
+    CURSOR_DIRECTIONS.some(([dx, dy]) => cursorOriginX + dx === x && cursorOriginY + dy === y);
 
   const findOpenedNeighbors = (currentX: number, currentY: number) => {
     let result = { x: Infinity, y: Infinity };
-    [[0, 0], ...CursorDirections].some(([dx, dy]) => {
+    [[0, 0], ...CURSOR_DIRECTIONS].some(([dx, dy]) => {
       const x = currentX + dx;
       const y = currentY + dy;
       if (!tiles[y] || !tiles[y][x]) return false;
@@ -349,7 +350,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const [drawX, drawY] = [x - cursorOriginX + otherCursorPaddingWidth, y - cursorOriginY + otherCursorPaddingHeight];
       const [distanceX, distanceY] = [x - pointerX, y - pointerY];
       const rotate = distanceX !== 0 || distanceY !== 0 ? Math.atan2(distanceY, distanceX) : 0;
-      drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CursorColors[color], revive_at, rotate);
+      drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CURSOR_COLORS[color], revive_at, rotate);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursors, cursorOriginX, cursorOriginY, tilePaddingWidth, tilePaddingHeight, tileSize, windowWidth, windowHeight, canvasRefs.otherCursorsRef]);
@@ -377,7 +378,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     cursors.forEach(({ pointer, color }) => {
       const { x, y } = pointer ?? { x: 0, y: 0 };
       const [drawX, drawY] = [x - cursorOriginX + otherCursorPaddingWidth, y - cursorOriginY + otherCursorPaddingHeight];
-      drawPointer(otherPointerCtx, drawX * tileSize, drawY * tileSize, OtherCursorColors[color], borderPixel);
+      drawPointer(otherPointerCtx, drawX * tileSize, drawY * tileSize, OTHER_CURSOR_COLORS[color], borderPixel);
     });
   };
 
@@ -395,7 +396,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     // Function to get neighbors of a node
     const getNeighbors = (grid: (TileNode | null)[][], node: TileNode) => {
       const neighbors = [];
-      for (const [dx, dy] of CursorDirections) {
+      for (const [dx, dy] of CURSOR_DIRECTIONS) {
         // Check if the neighbor is within bounds and not a flag or other cursor
         const [x, y] = [node.x + dx, node.y + dy];
         // Check if the neighbor is within bounds
@@ -470,7 +471,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     interactionCtx.clearRect(0, 0, windowWidth, windowHeight);
 
     // setting cursor color
-    const cursorColor = CursorColors[color];
+    const cursorColor = CURSOR_COLORS[color];
     const borderPixel = 5 * zoom;
 
     const cursorPosition = {

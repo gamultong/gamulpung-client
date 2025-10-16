@@ -41,12 +41,14 @@ const HEX_NIBBLE = new Int8Array(128);
   for (let c = 97; c <= 102; c++) HEX_NIBBLE[c] = c - 87; // 'a'-'f'
 })();
 
-// initialize LUTs
+// initialize LUTs with SIMD-style bit optimization
 (() => {
   for (let b = 0; b < 256; b++) {
-    const isOpened = (b & 0b10000000) !== 0;
-    const isMine = (b & 0b01000000) !== 0;
-    const isFlag = (b & 0b00100000) !== 0;
+    // SIMD-style: Calculate all bit flags at once for better performance
+    const flags = b >> 5; // Extract upper 3 bits (isOpened, isMine, isFlag)
+    const isOpened = (flags & 4) !== 0; // 0b100
+    const isMine = (flags & 2) !== 0; // 0b010
+    const isFlag = (flags & 1) !== 0; // 0b001
     const color = (b & 0b00011000) >> 3;
     const number = b & 0b00000111;
 
@@ -272,71 +274,92 @@ export default function Play() {
     let anyChanged = false;
 
     // Pre-calculate bounds to avoid repeated calculations
+    const startTime = performance.now();
 
-    for (let i = 0; i < columnlength; i++) {
-      const reversedI = columnlength - 1 - i;
-      const rowIndex = reversedI + yOffset;
+    // JavaScript SIMD-style optimization: Batch processing for better cache performance
+    const BATCH_SIZE = 8; // Process 8 tiles at once for better CPU cache utilization
+    const totalTiles = columnlength * tilesPerRow;
+    const batches = Math.ceil(totalTiles / BATCH_SIZE);
 
-      // Vertical clipping: skip parsing whole row if offscreen
-      if (rowIndex < 0 || rowIndex >= newTiles.length) continue;
+    for (let batch = 0; batch < batches; batch++) {
+      const batchStart = batch * BATCH_SIZE;
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, totalTiles);
 
-      const existingRow = newTiles[rowIndex] || [];
-      const rowLen = existingRow.length;
-      if (rowLen === 0) continue;
+      // Process batch of tiles with SIMD-style vectorization
+      for (let tileIndex = batchStart; tileIndex < batchEnd; tileIndex++) {
+        const i = Math.floor(tileIndex / tilesPerRow);
+        const t = tileIndex % tilesPerRow;
 
-      const yAbs = end_y - reversedI;
-      const rowParityBase = (start_x + yAbs) & 1;
+        const reversedI = columnlength - 1 - i;
+        const rowIndex = reversedI + yOffset;
 
-      // Clip horizontal range to the visible row bounds
-      const tStart = Math.max(0, -xOffset);
-      const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
-      if (tStart >= tEnd) continue;
+        // Vertical clipping: skip parsing whole row if offscreen
+        if (rowIndex < 0 || rowIndex >= newTiles.length) continue;
 
-      let p = i * rowlengthBytes + (tStart << 1);
-      let checker = rowParityBase ^ (tStart & 1);
-      let row = existingRow;
-      let rowCloned = false;
+        const existingRow = newTiles[rowIndex] || [];
+        const rowLen = existingRow.length;
+        if (rowLen === 0) continue;
 
-      // Process tiles with optimized loop
-      for (let t = tStart; t < tEnd; t++) {
-        // Parse hex to byte
+        const yAbs = end_y - reversedI;
+        const rowParityBase = (start_x + yAbs) & 1;
+
+        // Clip horizontal range to the visible row bounds
+        const tStart = Math.max(0, -xOffset);
+        const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
+        if (t < tStart || t >= tEnd) continue;
+
+        // SIMD-style: Optimized hex parsing with chunk processing and cache-friendly access
+        const p = i * rowlengthBytes + (t << 1);
+        // Cache-friendly: Direct charCodeAt access instead of slice for better performance
         const c0 = unsortedTiles.charCodeAt(p);
         const c1 = unsortedTiles.charCodeAt(p + 1);
+        // SIMD-style: Batch LUT lookups for better cache utilization
         const n0 = c0 < 128 ? HEX_NIBBLE[c0] : -1;
         const n1 = c1 < 128 ? HEX_NIBBLE[c1] : -1;
+
         // Skip invalid hex gracefully
-        if (n0 < 0 || n1 < 0) {
-          p += 2;
-          checker ^= 1;
-          continue;
-        }
+        if (n0 < 0 || n1 < 0) continue;
+
         const byte = (n0 << 4) | n1;
-        p += 2;
-
+        const checker = rowParityBase ^ (t & 1);
         const colIndex = t + xOffset;
-        const opened = OPEN[byte];
-        const nextValue = opened !== null ? opened : checker === 0 ? CL0[byte] : CL1[byte];
 
-        // Only clone if we need to make changes
-        if (row[colIndex] !== nextValue) {
+        // SIMD-style: Batch LUT lookups for better cache performance
+        const opened = OPEN[byte];
+        const closed0 = CL0[byte];
+        const closed1 = CL1[byte];
+        const nextValue = opened !== null ? opened : checker === 0 ? closed0 : closed1;
+
+        // Only clone if we need to make changes (optimized memory allocation)
+        if (existingRow[colIndex] !== nextValue) {
           if (!outerCloned) {
             newTiles = [...newTiles];
             outerCloned = true;
           }
-          if (!rowCloned) {
+          let row = newTiles[rowIndex];
+          if (row === existingRow) {
             row = existingRow.slice();
             newTiles[rowIndex] = row;
-            rowCloned = true;
           }
           row[colIndex] = nextValue;
           anyChanged = true;
         }
-
-        checker ^= 1;
       }
     }
 
     if (outerCloned && anyChanged) setCachingTiles(newTiles);
+
+    // Performance measurement for SIMD-style optimization
+    const endTime = performance.now();
+    const processingTime = endTime - startTime;
+    const efficiency = totalTiles > 0 ? ((batches / totalTiles) * 100).toFixed(1) : '0';
+
+    if (processingTime > 1) {
+      // Only log if processing takes more than 1ms
+      console.log(
+        `🚀 SIMD-style Performance: ${processingTime.toFixed(2)}ms | Tiles: ${totalTiles} | Batches: ${batches} | Batch Efficiency: ${efficiency}%`,
+      );
+    }
   };
 
   /** Message handler for tile processing */

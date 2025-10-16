@@ -1,4 +1,4 @@
-export const CursorDirections = [
+export const CURSOR_DIRECTIONS = [
   [-1, 0], // left
   [0, -1], // up
   [0, 1], // down
@@ -8,7 +8,7 @@ export const CursorDirections = [
   [1, -1], // right-up
   [1, 1], // right-down
 ];
-export const CursorColors: { [key: string]: string } = {
+export const CURSOR_COLORS: { [key: string]: string } = {
   red: '#FF4D00',
   blue: '#0094FF',
   yellow: '#F0C800',
@@ -18,7 +18,7 @@ export const CursorColors: { [key: string]: string } = {
   '2': '#0094FF',
   '3': '#BC3FDC',
 };
-export const OtherCursorColors: { [key: string]: string } = {
+export const OTHER_CURSOR_COLORS: { [key: string]: string } = {
   red: '#FBCBB6',
   blue: '#A8DBFF',
   yellow: '#FFEE99',
