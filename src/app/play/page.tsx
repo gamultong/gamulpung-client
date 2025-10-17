@@ -683,12 +683,11 @@ export default function Play() {
           break;
         }
         case CURSORS_DIED: {
-          const { cursors: deadCursors, revive_at } = payload;
-          const revive_time = new Date(revive_at)?.getTime();
+          const { cursors: deadCursors } = payload as { cursors: OtherUserSingleCursorState[] };
+          const revive_at = new Date(payload.revive_at)?.getTime();
           const newCursors = cursors.map(cursor => {
-            for (const deadCursor of deadCursors as OtherUserSingleCursorState[])
-              if (cursor.id === deadCursor.id) return { ...cursor, revive_at: revive_time };
-            return cursor;
+            if (!deadCursors.some(({ id }) => id === cursor.id)) return cursor;
+            return { ...cursor, revive_at };
           });
           setCursors(newCursors);
           break;
@@ -724,9 +723,8 @@ export default function Play() {
           console.error(msg);
           break;
         }
-        default: {
+        default:
           break;
-        }
       }
     } catch (e) {
       console.error(e);
