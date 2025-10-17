@@ -4,7 +4,7 @@ import React, { useRef, useEffect, useState, useCallback, useLayoutEffect } from
 import RenderPaths from '@/assets/renderPaths.json';
 
 import useScreenSize from '@/hooks/useScreenSize';
-import useClickStore from '@/store/clickStore';
+import { useClickStore, useAnimationStore } from '@/store/interactionStore';
 import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
 import ChatComponent from '@/components/chat';
@@ -53,7 +53,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 }) => {
   /** constants */
   const MOVE_SPEED = 200; // ms
-  const ANIMATION_ZOOM_MIN = 0.4; // min zoom level
   const BASE_OFFSET = tileSize >> 1; // tileSize / 2
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
   const otherCursorPadding = 1 / (paddingTiles - 1); // padding for other cursors
@@ -67,6 +66,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const { x: cursorX, y: cursorY, zoom, color, setPosition: setCursorPosition, goOriginTo } = useCursorStore();
   const { cursors } = useOtherUserCursorsStore();
   const { sendMessage } = useWebSocketStore();
+  const { useAnimation } = useAnimationStore();
 
   /** References */
   const movementInterval = useRef<NodeJS.Timeout | null>(null);
@@ -189,8 +189,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       currentPath = path;
       setPaths(foundPaths.slice(index));
-      if (zoom < ANIMATION_ZOOM_MIN) return;
-      moveAnimation(dx, dy);
+      if (useAnimation) moveAnimation(dx, dy);
     }, MOVE_SPEED);
   };
 

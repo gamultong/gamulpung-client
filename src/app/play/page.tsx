@@ -9,7 +9,7 @@ import { OtherUserSingleCursorState, useCursorStore, useOtherUserCursorsStore } 
 
 /** components */
 import CanvasRenderComponent from '@/components/canvas';
-import useClickStore from '@/store/clickStore';
+import { useClickStore } from '@/store/interactionStore';
 import useWebSocketStore from '@/store/websocketStore';
 import Inactive from '@/components/inactive';
 import CanvasDashboard from '@/components/canvasDashboard';
