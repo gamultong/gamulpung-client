@@ -41,41 +41,39 @@ const HEX_NIBBLE = new Int8Array(128);
   for (let c = 97; c <= 102; c++) HEX_NIBBLE[c] = c - 87; // 'a'-'f'
 })();
 
-// Vectorized LUT: 16비트 조합으로 모든 경우의 수를 미리 계산 (64KB)
-const VECTORIZED_TILE_LUT = new Uint8Array(65536); // 16비트 = 2^16 = 65536
+// vectorized LUT: calculate all possible combinations of 16 bits (64KB)
+const VECTORIZED_TILE_LUT = new Uint8Array(65536); // 16 bits = 2^16 = 65536
 
-// 벡터화 LUT 초기화 - 모든 16비트 조합을 미리 계산
+// initialize vectorized LUT
 (() => {
   for (let i = 0; i < 65536; i++) {
-    const byte1 = (i >> 8) & 0xff; // 상위 8비트 (첫 번째 hex 문자)
-    const byte2 = i & 0xff; // 하위 8비트 (두 번째 hex 문자)
+    const byte1 = (i >> 8) & 0xff; // upper 8 bits (first hex character)
+    const byte2 = i & 0xff; // lower 8 bits (second hex character)
 
-    // hex 문자를 바이트로 변환
+    // convert hex character to byte
     const n0 = byte1 < 128 ? HEX_NIBBLE[byte1] : -1;
     const n1 = byte2 < 128 ? HEX_NIBBLE[byte2] : -1;
 
     if (n0 < 0 || n1 < 0) {
-      VECTORIZED_TILE_LUT[i] = 255; // 잘못된 hex
+      VECTORIZED_TILE_LUT[i] = 255; // invalid hex
       continue;
     }
 
     const byte = (n0 << 4) | n1;
 
-    // 비트 연산으로 타일 타입 계산
+    // calculate tile type using bit operations
     const isOpened = (byte & 0b10000000) !== 0;
     const isMine = (byte & 0b01000000) !== 0;
     const isFlag = (byte & 0b00100000) !== 0;
     const color = (byte & 0b00011000) >> 3;
     const number = byte & 0b00000111;
 
-    // 타일 타입을 숫자로 인코딩 (0-31 범위)
-    if (isOpened) {
-      VECTORIZED_TILE_LUT[i] = isMine ? 8 : number; // 8 = 'B', 0-7 = 숫자
-    } else if (isFlag) {
-      VECTORIZED_TILE_LUT[i] = 16 + color * 2; // 16-23 = F00-F31 (체커보드는 별도 처리)
-    } else {
-      VECTORIZED_TILE_LUT[i] = 24; // 24 = C0 (체커보드는 별도 처리)
-    }
+    // encode tile type as number (0-31 range)
+    if (isOpened)
+      VECTORIZED_TILE_LUT[i] = isMine ? 8 : number; // 8 = 'B', 0-7 = numbers
+    else if (isFlag)
+      VECTORIZED_TILE_LUT[i] = 16 + color * 2; // 16-23 = F00-F31 (checkerboard is handled separately)
+    else VECTORIZED_TILE_LUT[i] = 24; // 24 = C0 (checkerboard is handled separately)
   }
 })();
 
@@ -83,7 +81,7 @@ const VECTORIZED_TILE_LUT = new Uint8Array(65536); // 16비트 = 2^16 = 65536
 (() => {
   for (let b = 0; b < 256; b++) {
     // SIMD-style: Calculate all bit flags at once for better performance
-    const flags = b >> 5; // Extract upper 3 bits (isOpened, isMine, isFlag)
+    const flags = b >> 5; // extract upper 3 bits (isOpened, isMine, isFlag)
     const isOpened = (flags & 4) !== 0; // 0b100
     const isMine = (flags & 2) !== 0; // 0b010
     const isFlag = (flags & 1) !== 0; // 0b001
@@ -245,6 +243,13 @@ export default function Play() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Handling Websocket Message */
+  useLayoutEffect(() => {
+    if (!message) return;
+    handleWebSocketMessage(message);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message]);
 
   /**
    * Initialize
@@ -522,13 +527,6 @@ export default function Play() {
     }
   };
 
-  /** Handling Websocket Message */
-  useLayoutEffect(() => {
-    if (!message) return;
-    handleWebSocketMessage(message);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message]);
-
   const computedRenderTiles = useMemo(() => {
     const cachingLength = cachingTiles.length;
     if (cachingLength === 0) return [];
@@ -577,7 +575,6 @@ export default function Play() {
 
           // Safe tile type handling
           if (tileType === 'C') return `C${checkerBit}`;
-
           if (tileType === 'F') {
             const flagColor = sourceTile[1] || '0';
             return `F${flagColor}${checkerBit}`;
