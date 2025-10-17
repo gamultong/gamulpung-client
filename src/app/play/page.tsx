@@ -265,10 +265,10 @@ export default function Play() {
    * @param y {number} - Optional Y coordinate for checkerboard pattern
    */
   const parseHex = (hex: string, x: number, y: number) => {
-    if (hex.length < 2) return '';
+    if (hex.length !== 2) return '';
 
     // Direct hex to integer conversion (much faster than string operations)
-    const byte = parseInt(hex.slice(0, 2), 16);
+    const byte = parseInt(hex, 16);
 
     // Bit operations instead of string manipulation
     const isTileOpened = (byte & 0b10000000) !== 0; // bit 7 (MSB)
@@ -295,32 +295,32 @@ export default function Play() {
     const totalTiles = columnlength * tilesPerRow;
     const cpuCores = navigator.hardwareConcurrency || 4;
 
-    // CPU 코어 수에 맞춰 최적 워커 수 결정
-    const workerCount = Math.min(cpuCores, Math.ceil(totalTiles / 32)); // 최소 32개 타일당 1워커
+    // Determine optimal worker count based on CPU cores
+    const workerCount = Math.min(cpuCores, Math.ceil(totalTiles / 32)); // Minimum 1 worker per 32 tiles
     const tilesPerWorker = Math.ceil(totalTiles / workerCount);
 
-    // SharedArrayBuffer 지원 여부 확인
+    // Check if SharedArrayBuffer is supported
     const supportsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && typeof Atomics !== 'undefined';
 
     if (supportsSharedArrayBuffer) {
-      // SharedArrayBuffer + Atomics를 사용한 최고 성능 병렬 처리
-      const sharedBuffer = new SharedArrayBuffer(totalTiles * 4); // 각 타일당 4바이트 (row, col, value)
+      // Highest performance parallel processing using SharedArrayBuffer + Atomics
+      const sharedBuffer = new SharedArrayBuffer(totalTiles * 4); // 4 bytes per tile (row, col, value)
       const sharedArray = new Int32Array(sharedBuffer);
       const changeCountBuffer = new SharedArrayBuffer(4);
       const changeCountArray = new Int32Array(changeCountBuffer);
 
-      // Atomics로 안전한 카운터 초기화
+      // Safely initialize counter using Atomics
       Atomics.store(changeCountArray, 0, 0);
 
-      // SharedArrayBuffer를 사용한 최고 성능 병렬 처리
+      // Highest performance parallel processing using SharedArrayBuffer
       const sharedWorkerPromises = Array.from({ length: workerCount }, (_, workerIndex) => {
         return new Promise<void>(resolve => {
           const workerStart = workerIndex * tilesPerWorker;
           const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
 
-          // 워커별로 할당된 타일들을 SIMD 스타일로 처리
+          // Process tiles assigned to each worker in SIMD style
           for (let tileIndex = workerStart; tileIndex < workerEnd; tileIndex += 4) {
-            // 4개 타일을 동시에 처리 (SIMD 스타일)
+            // Process 4 tiles simultaneously (SIMD style)
             const batchEnd = Math.min(tileIndex + 4, workerEnd);
 
             for (let batchIndex = tileIndex; batchIndex < batchEnd; batchIndex++) {
@@ -347,16 +347,16 @@ export default function Play() {
               const c0 = unsortedTiles.charCodeAt(p);
               const c1 = unsortedTiles.charCodeAt(p + 1);
 
-              // 16비트 조합으로 벡터화 LUT 룩업 (O(1) 연산)
+              // Vectorized LUT lookup (O(1) operation) using 16-bit combination
               const lookupIndex = (c0 << 8) | c1;
               const tileType = VECTORIZED_TILE_LUT[lookupIndex];
 
-              if (tileType === 255) continue; // 잘못된 hex
+              if (tileType === 255) continue; // Invalid hex
 
               const checker = rowParityBase ^ (t & 1);
               const colIndex = t + xOffset;
 
-              // 벡터화된 문자열 변환 (O(1) 룩업)
+              // Vectorized string conversion (O(1) lookup)
               let nextValue: string;
               if (tileType < 8) {
                 nextValue = tileType === 0 ? 'O' : tileType.toString();
@@ -368,16 +368,16 @@ export default function Play() {
               } else if (tileType === 24) {
                 nextValue = `C${checker}`;
               } else {
-                nextValue = '??'; // 예외 처리
+                nextValue = '??'; // Exception handling
               }
 
               if (existingRow[colIndex] !== nextValue) {
-                // Atomics로 안전하게 공유 배열에 변경사항 저장
+                // Safely store changes in shared array using Atomics
                 const changeIndex = Atomics.add(changeCountArray, 0, 1);
                 if (changeIndex < totalTiles) {
                   sharedArray[changeIndex * 3] = rowIndex;
                   sharedArray[changeIndex * 3 + 1] = colIndex;
-                  sharedArray[changeIndex * 3 + 2] = nextValue.charCodeAt(0); // 간단한 문자열 인코딩
+                  sharedArray[changeIndex * 3 + 2] = nextValue.charCodeAt(0); // Simple string encoding
                 }
               }
             }
@@ -386,10 +386,10 @@ export default function Play() {
         });
       });
 
-      // 모든 워커 완료 대기
+      // Wait for all workers to complete
       await Promise.all(sharedWorkerPromises);
 
-      // 공유 배열에서 변경사항 읽기
+      // Read changes from shared array
       const finalChangeCount = Atomics.load(changeCountArray, 0);
       const allChanges: Array<{ row: number; col: number; value: string }> = [];
 
@@ -413,14 +413,14 @@ export default function Play() {
         });
       }
     } else {
-      // SharedArrayBuffer 미지원 시 일반 병렬 처리
+      // Ordinary parallel processing when SharedArrayBuffer is not supported
       const workerPromises = Array.from({ length: workerCount }, (_, workerIndex) => {
         return new Promise<{ changes: Array<{ row: number; col: number; value: string }> }>(resolve => {
           const workerStart = workerIndex * tilesPerWorker;
           const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
           const changes: Array<{ row: number; col: number; value: string }> = [];
 
-          // 타일 배치를 Promise로 분할하여 병렬(동시) 처리
+          // Split tile distribution into promises for parallel (concurrent) processing
           const batchPromises: Array<Promise<void>> = [];
           for (let tileIndex = workerStart; tileIndex < workerEnd; tileIndex += 4) {
             const startIndexForBatch = tileIndex;
@@ -457,18 +457,18 @@ export default function Play() {
                   const c0 = unsortedTiles.charCodeAt(p);
                   const c1 = unsortedTiles.charCodeAt(p + 1);
 
-                  // 16비트 조합으로 벡터화 LUT 룩업 (O(1) 연산)
+                  // Vectorized LUT lookup (O(1) operation) using 16-bit combination
                   const lookupIndex = (c0 << 8) | c1;
                   const tileType = VECTORIZED_TILE_LUT[lookupIndex];
 
                   if (tileType === 255) {
-                    continue; // 잘못된 hex
+                    continue; // Invalid hex
                   }
 
                   const checker = rowParityBase ^ (t & 1);
                   const colIndex = t + xOffset;
 
-                  // 벡터화된 문자열 변환 (O(1) 룩업)
+                  // Vectorized string conversion (O(1) lookup)
                   let nextValue: string;
                   if (tileType < 8) {
                     nextValue = tileType === 0 ? 'O' : tileType.toString();
@@ -480,7 +480,7 @@ export default function Play() {
                   } else if (tileType === 24) {
                     nextValue = `C${checker}`;
                   } else {
-                    nextValue = '??'; // 예외 처리
+                    nextValue = '??'; // Exception handling
                   }
 
                   if (existingRow[colIndex] !== nextValue) {
@@ -497,7 +497,7 @@ export default function Play() {
       });
 
       try {
-        // 모든 워커를 병렬로 실행
+        // Run all workers in parallel
         const workerResults = await Promise.all(workerPromises);
         const allChanges = workerResults.flatMap(result => result.changes);
 
@@ -520,7 +520,7 @@ export default function Play() {
     }
   };
 
-  // 동기식 폴백 함수
+  // Synchronous fallback function
   const replaceTilesSync = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
     if (unsortedTiles.length === 0) return;
     const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1;
@@ -740,7 +740,6 @@ export default function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [message]);
 
-  /** STABLE & FAST: Reliable tile computation without GPU bugs */
   const computedRenderTiles = useMemo(() => {
     const cachingLength = cachingTiles.length;
     if (cachingLength === 0) return [];
@@ -775,7 +774,7 @@ export default function Play() {
           if (sourceColIndex < 0 || sourceColIndex >= sourceRow.length) return '??';
 
           const sourceTile = sourceRow[sourceColIndex];
-          if (!sourceTile || sourceTile === '??') return '??';
+          if (sourceTile === '??') return '??';
 
           const tileType = sourceTile[0];
 

@@ -232,13 +232,12 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     setClickPosition(tileX, tileY, clickedTileContent);
 
     const clickType: ClickType = event.buttons === 2 ? Click.SPECIAL_CLICK : Click.GENERAL_CLICK;
-    if (movementInterval.current) cancelCurrentMovement();
-
     clickEvent(tileX, tileY, clickType);
 
     if (clickType === Click.SPECIAL_CLICK && !clickedTileContent.includes(TileContent.CLOSED)) return;
     let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
     if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];
+    if (paths.length > 0) return;
     moveCursor(targetTileX, targetTileY, tileX, tileY, clickType);
   };
 
