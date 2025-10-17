@@ -296,306 +296,97 @@ export default function Play() {
     const cpuCores = navigator.hardwareConcurrency || 4;
 
     // Determine optimal worker count based on CPU cores
-    const workerCount = Math.min(cpuCores, Math.ceil(totalTiles / 32)); // Minimum 1 worker per 32 tiles
-    const tilesPerWorker = Math.ceil(totalTiles / workerCount);
+    const threadCount = Math.min(cpuCores, Math.ceil(totalTiles / 16)); // Minimum 1 worker per 16 tiles
+    const tilesPerThread = Math.ceil(totalTiles / threadCount);
 
-    // Check if SharedArrayBuffer is supported
-    const supportsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && typeof Atomics !== 'undefined';
+    const threadPromises = Array.from({ length: threadCount }, (_, workerIndex) => {
+      return new Promise<{ changes: Array<{ row: number; col: number; value: string }> }>(resolve => {
+        const workerStart = workerIndex * tilesPerThread;
+        const workerEnd = Math.min(workerStart + tilesPerThread, totalTiles);
+        const changes: Array<{ row: number; col: number; value: string }> = [];
 
-    if (supportsSharedArrayBuffer) {
-      // Highest performance parallel processing using SharedArrayBuffer + Atomics
-      const sharedBuffer = new SharedArrayBuffer(totalTiles * 4); // 4 bytes per tile (row, col, value)
-      const sharedArray = new Int32Array(sharedBuffer);
-      const changeCountBuffer = new SharedArrayBuffer(4);
-      const changeCountArray = new Int32Array(changeCountBuffer);
+        // Split tile distribution into promises for parallel (concurrent) processing
+        const batchPromises: Array<Promise<void>> = [];
+        for (let tileIndex = workerStart; tileIndex < workerEnd; tileIndex += 4) {
+          const startIndexForBatch = tileIndex;
+          const endIndexForBatch = Math.min(startIndexForBatch + 4, workerEnd);
+          batchPromises.push(
+            new Promise<void>(resolveBatch => {
+              for (let batchIndex = startIndexForBatch; batchIndex < endIndexForBatch; batchIndex++) {
+                const i = Math.floor(batchIndex / tilesPerRow);
+                const t = batchIndex % tilesPerRow;
 
-      // Safely initialize counter using Atomics
-      Atomics.store(changeCountArray, 0, 0);
+                const reversedI = columnlength - 1 - i;
+                const rowIndex = reversedI + yOffset;
 
-      // Highest performance parallel processing using SharedArrayBuffer
-      const sharedWorkerPromises = Array.from({ length: workerCount }, (_, workerIndex) => {
-        return new Promise<void>(resolve => {
-          const workerStart = workerIndex * tilesPerWorker;
-          const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
+                if (rowIndex < 0 || rowIndex >= cachingTiles.length) continue; // out of bounds
 
-          // Process tiles assigned to each worker in SIMD style
-          for (let tileIndex = workerStart; tileIndex < workerEnd; tileIndex += 4) {
-            // Process 4 tiles simultaneously (SIMD style)
-            const batchEnd = Math.min(tileIndex + 4, workerEnd);
+                const existingRow = cachingTiles[rowIndex] || [];
+                const rowLen = existingRow.length;
+                if (rowLen === 0) continue; // empty row
 
-            for (let batchIndex = tileIndex; batchIndex < batchEnd; batchIndex++) {
-              const i = Math.floor(batchIndex / tilesPerRow);
-              const t = batchIndex % tilesPerRow;
+                const yAbs = end_y - reversedI;
+                const rowParityBase = (start_x + yAbs) & 1;
 
-              const reversedI = columnlength - 1 - i;
-              const rowIndex = reversedI + yOffset;
-
-              if (rowIndex < 0 || rowIndex >= cachingTiles.length) continue;
-
-              const existingRow = cachingTiles[rowIndex] || [];
-              const rowLen = existingRow.length;
-              if (rowLen === 0) continue;
-
-              const yAbs = end_y - reversedI;
-              const rowParityBase = (start_x + yAbs) & 1;
-
-              const tStart = Math.max(0, -xOffset);
-              const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
-              if (t < tStart || t >= tEnd) continue;
-
-              const p = i * rowlengthBytes + (t << 1);
-              const c0 = unsortedTiles.charCodeAt(p);
-              const c1 = unsortedTiles.charCodeAt(p + 1);
-
-              // Vectorized LUT lookup (O(1) operation) using 16-bit combination
-              const lookupIndex = (c0 << 8) | c1;
-              const tileType = VECTORIZED_TILE_LUT[lookupIndex];
-
-              if (tileType === 255) continue; // Invalid hex
-
-              const checker = rowParityBase ^ (t & 1);
-              const colIndex = t + xOffset;
-
-              // Vectorized string conversion (O(1) lookup)
-              let nextValue: string;
-              if (tileType < 8) {
-                nextValue = tileType === 0 ? 'O' : tileType.toString();
-              } else if (tileType === 8) {
-                nextValue = 'B';
-              } else if (tileType >= 16 && tileType < 24) {
-                const flagColor = Math.floor((tileType - 16) / 2);
-                nextValue = `F${flagColor}${checker}`;
-              } else if (tileType === 24) {
-                nextValue = `C${checker}`;
-              } else {
-                nextValue = '??'; // Exception handling
-              }
-
-              if (existingRow[colIndex] !== nextValue) {
-                // Safely store changes in shared array using Atomics
-                const changeIndex = Atomics.add(changeCountArray, 0, 1);
-                if (changeIndex < totalTiles) {
-                  sharedArray[changeIndex * 3] = rowIndex;
-                  sharedArray[changeIndex * 3 + 1] = colIndex;
-                  sharedArray[changeIndex * 3 + 2] = nextValue.charCodeAt(0); // Simple string encoding
+                const tStart = Math.max(0, -xOffset);
+                const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
+                if (t < tStart || t >= tEnd) {
+                  continue;
                 }
+
+                const p = i * rowlengthBytes + (t << 1);
+                const c0 = unsortedTiles.charCodeAt(p);
+                const c1 = unsortedTiles.charCodeAt(p + 1);
+
+                // Vectorized LUT lookup (O(1) operation) using 16-bit combination
+                const lookupIndex = (c0 << 8) | c1;
+                const tileType = VECTORIZED_TILE_LUT[lookupIndex];
+
+                if (tileType === 255) continue; // Invalid hex
+
+                const checker = rowParityBase ^ (t & 1);
+                const colIndex = t + xOffset;
+
+                // Vectorized string conversion (O(1) lookup)
+                let nextValue: string;
+                if (tileType < 8)
+                  nextValue = tileType === 0 ? 'O' : `${tileType}`; // opened
+                else if (tileType === 8) nextValue = 'B';
+                else if (tileType >= 16 && tileType < 24)
+                  nextValue = `F${((tileType - 16) / 2) >>> 0}${checker}`; // flagged
+                else if (tileType === 24)
+                  nextValue = `C${checker}`; // closed
+                else nextValue = '??'; // Exception handling
+
+                if (existingRow[colIndex] !== nextValue) changes.push({ row: rowIndex, col: colIndex, value: nextValue });
               }
-            }
-          }
-          resolve();
-        });
+              resolveBatch();
+            }),
+          );
+        }
+
+        Promise.all(batchPromises).then(() => resolve({ changes }));
       });
+    });
 
-      // Wait for all workers to complete
-      await Promise.all(sharedWorkerPromises);
-
-      // Read changes from shared array
-      const finalChangeCount = Atomics.load(changeCountArray, 0);
-      const allChanges: Array<{ row: number; col: number; value: string }> = [];
-
-      for (let i = 0; i < finalChangeCount; i++) {
-        const row = sharedArray[i * 3];
-        const col = sharedArray[i * 3 + 1];
-        const value = String.fromCharCode(sharedArray[i * 3 + 2]);
-        allChanges.push({ row, col, value });
-      }
+    try {
+      // Run all workers in parallel
+      const workerResults = await Promise.all(threadPromises);
+      const allChanges = workerResults.flatMap(result => result.changes);
 
       if (allChanges.length > 0) {
         setCachingTiles(prevTiles => {
           const newTiles = [...prevTiles];
           allChanges.forEach(({ row, col, value }) => {
-            if (!newTiles[row]) {
-              newTiles[row] = [...prevTiles[row]];
-            }
+            if (!newTiles[row]) newTiles[row] = [...prevTiles[row]];
             newTiles[row][col] = value;
           });
           return newTiles;
         });
       }
-    } else {
-      // Ordinary parallel processing when SharedArrayBuffer is not supported
-      const workerPromises = Array.from({ length: workerCount }, (_, workerIndex) => {
-        return new Promise<{ changes: Array<{ row: number; col: number; value: string }> }>(resolve => {
-          const workerStart = workerIndex * tilesPerWorker;
-          const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
-          const changes: Array<{ row: number; col: number; value: string }> = [];
-
-          // Split tile distribution into promises for parallel (concurrent) processing
-          const batchPromises: Array<Promise<void>> = [];
-          for (let tileIndex = workerStart; tileIndex < workerEnd; tileIndex += 4) {
-            const startIndexForBatch = tileIndex;
-            const endIndexForBatch = Math.min(startIndexForBatch + 4, workerEnd);
-            batchPromises.push(
-              new Promise<void>(resolveBatch => {
-                for (let batchIndex = startIndexForBatch; batchIndex < endIndexForBatch; batchIndex++) {
-                  const i = Math.floor(batchIndex / tilesPerRow);
-                  const t = batchIndex % tilesPerRow;
-
-                  const reversedI = columnlength - 1 - i;
-                  const rowIndex = reversedI + yOffset;
-
-                  if (rowIndex < 0 || rowIndex >= cachingTiles.length) {
-                    continue;
-                  }
-
-                  const existingRow = cachingTiles[rowIndex] || [];
-                  const rowLen = existingRow.length;
-                  if (rowLen === 0) {
-                    continue;
-                  }
-
-                  const yAbs = end_y - reversedI;
-                  const rowParityBase = (start_x + yAbs) & 1;
-
-                  const tStart = Math.max(0, -xOffset);
-                  const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
-                  if (t < tStart || t >= tEnd) {
-                    continue;
-                  }
-
-                  const p = i * rowlengthBytes + (t << 1);
-                  const c0 = unsortedTiles.charCodeAt(p);
-                  const c1 = unsortedTiles.charCodeAt(p + 1);
-
-                  // Vectorized LUT lookup (O(1) operation) using 16-bit combination
-                  const lookupIndex = (c0 << 8) | c1;
-                  const tileType = VECTORIZED_TILE_LUT[lookupIndex];
-
-                  if (tileType === 255) {
-                    continue; // Invalid hex
-                  }
-
-                  const checker = rowParityBase ^ (t & 1);
-                  const colIndex = t + xOffset;
-
-                  // Vectorized string conversion (O(1) lookup)
-                  let nextValue: string;
-                  if (tileType < 8) {
-                    nextValue = tileType === 0 ? 'O' : tileType.toString();
-                  } else if (tileType === 8) {
-                    nextValue = 'B';
-                  } else if (tileType >= 16 && tileType < 24) {
-                    const flagColor = Math.floor((tileType - 16) / 2);
-                    nextValue = `F${flagColor}${checker}`;
-                  } else if (tileType === 24) {
-                    nextValue = `C${checker}`;
-                  } else {
-                    nextValue = '??'; // Exception handling
-                  }
-
-                  if (existingRow[colIndex] !== nextValue) {
-                    changes.push({ row: rowIndex, col: colIndex, value: nextValue });
-                  }
-                }
-                resolveBatch();
-              }),
-            );
-          }
-
-          Promise.all(batchPromises).then(() => resolve({ changes }));
-        });
-      });
-
-      try {
-        // Run all workers in parallel
-        const workerResults = await Promise.all(workerPromises);
-        const allChanges = workerResults.flatMap(result => result.changes);
-
-        if (allChanges.length > 0) {
-          setCachingTiles(prevTiles => {
-            const newTiles = [...prevTiles];
-            allChanges.forEach(({ row, col, value }) => {
-              if (!newTiles[row]) {
-                newTiles[row] = [...prevTiles[row]];
-              }
-              newTiles[row][col] = value;
-            });
-            return newTiles;
-          });
-        }
-      } catch (error) {
-        console.error('Ultra-Parallel Worker tile processing error:', error);
-        replaceTilesSync(end_x, end_y, start_x, start_y, unsortedTiles, type);
-      }
+    } catch (error) {
+      console.error('Ultra-Parallel Worker tile processing error:', error);
     }
-  };
-
-  // Synchronous fallback function
-  const replaceTilesSync = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
-    if (unsortedTiles.length === 0) return;
-    const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1;
-    const tilesPerRow = rowlengthBytes >> 1;
-    const columnlength = Math.abs(start_y - end_y + 1);
-    let newTiles = cachingTiles as string[][];
-    let outerCloned = false;
-    const yOffset = type === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - columnlength + 1 : 0) : end_y - startPoint.y;
-    const xOffset = start_x - startPoint.x;
-
-    const OPEN = OPEN_LUT;
-    const CL0 = CLOSED0_LUT;
-    const CL1 = CLOSED1_LUT;
-    let anyChanged = false;
-
-    for (let i = 0; i < columnlength; i++) {
-      const reversedI = columnlength - 1 - i;
-      const rowIndex = reversedI + yOffset;
-
-      if (rowIndex < 0 || rowIndex >= newTiles.length) continue;
-
-      const existingRow = newTiles[rowIndex] || [];
-      const rowLen = existingRow.length;
-      if (rowLen === 0) continue;
-
-      const yAbs = end_y - reversedI;
-      const rowParityBase = (start_x + yAbs) & 1;
-
-      const tStart = Math.max(0, -xOffset);
-      const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
-      if (tStart >= tEnd) continue;
-
-      let p = i * rowlengthBytes + (tStart << 1);
-      let checker = rowParityBase ^ (tStart & 1);
-      let row = existingRow;
-      let rowCloned = false;
-
-      for (let t = tStart; t < tEnd; t++) {
-        const c0 = unsortedTiles.charCodeAt(p);
-        const c1 = unsortedTiles.charCodeAt(p + 1);
-        const n0 = c0 < 128 ? HEX_NIBBLE[c0] : -1;
-        const n1 = c1 < 128 ? HEX_NIBBLE[c1] : -1;
-
-        if (n0 < 0 || n1 < 0) {
-          p += 2;
-          checker ^= 1;
-          continue;
-        }
-
-        const byte = (n0 << 4) | n1;
-        p += 2;
-
-        const colIndex = t + xOffset;
-        const opened = OPEN[byte];
-        const nextValue = opened !== null ? opened : checker === 0 ? CL0[byte] : CL1[byte];
-
-        if (row[colIndex] !== nextValue) {
-          if (!outerCloned) {
-            newTiles = [...newTiles];
-            outerCloned = true;
-          }
-          if (!rowCloned) {
-            row = existingRow.slice();
-            newTiles[rowIndex] = row;
-            rowCloned = true;
-          }
-          row[colIndex] = nextValue;
-          anyChanged = true;
-        }
-
-        checker ^= 1;
-      }
-    }
-
-    if (outerCloned && anyChanged) setCachingTiles(newTiles);
   };
 
   /** Message handler for tile processing */

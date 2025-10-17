@@ -54,6 +54,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   /** constants */
   const MOVE_SPEED = 200; // ms
   const ANIMATION_ZOOM_MIN = 0.4; // min zoom level
+  const BASE_OFFSET = tileSize >> 1; // tileSize / 2
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
   const otherCursorPadding = 1 / (paddingTiles - 1); // padding for other cursors
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
@@ -92,31 +93,14 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   /** Cleanup canvas contexts and resources */
   const cleanupCanvasResources = () => {
-    // Canvas 컨텍스트 정리
     Object.values(canvasRefs).forEach(ref => {
       if (ref.current) {
         const ctx = ref.current.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, ref.current.width, ref.current.height);
-        }
+        ctx?.clearRect(0, 0, ref.current.width, ref.current.height);
       }
     });
 
-    // 벡터 에셋 정리
     setCachedVectorAssets(undefined);
-  };
-
-  /** Cleanup font resources */
-  const cleanupFontResources = () => {
-    try {
-      // 폰트가 로드되어 있는지 확인 후 정리
-      if (document.fonts.check('1em LOTTERIACHAB')) {
-        // 폰트 정리는 브라우저가 자동으로 처리하므로 별도 작업 불필요
-        // document.fonts.delete()는 지원되지 않으므로 스킵
-      }
-    } catch (error) {
-      console.warn('Font cleanup failed:', error);
-    }
   };
 
   /** 🚀 HIGH QUALITY: Setup high-resolution canvas */
@@ -275,42 +259,38 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       ctx.fillStyle = color;
       ctx.translate(x, y);
       if (scale === 1) {
-        // 8방향 커서 오프셋 계산 (원래 로직 유지하면서 최적화)
         // up 0, rightup 1, right 2, rightdown 3, down 4, leftdown 5, left 6, leftup 7
         const angle = (Math.round((rotated + Math.PI) / (Math.PI / 4)) + 2) % 8;
 
-        // 상수 기반 오프셋 계산 (switch)
-        const baseOffset = tileSize >> 1; // tileSize / 2
-        const centerOffset = baseOffset >> 2;
+        const centerOffset = BASE_OFFSET >> 2; // tileSize / 8
 
         switch (angle) {
           case 0: // up
-            ctx.translate(baseOffset, centerOffset);
+            ctx.translate(BASE_OFFSET, centerOffset);
             break;
           case 1: // rightup
             ctx.translate(tileSize - centerOffset, centerOffset);
             break;
           case 2: // right
-            ctx.translate(tileSize - centerOffset, baseOffset);
+            ctx.translate(tileSize - centerOffset, BASE_OFFSET);
             break;
           case 3: // rightdown
             ctx.translate(tileSize - centerOffset, tileSize - centerOffset);
             break;
           case 4: // down
-            ctx.translate(baseOffset, tileSize - centerOffset);
+            ctx.translate(BASE_OFFSET, tileSize - centerOffset);
             break;
           case 5: // leftdown
             ctx.translate(centerOffset, tileSize - centerOffset);
             break;
           case 6: // left
-            ctx.translate(centerOffset, baseOffset);
+            ctx.translate(centerOffset, BASE_OFFSET);
             break;
           case 7: // leftup
             ctx.translate(centerOffset, centerOffset);
             break;
         }
-        // ctx.translate(offsetX, offsetY);
-      } else ctx.translate(tileSize / 2, tileSize / 2);
+      } else ctx.translate(BASE_OFFSET, BASE_OFFSET);
 
       ctx.rotate(rotated - Math.PI / 4);
 
@@ -320,7 +300,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       if (!(reviveAt > 0 && Date.now() < reviveAt && cachedVectorAssets?.stun)) return;
       const stunScale = zoom / 2;
       ctx.save();
-      ctx.translate(x - tileSize / 2, y - tileSize / 2);
+      ctx.translate(x - BASE_OFFSET, y - BASE_OFFSET);
       ctx.fillStyle = 'white';
       ctx.strokeStyle = 'black';
       ctx.scale(stunScale, stunScale);
@@ -530,7 +510,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const [lastPointX, lastPointY] = [(last.x + beforeLast.x) / 2, (last.y + beforeLast.y) / 2];
     const pathRotate = Math.PI + Math.atan2(last.y - beforeLast.y, last.x - beforeLast.x);
     interactionCtx.lineTo(lastPointX, lastPointY);
-    drawCursor(interactionCtx, lastPointX - tileSize / 2, lastPointY - tileSize / 2, cursorColor, 0, pathRotate, 0.6);
+    drawCursor(interactionCtx, lastPointX - BASE_OFFSET, lastPointY - BASE_OFFSET, cursorColor, 0, pathRotate, 0.6);
     interactionCtx.stroke();
   };
 
@@ -555,7 +535,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       }
     };
 
-    // 벡터 에셋은 즉시 생성 (폰트 로딩과 병렬)
     const cursor = makePath2d(cursorPaths);
     const stun = makePath2dFromArray(stunPaths);
     const flag = { flag: makePath2d(flagPaths[0]), pole: makePath2d(flagPaths[1]) };
@@ -579,7 +558,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     return () => {
       cancelCurrentMovement();
       cleanupCanvasResources();
-      cleanupFontResources();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
