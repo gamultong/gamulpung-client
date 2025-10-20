@@ -107,6 +107,47 @@ const VECTORIZED_TILE_LUT = new Uint8Array(65536); // 16 bits = 2^16 = 65536
 
 // hex -> byte conversion is inlined in the hot loop to avoid call overhead
 
+// String pooling for tile values to avoid repeated string creation
+const TILE_STRINGS = {
+  O: 'O',
+  '1': '1',
+  '2': '2',
+  '3': '3',
+  '4': '4',
+  '5': '5',
+  '6': '6',
+  '7': '7',
+  B: 'B',
+  C0: 'C0',
+  C1: 'C1',
+  F00: 'F00',
+  F01: 'F01',
+  F10: 'F10',
+  F11: 'F11',
+  F20: 'F20',
+  F21: 'F21',
+  F30: 'F30',
+  F31: 'F31',
+  '??': '??',
+} as const;
+
+// Memory pool for changes arrays
+const changesPool: Array<{ row: number; col: number; value: string }>[] = [];
+const getChangesArray = (): Array<{ row: number; col: number; value: string }> => {
+  const pooled = changesPool.pop();
+  if (pooled) {
+    pooled.length = 0; // Clear array
+    return pooled;
+  }
+  return [];
+};
+const returnChangesArray = (arr: Array<{ row: number; col: number; value: string }>): void => {
+  if (changesPool.length < 5) {
+    // Limit pool size
+    changesPool.push(arr);
+  }
+};
+
 export default function Play() {
   /** constants */
   const RENDER_RANGE = 1.5;
@@ -297,100 +338,85 @@ export default function Play() {
     const yOffset = type === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - columnlength + 1 : 0) : end_y - startPoint.y;
     const xOffset = start_x - startPoint.x;
 
-    const totalTiles = columnlength * tilesPerRow;
-    const cpuCores = navigator.hardwareConcurrency || 4;
-
-    // Determine optimal worker count based on CPU cores
-    const threadCount = Math.min(cpuCores, Math.ceil(totalTiles / 16)); // Minimum 1 worker per 16 tiles
-    const tilesPerThread = Math.ceil(totalTiles / threadCount);
-
-    const threadPromises = Array.from({ length: threadCount }, (_, workerIndex) => {
-      return new Promise<{ changes: Array<{ row: number; col: number; value: string }> }>(resolve => {
-        const workerStart = workerIndex * tilesPerThread;
-        const workerEnd = Math.min(workerStart + tilesPerThread, totalTiles);
-        const changes: Array<{ row: number; col: number; value: string }> = [];
-
-        // Split tile distribution into promises for parallel (concurrent) processing
-        const batchPromises: Array<Promise<void>> = [];
-        for (let tileIndex = workerStart; tileIndex < workerEnd; tileIndex += 4) {
-          const startIndexForBatch = tileIndex;
-          const endIndexForBatch = Math.min(startIndexForBatch + 4, workerEnd);
-          batchPromises.push(
-            new Promise<void>(resolveBatch => {
-              for (let batchIndex = startIndexForBatch; batchIndex < endIndexForBatch; batchIndex++) {
-                const i = Math.floor(batchIndex / tilesPerRow);
-                const t = batchIndex % tilesPerRow;
-
-                const reversedI = columnlength - 1 - i;
-                const rowIndex = reversedI + yOffset;
-
-                if (rowIndex < 0 || rowIndex >= cachingTiles.length) continue; // out of bounds
-
-                const existingRow = cachingTiles[rowIndex] || [];
-                const rowLen = existingRow.length;
-                if (rowLen === 0) continue; // empty row
-
-                const yAbs = end_y - reversedI;
-                const rowParityBase = (start_x + yAbs) & 1;
-
-                const tStart = Math.max(0, -xOffset);
-                const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
-                if (t < tStart || t >= tEnd) {
-                  continue;
-                }
-
-                const p = i * rowlengthBytes + (t << 1);
-                const c0 = unsortedTiles.charCodeAt(p);
-                const c1 = unsortedTiles.charCodeAt(p + 1);
-
-                // Vectorized LUT lookup (O(1) operation) using 16-bit combination
-                const lookupIndex = (c0 << 8) | c1;
-                const tileType = VECTORIZED_TILE_LUT[lookupIndex];
-
-                if (tileType === 255) continue; // Invalid hex
-
-                const checker = rowParityBase ^ (t & 1);
-                const colIndex = t + xOffset;
-
-                // Vectorized string conversion (O(1) lookup)
-                let nextValue: string;
-                if (tileType < 8)
-                  nextValue = tileType === 0 ? 'O' : `${tileType}`; // opened
-                else if (tileType === 8) nextValue = 'B';
-                else if (tileType >= 16 && tileType < 24)
-                  nextValue = `F${((tileType - 16) / 2) >>> 0}${checker}`; // flagged
-                else if (tileType === 24)
-                  nextValue = `C${checker}`; // closed
-                else nextValue = '??'; // Exception handling
-
-                if (existingRow[colIndex] !== nextValue) changes.push({ row: rowIndex, col: colIndex, value: nextValue });
-              }
-              resolveBatch();
-            }),
-          );
-        }
-
-        Promise.all(batchPromises).then(() => resolve({ changes }));
-      });
-    });
-
+    const changes = getChangesArray();
     try {
-      // Run all workers in parallel
-      const workerResults = await Promise.all(threadPromises);
-      const allChanges = workerResults.flatMap(result => result.changes);
+      for (let i = 0; i < columnlength; i++) {
+        const reversedI = columnlength - 1 - i;
+        const rowIndex = reversedI + yOffset;
+        if (rowIndex < 0 || rowIndex >= cachingTiles.length) continue;
 
-      if (allChanges.length > 0) {
-        setCachingTiles(prevTiles => {
-          const newTiles = [...prevTiles];
-          allChanges.forEach(({ row, col, value }) => {
-            if (!newTiles[row]) newTiles[row] = [...prevTiles[row]];
-            newTiles[row][col] = value;
+        const existingRow = cachingTiles[rowIndex];
+        if (!existingRow || existingRow.length === 0) continue;
+
+        const rowLen = existingRow.length;
+        const yAbs = end_y - reversedI;
+        const rowParityBase = (start_x + yAbs) & 1;
+
+        const tStart = Math.max(0, -xOffset);
+        const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
+        if (tStart >= tEnd) continue;
+
+        const rowStrBase = i * rowlengthBytes;
+        for (let t = tStart; t < tEnd; t++) {
+          const colIndex = t + xOffset;
+          const p = rowStrBase + (t << 1);
+          const c0 = unsortedTiles.charCodeAt(p);
+          const c1 = unsortedTiles.charCodeAt(p + 1);
+
+          const lookupIndex = (c0 << 8) | c1;
+          const tileType = VECTORIZED_TILE_LUT[lookupIndex];
+          if (tileType === 255) continue;
+
+          const checker = rowParityBase ^ (t & 1);
+
+          let nextValue: string;
+          if (tileType < 8) {
+            nextValue = tileType === 0 ? TILE_STRINGS.O : TILE_STRINGS[tileType.toString() as keyof typeof TILE_STRINGS];
+          } else if (tileType === 8) {
+            nextValue = TILE_STRINGS.B;
+          } else if (tileType >= 16 && tileType < 24) {
+            const flagColor = ((tileType - 16) / 2) >>> 0;
+            const flagKey = `F${flagColor}${checker}` as keyof typeof TILE_STRINGS;
+            nextValue = TILE_STRINGS[flagKey] || `F${flagColor}${checker}`;
+          } else if (tileType === 24) {
+            nextValue = checker === 0 ? TILE_STRINGS.C0 : TILE_STRINGS.C1;
+          } else {
+            nextValue = TILE_STRINGS['??'];
+          }
+
+          if (existingRow[colIndex] !== nextValue) {
+            changes.push({ row: rowIndex, col: colIndex, value: nextValue });
+          }
+        }
+      }
+
+      if (changes.length > 0) {
+        setCachingTiles(prev => {
+          const next = prev.slice();
+          const byRow = new Map<number, Array<{ col: number; value: string }>>();
+          for (let k = 0; k < changes.length; k++) {
+            const { row, col, value } = changes[k];
+            let arr = byRow.get(row);
+            if (!arr) {
+              arr = [];
+              byRow.set(row, arr);
+            }
+            arr.push({ col, value });
+          }
+          byRow.forEach((rowChanges, row) => {
+            const src = prev[row];
+            const dst = src.slice();
+            for (let j = 0; j < rowChanges.length; j++) {
+              const { col, value } = rowChanges[j];
+              dst[col] = value;
+            }
+            next[row] = dst;
           });
-          return newTiles;
+          return next;
         });
       }
-    } catch (error) {
-      console.error('Ultra-Parallel Worker tile processing error:', error);
+    } finally {
+      returnChangesArray(changes);
     }
   };
 
@@ -533,58 +559,57 @@ export default function Play() {
 
     const offsetX = cursorOriginX - cursorX;
     const offsetY = cursorOriginY - cursorY;
-    const renderBaseX = renderStartPoint.x;
-    const renderBaseY = renderStartPoint.y;
+    const baseX = renderStartPoint.x;
+    const baseY = renderStartPoint.y;
 
-    // INSTANT: Perfect alignment - no processing needed
-    if (offsetX === 0 && offsetY === 0) return cachingTiles; // O(1) return!
+    if (offsetX === 0 && offsetY === 0) return cachingTiles;
 
-    // STABLE CPU processing - no disappearing tiles
-    return processWithStableCPU();
+    const out: string[][] = new Array(cachingLength);
+    for (let row = 0; row < cachingLength; row++) {
+      const srcRowIndex = row + offsetY;
+      const hasSrcRow = srcRowIndex >= 0 && srcRowIndex < cachingLength;
+      const srcRow = hasSrcRow ? cachingTiles[srcRowIndex] : undefined;
+      const width = srcRow ? srcRow.length : cachingTiles[row]?.length || 0;
+      const dstRow = new Array<string>(width);
 
-    function processWithStableCPU(): string[][] {
-      // Ultra-stable rendering - guaranteed no missing tiles
-      return cachingTiles.map((cachingRow, row) => {
-        const sourceRowIndex = row + offsetY;
+      if (!srcRow) {
+        for (let c = 0; c < width; c++) dstRow[c] = '??';
+        out[row] = dstRow;
+        continue;
+      }
 
-        // Bounds check for source row
-        if (sourceRowIndex < 0 || sourceRowIndex >= cachingLength) return new Array(cachingRow.length).fill('??');
+      for (let col = 0; col < width; col++) {
+        const srcColIndex = col + offsetX;
+        if (srcColIndex < 0 || srcColIndex >= width) {
+          dstRow[col] = '??';
+          continue;
+        }
 
-        const sourceRow = cachingTiles[sourceRowIndex];
-        if (!sourceRow) return new Array(cachingRow.length).fill('??');
+        const v = srcRow[srcColIndex];
+        if (v === '??') {
+          dstRow[col] = '??';
+          continue;
+        }
 
-        // Process each column safely
-        return cachingRow.map((_, col) => {
-          const sourceColIndex = col + offsetX;
+        const t0 = v[0];
+        if (t0 !== 'C' && t0 !== 'F') {
+          dstRow[col] = v;
+          continue;
+        }
 
-          // Bounds check for source column
-          if (sourceColIndex < 0 || sourceColIndex >= sourceRow.length) return '??';
+        const checker = (baseX + col + baseY + row) & 1;
+        if (t0 === 'C') {
+          dstRow[col] = checker === 0 ? 'C0' : 'C1';
+        } else {
+          const colorChar = v[1] ?? '0';
+          dstRow[col] = `F${colorChar}${checker}`;
+        }
+      }
 
-          const sourceTile = sourceRow[sourceColIndex];
-          if (sourceTile === '??') return '??';
-
-          const tileType = sourceTile[0];
-
-          // Fast path for most tiles - no transformation needed
-          if (!['C', 'F'].includes(tileType)) return sourceTile;
-
-          // Safe checkerboard calculation
-          const renderX = renderBaseX + col;
-          const renderY = renderBaseY + row;
-          const checkerBit = (renderX + renderY) & 1;
-
-          // Safe tile type handling
-          if (tileType === 'C') return `C${checkerBit}`;
-          if (tileType === 'F') {
-            const flagColor = sourceTile[1] || '0';
-            return `F${flagColor}${checkerBit}`;
-          }
-
-          // Fallback for unexpected tile types
-          return sourceTile;
-        });
-      });
+      out[row] = dstRow;
     }
+
+    return out;
   }, [cachingTiles, cursorOriginX, cursorOriginY, cursorX, cursorY, renderStartPoint]);
 
   /** Apply computed tiles */
