@@ -17,22 +17,40 @@ const geistMono = localFont({
 });
 
 const host = process.env.NEXT_PUBLIC_HOST;
+const siteUrl = host || 'https://gamulpung.com';
 
 export const metadata: Metadata = {
-  title: 'Gamulpung',
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: 'Gamulpung',
+    template: '%s | Gamulpung',
+  },
   description: 'Gamulpung, Web Multi-play Infinity Minesweeper Game',
+  alternates: {
+    canonical: '/',
+    languages: {
+      'en-US': '/',
+      'ko-KR': '/ko',
+    },
+  },
   openGraph: {
     type: 'website',
     locale: 'en_US',
     alternateLocale: 'ko_KR',
-    url: 'https://gamultong.github.io/gamulpung-client/',
+    url: siteUrl,
     siteName: 'Gamulpung',
     images: [
       {
-        url: host + '/ogimage.png',
+        url: siteUrl + '/ogimage.png',
         alt: 'Gamulpung',
       },
     ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Gamulpung',
+    description: 'Gamulpung, Web Multi-play Infinity Minesweeper Game',
+    images: siteUrl + '/ogimage.png',
   },
 };
 
@@ -45,6 +63,38 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <meta name="google-site-verification" content="1sW-H9-5GodnFCoN_y-Cbz8mVgWH5zED1nvKVKKtG88" />
+        <link rel="canonical" href={siteUrl} />
+        <meta name="theme-color" content="#000000" />
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'Organization',
+              name: 'Gamulpung',
+              url: siteUrl,
+              logo: siteUrl + '/icon.png',
+            }),
+          }}
+        />
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'WebSite',
+              name: 'Gamulpung',
+              url: siteUrl,
+              potentialAction: {
+                '@type': 'SearchAction',
+                target: siteUrl + '/?q={search_term_string}',
+                'query-input': 'required name=search_term_string',
+              },
+            }),
+          }}
+        />
         <link
           rel="preload"
           href="https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2302@1.0/LOTTERIACHAB.woff2"
