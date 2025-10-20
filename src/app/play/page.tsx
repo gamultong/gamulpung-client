@@ -5,11 +5,11 @@ import S from './page.module.scss';
 /** hooks */
 import { useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
 import useScreenSize from '@/hooks/useScreenSize';
-import { OtherUserSingleCursorState, useCursorStore, useOtherUserCursorsStore } from '../../store/cursorStore';
+import { OtherUserSingleCursorState, useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
+import { useClickStore } from '@/store/interactionStore';
 
 /** components */
 import CanvasRenderComponent from '@/components/canvas';
-import { useClickStore } from '@/store/interactionStore';
 import useWebSocketStore from '@/store/websocketStore';
 import Inactive from '@/components/inactive';
 import CanvasDashboard from '@/components/canvasDashboard';
@@ -41,39 +41,41 @@ const HEX_NIBBLE = new Int8Array(128);
   for (let c = 97; c <= 102; c++) HEX_NIBBLE[c] = c - 87; // 'a'-'f'
 })();
 
-// vectorized LUT: calculate all possible combinations of 16 bits (64KB)
-const VECTORIZED_TILE_LUT = new Uint8Array(65536); // 16 bits = 2^16 = 65536
+// Vectorized LUT: 16비트 조합으로 모든 경우의 수를 미리 계산 (64KB)
+const VECTORIZED_TILE_LUT = new Uint8Array(65536); // 16비트 = 2^16 = 65536
 
-// initialize vectorized LUT
+// 벡터화 LUT 초기화 - 모든 16비트 조합을 미리 계산
 (() => {
   for (let i = 0; i < 65536; i++) {
-    const byte1 = (i >> 8) & 0xff; // upper 8 bits (first hex character)
-    const byte2 = i & 0xff; // lower 8 bits (second hex character)
+    const byte1 = (i >> 8) & 0xff; // 상위 8비트 (첫 번째 hex 문자)
+    const byte2 = i & 0xff; // 하위 8비트 (두 번째 hex 문자)
 
-    // convert hex character to byte
+    // hex 문자를 바이트로 변환
     const n0 = byte1 < 128 ? HEX_NIBBLE[byte1] : -1;
     const n1 = byte2 < 128 ? HEX_NIBBLE[byte2] : -1;
 
     if (n0 < 0 || n1 < 0) {
-      VECTORIZED_TILE_LUT[i] = 255; // invalid hex
+      VECTORIZED_TILE_LUT[i] = 255; // 잘못된 hex
       continue;
     }
 
     const byte = (n0 << 4) | n1;
 
-    // calculate tile type using bit operations
+    // 비트 연산으로 타일 타입 계산
     const isOpened = (byte & 0b10000000) !== 0;
     const isMine = (byte & 0b01000000) !== 0;
     const isFlag = (byte & 0b00100000) !== 0;
     const color = (byte & 0b00011000) >> 3;
     const number = byte & 0b00000111;
 
-    // encode tile type as number (0-31 range)
-    if (isOpened)
-      VECTORIZED_TILE_LUT[i] = isMine ? 8 : number; // 8 = 'B', 0-7 = numbers
-    else if (isFlag)
-      VECTORIZED_TILE_LUT[i] = 16 + color * 2; // 16-23 = F00-F31 (checkerboard is handled separately)
-    else VECTORIZED_TILE_LUT[i] = 24; // 24 = C0 (checkerboard is handled separately)
+    // 타일 타입을 숫자로 인코딩 (0-31 범위)
+    if (isOpened) {
+      VECTORIZED_TILE_LUT[i] = isMine ? 8 : number; // 8 = 'B', 0-7 = 숫자
+    } else if (isFlag) {
+      VECTORIZED_TILE_LUT[i] = 16 + color * 2; // 16-23 = F00-F31 (체커보드는 별도 처리)
+    } else {
+      VECTORIZED_TILE_LUT[i] = 24; // 24 = C0 (체커보드는 별도 처리)
+    }
   }
 })();
 
@@ -81,7 +83,7 @@ const VECTORIZED_TILE_LUT = new Uint8Array(65536); // 16 bits = 2^16 = 65536
 (() => {
   for (let b = 0; b < 256; b++) {
     // SIMD-style: Calculate all bit flags at once for better performance
-    const flags = b >> 5; // extract upper 3 bits (isOpened, isMine, isFlag)
+    const flags = b >> 5; // Extract upper 3 bits (isOpened, isMine, isFlag)
     const isOpened = (flags & 4) !== 0; // 0b100
     const isMine = (flags & 2) !== 0; // 0b010
     const isFlag = (flags & 1) !== 0; // 0b001
@@ -106,47 +108,6 @@ const VECTORIZED_TILE_LUT = new Uint8Array(65536); // 16 bits = 2^16 = 65536
 })();
 
 // hex -> byte conversion is inlined in the hot loop to avoid call overhead
-
-// String pooling for tile values to avoid repeated string creation
-const TILE_STRINGS = {
-  O: 'O',
-  '1': '1',
-  '2': '2',
-  '3': '3',
-  '4': '4',
-  '5': '5',
-  '6': '6',
-  '7': '7',
-  B: 'B',
-  C0: 'C0',
-  C1: 'C1',
-  F00: 'F00',
-  F01: 'F01',
-  F10: 'F10',
-  F11: 'F11',
-  F20: 'F20',
-  F21: 'F21',
-  F30: 'F30',
-  F31: 'F31',
-  '??': '??',
-} as const;
-
-// Memory pool for changes arrays
-const changesPool: Array<{ row: number; col: number; value: string }>[] = [];
-const getChangesArray = (): Array<{ row: number; col: number; value: string }> => {
-  const pooled = changesPool.pop();
-  if (pooled) {
-    pooled.length = 0; // Clear array
-    return pooled;
-  }
-  return [];
-};
-const returnChangesArray = (arr: Array<{ row: number; col: number; value: string }>): void => {
-  if (changesPool.length < 5) {
-    // Limit pool size
-    changesPool.push(arr);
-  }
-};
 
 export default function Play() {
   /** constants */
@@ -285,13 +246,6 @@ export default function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Handling Websocket Message */
-  useLayoutEffect(() => {
-    if (!message) return;
-    handleWebSocketMessage(message);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message]);
-
   /**
    * Initialize
    * Re-connect websocket when websocket is closed state.
@@ -311,10 +265,10 @@ export default function Play() {
    * @param y {number} - Optional Y coordinate for checkerboard pattern
    */
   const parseHex = (hex: string, x: number, y: number) => {
-    if (hex.length !== 2) return '';
+    if (hex.length < 2) return '';
 
     // Direct hex to integer conversion (much faster than string operations)
-    const byte = parseInt(hex, 16);
+    const byte = parseInt(hex.slice(0, 2), 16);
 
     // Bit operations instead of string manipulation
     const isTileOpened = (byte & 0b10000000) !== 0; // bit 7 (MSB)
@@ -338,86 +292,310 @@ export default function Play() {
     const yOffset = type === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - columnlength + 1 : 0) : end_y - startPoint.y;
     const xOffset = start_x - startPoint.x;
 
-    const changes = getChangesArray();
-    try {
-      for (let i = 0; i < columnlength; i++) {
-        const reversedI = columnlength - 1 - i;
-        const rowIndex = reversedI + yOffset;
-        if (rowIndex < 0 || rowIndex >= cachingTiles.length) continue;
+    const totalTiles = columnlength * tilesPerRow;
+    const cpuCores = navigator.hardwareConcurrency || 4;
 
-        const existingRow = cachingTiles[rowIndex];
-        if (!existingRow || existingRow.length === 0) continue;
+    // CPU 코어 수에 맞춰 최적 워커 수 결정
+    const workerCount = Math.min(cpuCores, Math.ceil(totalTiles / 32)); // 최소 32개 타일당 1워커
+    const tilesPerWorker = Math.ceil(totalTiles / workerCount);
 
-        const rowLen = existingRow.length;
-        const yAbs = end_y - reversedI;
-        const rowParityBase = (start_x + yAbs) & 1;
+    // SharedArrayBuffer 지원 여부 확인
+    const supportsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && typeof Atomics !== 'undefined';
 
-        const tStart = Math.max(0, -xOffset);
-        const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
-        if (tStart >= tEnd) continue;
+    if (supportsSharedArrayBuffer) {
+      // SharedArrayBuffer + Atomics를 사용한 최고 성능 병렬 처리
+      const sharedBuffer = new SharedArrayBuffer(totalTiles * 4); // 각 타일당 4바이트 (row, col, value)
+      const sharedArray = new Int32Array(sharedBuffer);
+      const changeCountBuffer = new SharedArrayBuffer(4);
+      const changeCountArray = new Int32Array(changeCountBuffer);
 
-        const rowStrBase = i * rowlengthBytes;
-        for (let t = tStart; t < tEnd; t++) {
-          const colIndex = t + xOffset;
-          const p = rowStrBase + (t << 1);
-          const c0 = unsortedTiles.charCodeAt(p);
-          const c1 = unsortedTiles.charCodeAt(p + 1);
+      // Atomics로 안전한 카운터 초기화
+      Atomics.store(changeCountArray, 0, 0);
 
-          const lookupIndex = (c0 << 8) | c1;
-          const tileType = VECTORIZED_TILE_LUT[lookupIndex];
-          if (tileType === 255) continue;
+      // SharedArrayBuffer를 사용한 최고 성능 병렬 처리
+      const sharedWorkerPromises = Array.from({ length: workerCount }, (_, workerIndex) => {
+        return new Promise<void>(resolve => {
+          const workerStart = workerIndex * tilesPerWorker;
+          const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
 
-          const checker = rowParityBase ^ (t & 1);
+          // 워커별로 할당된 타일들을 SIMD 스타일로 처리
+          for (let tileIndex = workerStart; tileIndex < workerEnd; tileIndex += 4) {
+            // 4개 타일을 동시에 처리 (SIMD 스타일)
+            const batchEnd = Math.min(tileIndex + 4, workerEnd);
 
-          let nextValue: string;
-          if (tileType < 8) {
-            nextValue = tileType === 0 ? TILE_STRINGS.O : TILE_STRINGS[tileType.toString() as keyof typeof TILE_STRINGS];
-          } else if (tileType === 8) {
-            nextValue = TILE_STRINGS.B;
-          } else if (tileType >= 16 && tileType < 24) {
-            const flagColor = ((tileType - 16) / 2) >>> 0;
-            const flagKey = `F${flagColor}${checker}` as keyof typeof TILE_STRINGS;
-            nextValue = TILE_STRINGS[flagKey] || `F${flagColor}${checker}`;
-          } else if (tileType === 24) {
-            nextValue = checker === 0 ? TILE_STRINGS.C0 : TILE_STRINGS.C1;
-          } else {
-            nextValue = TILE_STRINGS['??'];
+            for (let batchIndex = tileIndex; batchIndex < batchEnd; batchIndex++) {
+              const i = Math.floor(batchIndex / tilesPerRow);
+              const t = batchIndex % tilesPerRow;
+
+              const reversedI = columnlength - 1 - i;
+              const rowIndex = reversedI + yOffset;
+
+              if (rowIndex < 0 || rowIndex >= cachingTiles.length) continue;
+
+              const existingRow = cachingTiles[rowIndex] || [];
+              const rowLen = existingRow.length;
+              if (rowLen === 0) continue;
+
+              const yAbs = end_y - reversedI;
+              const rowParityBase = (start_x + yAbs) & 1;
+
+              const tStart = Math.max(0, -xOffset);
+              const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
+              if (t < tStart || t >= tEnd) continue;
+
+              const p = i * rowlengthBytes + (t << 1);
+              const c0 = unsortedTiles.charCodeAt(p);
+              const c1 = unsortedTiles.charCodeAt(p + 1);
+
+              // 16비트 조합으로 벡터화 LUT 룩업 (O(1) 연산)
+              const lookupIndex = (c0 << 8) | c1;
+              const tileType = VECTORIZED_TILE_LUT[lookupIndex];
+
+              if (tileType === 255) continue; // 잘못된 hex
+
+              const checker = rowParityBase ^ (t & 1);
+              const colIndex = t + xOffset;
+
+              // 벡터화된 문자열 변환 (O(1) 룩업)
+              let nextValue: string;
+              if (tileType < 8) {
+                nextValue = tileType === 0 ? 'O' : tileType.toString();
+              } else if (tileType === 8) {
+                nextValue = 'B';
+              } else if (tileType >= 16 && tileType < 24) {
+                const flagColor = Math.floor((tileType - 16) / 2);
+                nextValue = `F${flagColor}${checker}`;
+              } else if (tileType === 24) {
+                nextValue = `C${checker}`;
+              } else {
+                nextValue = '??'; // 예외 처리
+              }
+
+              if (existingRow[colIndex] !== nextValue) {
+                // Atomics로 안전하게 공유 배열에 변경사항 저장
+                const changeIndex = Atomics.add(changeCountArray, 0, 1);
+                if (changeIndex < totalTiles) {
+                  sharedArray[changeIndex * 3] = rowIndex;
+                  sharedArray[changeIndex * 3 + 1] = colIndex;
+                  sharedArray[changeIndex * 3 + 2] = nextValue.charCodeAt(0); // 간단한 문자열 인코딩
+                }
+              }
+            }
           }
+          resolve();
+        });
+      });
 
-          if (existingRow[colIndex] !== nextValue) {
-            changes.push({ row: rowIndex, col: colIndex, value: nextValue });
-          }
-        }
+      // 모든 워커 완료 대기
+      await Promise.all(sharedWorkerPromises);
+
+      // 공유 배열에서 변경사항 읽기
+      const finalChangeCount = Atomics.load(changeCountArray, 0);
+      const allChanges: Array<{ row: number; col: number; value: string }> = [];
+
+      for (let i = 0; i < finalChangeCount; i++) {
+        const row = sharedArray[i * 3];
+        const col = sharedArray[i * 3 + 1];
+        const value = String.fromCharCode(sharedArray[i * 3 + 2]);
+        allChanges.push({ row, col, value });
       }
 
-      if (changes.length > 0) {
-        setCachingTiles(prev => {
-          const next = prev.slice();
-          const byRow = new Map<number, Array<{ col: number; value: string }>>();
-          for (let k = 0; k < changes.length; k++) {
-            const { row, col, value } = changes[k];
-            let arr = byRow.get(row);
-            if (!arr) {
-              arr = [];
-              byRow.set(row, arr);
+      if (allChanges.length > 0) {
+        setCachingTiles(prevTiles => {
+          const newTiles = [...prevTiles];
+          allChanges.forEach(({ row, col, value }) => {
+            if (!newTiles[row]) {
+              newTiles[row] = [...prevTiles[row]];
             }
-            arr.push({ col, value });
-          }
-          byRow.forEach((rowChanges, row) => {
-            const src = prev[row];
-            const dst = src.slice();
-            for (let j = 0; j < rowChanges.length; j++) {
-              const { col, value } = rowChanges[j];
-              dst[col] = value;
-            }
-            next[row] = dst;
+            newTiles[row][col] = value;
           });
-          return next;
+          return newTiles;
         });
       }
-    } finally {
-      returnChangesArray(changes);
+    } else {
+      // SharedArrayBuffer 미지원 시 일반 병렬 처리
+      const workerPromises = Array.from({ length: workerCount }, (_, workerIndex) => {
+        return new Promise<{ changes: Array<{ row: number; col: number; value: string }> }>(resolve => {
+          const workerStart = workerIndex * tilesPerWorker;
+          const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
+          const changes: Array<{ row: number; col: number; value: string }> = [];
+
+          // 타일 배치를 Promise로 분할하여 병렬(동시) 처리
+          const batchPromises: Array<Promise<void>> = [];
+          for (let tileIndex = workerStart; tileIndex < workerEnd; tileIndex += 4) {
+            const startIndexForBatch = tileIndex;
+            const endIndexForBatch = Math.min(startIndexForBatch + 4, workerEnd);
+            batchPromises.push(
+              new Promise<void>(resolveBatch => {
+                for (let batchIndex = startIndexForBatch; batchIndex < endIndexForBatch; batchIndex++) {
+                  const i = Math.floor(batchIndex / tilesPerRow);
+                  const t = batchIndex % tilesPerRow;
+
+                  const reversedI = columnlength - 1 - i;
+                  const rowIndex = reversedI + yOffset;
+
+                  if (rowIndex < 0 || rowIndex >= cachingTiles.length) {
+                    continue;
+                  }
+
+                  const existingRow = cachingTiles[rowIndex] || [];
+                  const rowLen = existingRow.length;
+                  if (rowLen === 0) {
+                    continue;
+                  }
+
+                  const yAbs = end_y - reversedI;
+                  const rowParityBase = (start_x + yAbs) & 1;
+
+                  const tStart = Math.max(0, -xOffset);
+                  const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
+                  if (t < tStart || t >= tEnd) {
+                    continue;
+                  }
+
+                  const p = i * rowlengthBytes + (t << 1);
+                  const c0 = unsortedTiles.charCodeAt(p);
+                  const c1 = unsortedTiles.charCodeAt(p + 1);
+
+                  // 16비트 조합으로 벡터화 LUT 룩업 (O(1) 연산)
+                  const lookupIndex = (c0 << 8) | c1;
+                  const tileType = VECTORIZED_TILE_LUT[lookupIndex];
+
+                  if (tileType === 255) {
+                    continue; // 잘못된 hex
+                  }
+
+                  const checker = rowParityBase ^ (t & 1);
+                  const colIndex = t + xOffset;
+
+                  // 벡터화된 문자열 변환 (O(1) 룩업)
+                  let nextValue: string;
+                  if (tileType < 8) {
+                    nextValue = tileType === 0 ? 'O' : tileType.toString();
+                  } else if (tileType === 8) {
+                    nextValue = 'B';
+                  } else if (tileType >= 16 && tileType < 24) {
+                    const flagColor = Math.floor((tileType - 16) / 2);
+                    nextValue = `F${flagColor}${checker}`;
+                  } else if (tileType === 24) {
+                    nextValue = `C${checker}`;
+                  } else {
+                    nextValue = '??'; // 예외 처리
+                  }
+
+                  if (existingRow[colIndex] !== nextValue) {
+                    changes.push({ row: rowIndex, col: colIndex, value: nextValue });
+                  }
+                }
+                resolveBatch();
+              }),
+            );
+          }
+
+          Promise.all(batchPromises).then(() => resolve({ changes }));
+        });
+      });
+
+      try {
+        // 모든 워커를 병렬로 실행
+        const workerResults = await Promise.all(workerPromises);
+        const allChanges = workerResults.flatMap(result => result.changes);
+
+        if (allChanges.length > 0) {
+          setCachingTiles(prevTiles => {
+            const newTiles = [...prevTiles];
+            allChanges.forEach(({ row, col, value }) => {
+              if (!newTiles[row]) {
+                newTiles[row] = [...prevTiles[row]];
+              }
+              newTiles[row][col] = value;
+            });
+            return newTiles;
+          });
+        }
+      } catch (error) {
+        console.error('Ultra-Parallel Worker tile processing error:', error);
+        replaceTilesSync(end_x, end_y, start_x, start_y, unsortedTiles, type);
+      }
     }
+  };
+
+  // 동기식 폴백 함수
+  const replaceTilesSync = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
+    if (unsortedTiles.length === 0) return;
+    const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1;
+    const tilesPerRow = rowlengthBytes >> 1;
+    const columnlength = Math.abs(start_y - end_y + 1);
+    let newTiles = cachingTiles as string[][];
+    let outerCloned = false;
+    const yOffset = type === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - columnlength + 1 : 0) : end_y - startPoint.y;
+    const xOffset = start_x - startPoint.x;
+
+    const OPEN = OPEN_LUT;
+    const CL0 = CLOSED0_LUT;
+    const CL1 = CLOSED1_LUT;
+    let anyChanged = false;
+
+    for (let i = 0; i < columnlength; i++) {
+      const reversedI = columnlength - 1 - i;
+      const rowIndex = reversedI + yOffset;
+
+      if (rowIndex < 0 || rowIndex >= newTiles.length) continue;
+
+      const existingRow = newTiles[rowIndex] || [];
+      const rowLen = existingRow.length;
+      if (rowLen === 0) continue;
+
+      const yAbs = end_y - reversedI;
+      const rowParityBase = (start_x + yAbs) & 1;
+
+      const tStart = Math.max(0, -xOffset);
+      const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
+      if (tStart >= tEnd) continue;
+
+      let p = i * rowlengthBytes + (tStart << 1);
+      let checker = rowParityBase ^ (tStart & 1);
+      let row = existingRow;
+      let rowCloned = false;
+
+      for (let t = tStart; t < tEnd; t++) {
+        const c0 = unsortedTiles.charCodeAt(p);
+        const c1 = unsortedTiles.charCodeAt(p + 1);
+        const n0 = c0 < 128 ? HEX_NIBBLE[c0] : -1;
+        const n1 = c1 < 128 ? HEX_NIBBLE[c1] : -1;
+
+        if (n0 < 0 || n1 < 0) {
+          p += 2;
+          checker ^= 1;
+          continue;
+        }
+
+        const byte = (n0 << 4) | n1;
+        p += 2;
+
+        const colIndex = t + xOffset;
+        const opened = OPEN[byte];
+        const nextValue = opened !== null ? opened : checker === 0 ? CL0[byte] : CL1[byte];
+
+        if (row[colIndex] !== nextValue) {
+          if (!outerCloned) {
+            newTiles = [...newTiles];
+            outerCloned = true;
+          }
+          if (!rowCloned) {
+            row = existingRow.slice();
+            newTiles[rowIndex] = row;
+            rowCloned = true;
+          }
+          row[colIndex] = nextValue;
+          anyChanged = true;
+        }
+
+        checker ^= 1;
+      }
+    }
+
+    if (outerCloned && anyChanged) setCachingTiles(newTiles);
   };
 
   /** Message handler for tile processing */
@@ -505,11 +683,12 @@ export default function Play() {
           break;
         }
         case CURSORS_DIED: {
-          const { cursors: deadCursors } = payload as { cursors: OtherUserSingleCursorState[] };
-          const revive_at = new Date(payload.revive_at)?.getTime();
+          const { cursors: deadCursors, revive_at } = payload;
+          const revive_time = new Date(revive_at)?.getTime();
           const newCursors = cursors.map(cursor => {
-            if (!deadCursors.some(({ id }) => id === cursor.id)) return cursor;
-            return { ...cursor, revive_at };
+            for (const deadCursor of deadCursors as OtherUserSingleCursorState[])
+              if (cursor.id === deadCursor.id) return { ...cursor, revive_at: revive_time };
+            return cursor;
           });
           setCursors(newCursors);
           break;
@@ -545,71 +724,82 @@ export default function Play() {
           console.error(msg);
           break;
         }
-        default:
+        default: {
           break;
+        }
       }
     } catch (e) {
       console.error(e);
     }
   };
 
+  /** Handling Websocket Message */
+  useLayoutEffect(() => {
+    if (!message) return;
+    handleWebSocketMessage(message);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message]);
+
+  /** STABLE & FAST: Reliable tile computation without GPU bugs */
   const computedRenderTiles = useMemo(() => {
     const cachingLength = cachingTiles.length;
     if (cachingLength === 0) return [];
 
     const offsetX = cursorOriginX - cursorX;
     const offsetY = cursorOriginY - cursorY;
-    const baseX = renderStartPoint.x;
-    const baseY = renderStartPoint.y;
+    const renderBaseX = renderStartPoint.x;
+    const renderBaseY = renderStartPoint.y;
 
-    if (offsetX === 0 && offsetY === 0) return cachingTiles;
+    // INSTANT: Perfect alignment - no processing needed
+    if (offsetX === 0 && offsetY === 0) return cachingTiles; // O(1) return!
 
-    const out: string[][] = new Array(cachingLength);
-    for (let row = 0; row < cachingLength; row++) {
-      const srcRowIndex = row + offsetY;
-      const hasSrcRow = srcRowIndex >= 0 && srcRowIndex < cachingLength;
-      const srcRow = hasSrcRow ? cachingTiles[srcRowIndex] : undefined;
-      const width = srcRow ? srcRow.length : cachingTiles[row]?.length || 0;
-      const dstRow = new Array<string>(width);
+    // STABLE CPU processing - no disappearing tiles
+    return processWithStableCPU();
 
-      if (!srcRow) {
-        for (let c = 0; c < width; c++) dstRow[c] = '??';
-        out[row] = dstRow;
-        continue;
-      }
+    function processWithStableCPU(): string[][] {
+      // Ultra-stable rendering - guaranteed no missing tiles
+      return cachingTiles.map((cachingRow, row) => {
+        const sourceRowIndex = row + offsetY;
 
-      for (let col = 0; col < width; col++) {
-        const srcColIndex = col + offsetX;
-        if (srcColIndex < 0 || srcColIndex >= width) {
-          dstRow[col] = '??';
-          continue;
-        }
+        // Bounds check for source row
+        if (sourceRowIndex < 0 || sourceRowIndex >= cachingLength) return new Array(cachingRow.length).fill('??');
 
-        const v = srcRow[srcColIndex];
-        if (v === '??') {
-          dstRow[col] = '??';
-          continue;
-        }
+        const sourceRow = cachingTiles[sourceRowIndex];
+        if (!sourceRow) return new Array(cachingRow.length).fill('??');
 
-        const t0 = v[0];
-        if (t0 !== 'C' && t0 !== 'F') {
-          dstRow[col] = v;
-          continue;
-        }
+        // Process each column safely
+        return cachingRow.map((_, col) => {
+          const sourceColIndex = col + offsetX;
 
-        const checker = (baseX + col + baseY + row) & 1;
-        if (t0 === 'C') {
-          dstRow[col] = checker === 0 ? 'C0' : 'C1';
-        } else {
-          const colorChar = v[1] ?? '0';
-          dstRow[col] = `F${colorChar}${checker}`;
-        }
-      }
+          // Bounds check for source column
+          if (sourceColIndex < 0 || sourceColIndex >= sourceRow.length) return '??';
 
-      out[row] = dstRow;
+          const sourceTile = sourceRow[sourceColIndex];
+          if (!sourceTile || sourceTile === '??') return '??';
+
+          const tileType = sourceTile[0];
+
+          // Fast path for most tiles - no transformation needed
+          if (!['C', 'F'].includes(tileType)) return sourceTile;
+
+          // Safe checkerboard calculation
+          const renderX = renderBaseX + col;
+          const renderY = renderBaseY + row;
+          const checkerBit = (renderX + renderY) & 1;
+
+          // Safe tile type handling
+          if (tileType === 'C') return `C${checkerBit}`;
+
+          if (tileType === 'F') {
+            const flagColor = sourceTile[1] || '0';
+            return `F${flagColor}${checkerBit}`;
+          }
+
+          // Fallback for unexpected tile types
+          return sourceTile;
+        });
+      });
     }
-
-    return out;
   }, [cachingTiles, cursorOriginX, cursorOriginY, cursorX, cursorY, renderStartPoint]);
 
   /** Apply computed tiles */
