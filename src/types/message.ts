@@ -66,5 +66,6 @@ export const ReceiveMessageEvent = {
   FLAG_SET: 'flag-set',
   SINGLE_TILE_OPENED: 'single-tile-opened',
   TILES_OPENED: 'tiles-opened',
+  SCOREBOARD: 'scoreboard',
 } as const;
 export type ReceiveMessageEvent = (typeof ReceiveMessageEvent)[keyof typeof ReceiveMessageEvent];

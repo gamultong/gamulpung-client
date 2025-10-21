@@ -14,10 +14,11 @@ import useWebSocketStore from '@/store/websocketStore';
 import Inactive from '@/components/inactive';
 import CanvasDashboard from '@/components/canvasDashboard';
 import TutorialStep from '@/components/tutorialstep';
-import ScoreBoard from '@/components/scoreboard';
-import { Direction, ReceiveMessageEvent, SendMessageEvent, XYType } from '@/types';
+import ScoreBoardComponent from '@/components/scoreboard';
+import { Direction, ReceiveMessageEvent, ResponseRankState, SendMessageEvent, XYType } from '@/types';
 // WebGPU imports removed - using simple CPU processing only
 import { OPEN_LUT, CLOSED0_LUT, CLOSED1_LUT, HEX_NIBBLE, VECTORIZED_TILE_LUT, parseHex } from '@/utils/tiles';
+import { useRankStore } from '@/store/rankingStore';
 
 // hex -> byte conversion is inlined in the hot loop to avoid call overhead
 
@@ -38,6 +39,7 @@ export default function Play() {
   const { setColor, setPosition: setCursorPosition, setOringinPosition, setId } = useCursorStore();
   // for movings
   const { zoomUp, zoomDown, setZoom } = useCursorStore();
+  const { setRanking } = useRankStore();
 
   /** hooks */
   const { windowWidth, windowHeight } = useScreenSize();
@@ -493,7 +495,7 @@ export default function Play() {
     // others
     const { POINTER_SET, CURSORS, CURSORS_DIED, CURSOR_QUIT, CHAT } = ReceiveMessageEvent;
     // all
-    const { TILES, FLAG_SET, SINGLE_TILE_OPENED, TILES_OPENED } = ReceiveMessageEvent;
+    const { TILES, FLAG_SET, SINGLE_TILE_OPENED, TILES_OPENED, SCOREBOARD } = ReceiveMessageEvent;
     try {
       const { event, payload } = JSON.parse(wsMessage);
       switch (event) {
@@ -535,7 +537,7 @@ export default function Play() {
           const { tiles, start_p, end_p } = payload;
           const { x: start_x, y: start_y } = start_p;
           const { x: end_x, y: end_y } = end_p;
-          await replaceTiles(end_x, end_y, start_x, start_y, tiles, 'PART');
+          replaceTiles(end_x, end_y, start_x, start_y, tiles, 'PART');
           break;
         }
         /** Fetches own information only once when connected. */
@@ -598,6 +600,11 @@ export default function Play() {
           setCursors(newCursors);
           break;
         }
+        case SCOREBOARD: {
+          const { scores } = payload as ResponseRankState;
+          setRanking(scores);
+          break;
+        }
         case CHAT: {
           const { cursor_id, message } = payload;
           const newCursors = cursors.map(cursor => {
@@ -608,8 +615,7 @@ export default function Play() {
           break;
         }
         case ERROR: {
-          const { msg } = payload;
-          console.error(msg);
+          console.error(payload);
           break;
         }
         default: {
@@ -817,7 +823,7 @@ export default function Play() {
     <div className={S.page}>
       {leftReviveTime > 0 && <Inactive time={leftReviveTime} />}
       <TutorialStep />
-      <ScoreBoard />
+      <ScoreBoardComponent />
       <CanvasDashboard tileSize={tileSize} renderRange={RENDER_RANGE} maxTileCount={MAX_TILE_COUNT} />
       <CanvasRenderComponent
         leftReviveTime={leftReviveTime}

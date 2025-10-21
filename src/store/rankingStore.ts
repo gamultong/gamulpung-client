@@ -1,16 +1,12 @@
+import { RankState } from '@/types';
 import { create } from 'zustand';
-
-interface RankState {
-  ranking: number;
-  score: number;
-}
 
 interface RankStore {
   rankings: RankState[];
   setRanking: (newRank: RankState[]) => void;
 }
 
-export const useHighRankStore = create<RankStore>(set => ({
+export const useRankStore = create<RankStore>(set => ({
   // Initialize with dummy data
   rankings: [
     {
