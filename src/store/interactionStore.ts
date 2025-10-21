@@ -9,7 +9,7 @@ interface ClickState {
   setPosition: (x: number, y: number, content: string) => void;
 }
 
-const useClickStore = create<ClickState>(set => ({
+export const useClickStore = create<ClickState>(set => ({
   x: Infinity,
   y: Infinity,
   content: '',
@@ -18,4 +18,12 @@ const useClickStore = create<ClickState>(set => ({
   setPosition: (x, y, content) => set({ x, y, content }),
 }));
 
-export default useClickStore;
+interface AnimationState {
+  useAnimation: boolean;
+  setAnimation: (animation: boolean) => void;
+}
+
+export const useAnimationStore = create<AnimationState>(set => ({
+  useAnimation: true,
+  setAnimation: animation => set({ useAnimation: animation }),
+}));

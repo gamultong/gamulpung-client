@@ -25,6 +25,18 @@
       background-color: rgba(0, 0, 0, 35%);
       margin-bottom: 16px;
     }
+    .animation {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      input[type='checkbox'] {
+        width: 20px;
+        height: 20px;
+        margin-left: -25px;
+        cursor: pointer;
+      }
+    }
     .toggle {
       padding: 18px;
       border-radius: 24px;

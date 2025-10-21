@@ -5,7 +5,7 @@ import PointerSVG from '@/assets/pointervg';
 import SearchSVG from '@/assets/searchsvg';
 import UpArrowSVG from '@/assets/upArrowSvg';
 import useScreenSize from '@/hooks/useScreenSize';
-import useClickStore from '@/store/clickStore';
+import { useClickStore, useAnimationStore } from '@/store/interactionStore';
 import { useCursorStore } from '@/store/cursorStore';
 import { useState } from 'react';
 
@@ -20,6 +20,7 @@ export default function CanvasDashboard({ tileSize, renderRange, maxTileCount }:
   const { zoom, zoomDown, zoomUp, originX: cursorOriginX, originY: cursorOriginY } = useCursorStore();
   const { windowWidth: w, windowHeight: h } = useScreenSize();
   const { x: clickX, y: clickY } = useClickStore();
+  const { useAnimation, setAnimation } = useAnimationStore();
 
   const checkMaxTileCount = () => (w * renderRange) / (tileSize / zoomScale) + (h * renderRange) / (tileSize / zoomScale) > maxTileCount;
   const [bottomToggle, setBottomToggle] = useState(true);
@@ -43,6 +44,10 @@ export default function CanvasDashboard({ tileSize, renderRange, maxTileCount }:
               <p>
                 <PointerSVG />
                 &nbsp;({clickX === Infinity ? '' : clickX}, {clickY === Infinity ? '' : clickY})
+              </p>
+              <p className={S.animation} onClick={() => setAnimation(!useAnimation)}>
+                <input type="checkbox" checked={useAnimation} />
+                Animation
               </p>
             </div>
             <div className={S.zoom}>
