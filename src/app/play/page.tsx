@@ -17,7 +17,7 @@ import TutorialStep from '@/components/tutorialstep';
 import ScoreBoardComponent from '@/components/scoreboard';
 import { Direction, ReceiveMessageEvent, ResponseRankState, SendMessageEvent, XYType } from '@/types';
 // WebGPU imports removed - using simple CPU processing only
-import { OPEN_LUT, CLOSED0_LUT, CLOSED1_LUT, HEX_NIBBLE, VECTORIZED_TILE_LUT, parseHex } from '@/utils/tiles';
+import { VECTORIZED_TILE_LUT, parseHex } from '@/utils/tiles';
 import { useRankStore } from '@/store/rankingStore';
 
 // hex -> byte conversion is inlined in the hot loop to avoid call overhead
@@ -173,266 +173,72 @@ export default function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, startPoint, endPoint]);
 
-  /** parseHex moved to utils */
-
-  const replaceTiles = async (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
-    if (unsortedTiles.length === 0) return;
-
-    const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1; // 2 hex chars per tile
-    const tilesPerRow = rowlengthBytes >> 1;
-    const columnlength = Math.abs(start_y - end_y + 1);
-    const yOffset = type === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - columnlength + 1 : 0) : end_y - startPoint.y;
-    const xOffset = start_x - startPoint.x;
-
-    const totalTiles = columnlength * tilesPerRow;
-    const cpuCores = navigator.hardwareConcurrency || 4;
-
-    // CPU 코어 수에 맞춰 최적 워커 수 결정
-    const workerCount = Math.min(cpuCores, Math.ceil(totalTiles / 32)); // 최소 32개 타일당 1워커
-    const tilesPerWorker = Math.ceil(totalTiles / workerCount);
-
-    // SharedArrayBuffer 지원 여부 확인
-    const supportsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && typeof Atomics !== 'undefined';
-
-    if (supportsSharedArrayBuffer) {
-      // SharedArrayBuffer + Atomics를 사용한 최고 성능 병렬 처리
-      const sharedBuffer = new SharedArrayBuffer(totalTiles * 4); // 각 타일당 4바이트 (row, col, value)
-      const sharedArray = new Int32Array(sharedBuffer);
-      const changeCountBuffer = new SharedArrayBuffer(4);
-      const changeCountArray = new Int32Array(changeCountBuffer);
-
-      // Atomics로 안전한 카운터 초기화
-      Atomics.store(changeCountArray, 0, 0);
-
-      // SharedArrayBuffer를 사용한 최고 성능 병렬 처리
-      const sharedWorkerPromises = Array.from({ length: workerCount }, (_, workerIndex) => {
-        return new Promise<void>(resolve => {
-          const workerStart = workerIndex * tilesPerWorker;
-          const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
-
-          // 워커별로 할당된 타일들을 SIMD 스타일로 처리
-          for (let tileIndex = workerStart; tileIndex < workerEnd; tileIndex += 4) {
-            // 4개 타일을 동시에 처리 (SIMD 스타일)
-            const batchEnd = Math.min(tileIndex + 4, workerEnd);
-
-            for (let batchIndex = tileIndex; batchIndex < batchEnd; batchIndex++) {
-              const i = Math.floor(batchIndex / tilesPerRow);
-              const t = batchIndex % tilesPerRow;
-
-              const reversedI = columnlength - 1 - i;
-              const rowIndex = reversedI + yOffset;
-
-              if (rowIndex < 0 || rowIndex >= cachingTiles.length) continue;
-
-              const existingRow = cachingTiles[rowIndex] || [];
-              const rowLen = existingRow.length;
-              if (rowLen === 0) continue;
-
-              const yAbs = end_y - reversedI;
-              const rowParityBase = (start_x + yAbs) & 1;
-
-              const tStart = Math.max(0, -xOffset);
-              const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
-              if (t < tStart || t >= tEnd) continue;
-
-              const p = i * rowlengthBytes + (t << 1);
-              const c0 = unsortedTiles.charCodeAt(p);
-              const c1 = unsortedTiles.charCodeAt(p + 1);
-
-              // 16비트 조합으로 벡터화 LUT 룩업 (O(1) 연산)
-              const lookupIndex = (c0 << 8) | c1;
-              const tileType = VECTORIZED_TILE_LUT[lookupIndex];
-
-              if (tileType === 255) continue; // 잘못된 hex
-
-              const checker = rowParityBase ^ (t & 1);
-              const colIndex = t + xOffset;
-
-              // 벡터화된 문자열 변환 (O(1) 룩업)
-              let nextValue: string;
-              if (tileType < 8) {
-                nextValue = tileType === 0 ? 'O' : tileType.toString();
-              } else if (tileType === 8) {
-                nextValue = 'B';
-              } else if (tileType >= 16 && tileType < 24) {
-                const flagColor = Math.floor((tileType - 16) / 2);
-                nextValue = `F${flagColor}${checker}`;
-              } else if (tileType === 24) {
-                nextValue = `C${checker}`;
-              } else {
-                nextValue = '??'; // 예외 처리
-              }
-
-              if (existingRow[colIndex] !== nextValue) {
-                // Atomics로 안전하게 공유 배열에 변경사항 저장
-                const changeIndex = Atomics.add(changeCountArray, 0, 1);
-                if (changeIndex < totalTiles) {
-                  sharedArray[changeIndex * 3] = rowIndex;
-                  sharedArray[changeIndex * 3 + 1] = colIndex;
-                  sharedArray[changeIndex * 3 + 2] = nextValue.charCodeAt(0); // 간단한 문자열 인코딩
-                }
-              }
-            }
-          }
-          resolve();
-        });
+  /** Apply tile changes to caching tiles */
+  const applyTileChanges = (changes: Array<{ row: number; col: number; value: string }>) => {
+    if (changes.length < 1) return;
+    setCachingTiles(prevTiles => {
+      const newTiles = [...prevTiles];
+      changes.forEach(({ row, col, value }) => {
+        if (!newTiles[row]) newTiles[row] = [...prevTiles[row]];
+        newTiles[row][col] = value;
       });
-
-      // 모든 워커 완료 대기
-      await Promise.all(sharedWorkerPromises);
-
-      // 공유 배열에서 변경사항 읽기
-      const finalChangeCount = Atomics.load(changeCountArray, 0);
-      const allChanges: Array<{ row: number; col: number; value: string }> = [];
-
-      for (let i = 0; i < finalChangeCount; i++) {
-        const row = sharedArray[i * 3];
-        const col = sharedArray[i * 3 + 1];
-        const value = String.fromCharCode(sharedArray[i * 3 + 2]);
-        allChanges.push({ row, col, value });
-      }
-
-      if (allChanges.length > 0) {
-        setCachingTiles(prevTiles => {
-          const newTiles = [...prevTiles];
-          allChanges.forEach(({ row, col, value }) => {
-            if (!newTiles[row]) {
-              newTiles[row] = [...prevTiles[row]];
-            }
-            newTiles[row][col] = value;
-          });
-          return newTiles;
-        });
-      }
-    } else {
-      // SharedArrayBuffer 미지원 시 일반 병렬 처리
-      const workerPromises = Array.from({ length: workerCount }, (_, workerIndex) => {
-        return new Promise<{ changes: Array<{ row: number; col: number; value: string }> }>(resolve => {
-          const workerStart = workerIndex * tilesPerWorker;
-          const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
-          const changes: Array<{ row: number; col: number; value: string }> = [];
-
-          // 타일 배치를 Promise로 분할하여 병렬(동시) 처리
-          const batchPromises: Array<Promise<void>> = [];
-          for (let tileIndex = workerStart; tileIndex < workerEnd; tileIndex += 4) {
-            const startIndexForBatch = tileIndex;
-            const endIndexForBatch = Math.min(startIndexForBatch + 4, workerEnd);
-            batchPromises.push(
-              new Promise<void>(resolveBatch => {
-                for (let batchIndex = startIndexForBatch; batchIndex < endIndexForBatch; batchIndex++) {
-                  const i = Math.floor(batchIndex / tilesPerRow);
-                  const t = batchIndex % tilesPerRow;
-
-                  const reversedI = columnlength - 1 - i;
-                  const rowIndex = reversedI + yOffset;
-
-                  if (rowIndex < 0 || rowIndex >= cachingTiles.length) {
-                    continue;
-                  }
-
-                  const existingRow = cachingTiles[rowIndex] || [];
-                  const rowLen = existingRow.length;
-                  if (rowLen === 0) {
-                    continue;
-                  }
-
-                  const yAbs = end_y - reversedI;
-                  const rowParityBase = (start_x + yAbs) & 1;
-
-                  const tStart = Math.max(0, -xOffset);
-                  const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
-                  if (t < tStart || t >= tEnd) {
-                    continue;
-                  }
-
-                  const p = i * rowlengthBytes + (t << 1);
-                  const c0 = unsortedTiles.charCodeAt(p);
-                  const c1 = unsortedTiles.charCodeAt(p + 1);
-
-                  // 16비트 조합으로 벡터화 LUT 룩업 (O(1) 연산)
-                  const lookupIndex = (c0 << 8) | c1;
-                  const tileType = VECTORIZED_TILE_LUT[lookupIndex];
-
-                  if (tileType === 255) {
-                    continue; // 잘못된 hex
-                  }
-
-                  const checker = rowParityBase ^ (t & 1);
-                  const colIndex = t + xOffset;
-
-                  // 벡터화된 문자열 변환 (O(1) 룩업)
-                  let nextValue: string;
-                  if (tileType < 8) {
-                    nextValue = tileType === 0 ? 'O' : tileType.toString();
-                  } else if (tileType === 8) {
-                    nextValue = 'B';
-                  } else if (tileType >= 16 && tileType < 24) {
-                    const flagColor = Math.floor((tileType - 16) / 2);
-                    nextValue = `F${flagColor}${checker}`;
-                  } else if (tileType === 24) {
-                    nextValue = `C${checker}`;
-                  } else {
-                    nextValue = '??'; // 예외 처리
-                  }
-
-                  if (existingRow[colIndex] !== nextValue) {
-                    changes.push({ row: rowIndex, col: colIndex, value: nextValue });
-                  }
-                }
-                resolveBatch();
-              }),
-            );
-          }
-
-          Promise.all(batchPromises).then(() => resolve({ changes }));
-        });
-      });
-
-      try {
-        // 모든 워커를 병렬로 실행
-        const workerResults = await Promise.all(workerPromises);
-        const allChanges = workerResults.flatMap(result => result.changes);
-
-        if (allChanges.length > 0) {
-          setCachingTiles(prevTiles => {
-            const newTiles = [...prevTiles];
-            allChanges.forEach(({ row, col, value }) => {
-              if (!newTiles[row]) newTiles[row] = [...prevTiles[row]];
-              newTiles[row][col] = value;
-            });
-            return newTiles;
-          });
-        }
-      } catch (error) {
-        console.error('Ultra-Parallel Worker tile processing error:', error);
-        replaceTilesSync(end_x, end_y, start_x, start_y, unsortedTiles, type);
-      }
-    }
+      return newTiles;
+    });
   };
 
-  // 동기식 폴백 함수
-  const replaceTilesSync = (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
-    if (unsortedTiles.length === 0) return;
+  /** Create worker promises for tile processing */
+  const createWorkerPromises = (
+    workerCount: number,
+    tilesPerWorker: number,
+    totalTiles: number,
+    end_x: number,
+    end_y: number,
+    start_x: number,
+    start_y: number,
+    unsortedTiles: string,
+    type: 'All' | 'PART',
+  ) => {
+    const lenObject = { length: workerCount };
+
+    return Array.from(lenObject, (_, workerIndex) => {
+      const workerStart = workerIndex * tilesPerWorker;
+      const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
+
+      return processTileData(end_x, end_y, start_x, start_y, unsortedTiles, type, workerStart, workerEnd);
+    });
+  };
+
+  /** Common tile processing logic */
+  const processTileData = (
+    end_x: number,
+    end_y: number,
+    start_x: number,
+    start_y: number,
+    unsortedTiles: string,
+    type: 'All' | 'PART',
+    startIndex: number = 0,
+    endIndex: number = -1,
+  ) => {
     const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1;
     const tilesPerRow = rowlengthBytes >> 1;
     const columnlength = Math.abs(start_y - end_y + 1);
-    let newTiles = cachingTiles as string[][];
-    let outerCloned = false;
     const yOffset = type === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - columnlength + 1 : 0) : end_y - startPoint.y;
     const xOffset = start_x - startPoint.x;
 
-    const OPEN = OPEN_LUT;
-    const CL0 = CLOSED0_LUT;
-    const CL1 = CLOSED1_LUT;
-    let anyChanged = false;
+    const actualEndIndex = endIndex === -1 ? columnlength * tilesPerRow : endIndex;
+    const changes: Array<{ row: number; col: number; value: string }> = [];
 
-    for (let i = 0; i < columnlength; i++) {
+    for (let tileIndex = startIndex; tileIndex < actualEndIndex; tileIndex++) {
+      // Calculate row and column indices
+      const i = Math.floor(tileIndex / tilesPerRow);
+      const t = tileIndex % tilesPerRow;
+
       const reversedI = columnlength - 1 - i;
-      const rowIndex = reversedI + yOffset;
+      const row = reversedI + yOffset;
 
-      if (rowIndex < 0 || rowIndex >= newTiles.length) continue;
+      if (row < 0 || row >= cachingTiles.length) continue;
 
-      const existingRow = newTiles[rowIndex] || [];
+      const existingRow = cachingTiles[row] || [];
       const rowLen = existingRow.length;
       if (rowLen === 0) continue;
 
@@ -441,51 +247,108 @@ export default function Play() {
 
       const tStart = Math.max(0, -xOffset);
       const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
-      if (tStart >= tEnd) continue;
+      if (t < tStart || t >= tEnd) continue;
 
-      let p = i * rowlengthBytes + (tStart << 1);
-      let checker = rowParityBase ^ (tStart & 1);
-      let row = existingRow;
-      let rowCloned = false;
+      const p = i * rowlengthBytes + (t << 1);
+      const c0 = unsortedTiles.charCodeAt(p);
+      const c1 = unsortedTiles.charCodeAt(p + 1);
 
-      for (let t = tStart; t < tEnd; t++) {
-        const c0 = unsortedTiles.charCodeAt(p);
-        const c1 = unsortedTiles.charCodeAt(p + 1);
-        const n0 = c0 < 128 ? HEX_NIBBLE[c0] : -1;
-        const n1 = c1 < 128 ? HEX_NIBBLE[c1] : -1;
+      // 16bit combination vectorized LUT LookUp (O(1) operation)
+      const lookupIndex = (c0 << 8) | c1;
+      const tileType = VECTORIZED_TILE_LUT[lookupIndex];
 
-        if (n0 < 0 || n1 < 0) {
-          p += 2;
-          checker ^= 1;
-          continue;
-        }
+      if (tileType === 255) continue; // Check invalid hex
 
-        const byte = (n0 << 4) | n1;
-        p += 2;
+      const checker = rowParityBase ^ (t & 1);
+      const col = t + xOffset;
 
-        const colIndex = t + xOffset;
-        const opened = OPEN[byte];
-        const nextValue = opened !== null ? opened : checker === 0 ? CL0[byte] : CL1[byte];
+      // Vectorized string conversion (O(1) LookUp)
+      let value: string;
+      if (tileType < 8) value = tileType === 0 ? 'O' : tileType.toString();
+      // Bomb
+      else if (tileType === 8) value = 'B';
+      // CLosed
+      else if (tileType === 24) value = `C${checker}`;
+      // Flag tiles
+      else if (tileType >= 16 && tileType < 24) {
+        const flagColor = Math.floor((tileType - 16) / 2);
+        value = `F${flagColor}${checker}`;
+      } else value = '??'; // Exception handling
 
-        if (row[colIndex] !== nextValue) {
-          if (!outerCloned) {
-            newTiles = [...newTiles];
-            outerCloned = true;
-          }
-          if (!rowCloned) {
-            row = existingRow.slice();
-            newTiles[rowIndex] = row;
-            rowCloned = true;
-          }
-          row[colIndex] = nextValue;
-          anyChanged = true;
-        }
+      if (existingRow[col] !== value) changes.push({ row, col, value });
+    }
 
-        checker ^= 1;
+    return changes;
+  };
+
+  /** parseHex moved to utils */
+  const replaceTiles = async (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
+    if (unsortedTiles.length === 0) return;
+
+    const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1; // 2 hex chars per tile
+    const tilesPerRow = rowlengthBytes >> 1;
+    const columnlength = Math.abs(start_y - end_y + 1);
+    const totalTiles = columnlength * tilesPerRow;
+    const cpuCores = navigator.hardwareConcurrency || 4;
+
+    // Set the number of workers based on the number of CPU cores
+    const workerCount = Math.min(cpuCores, Math.ceil(totalTiles / 32)); // 1 worker for 32 tiles
+    const tilesPerWorker = Math.ceil(totalTiles / workerCount);
+    let allChanges: Array<{ row: number; col: number; value: string }> = [];
+
+    // Check if SharedArrayBuffer is supported
+    const supportsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && typeof Atomics !== 'undefined';
+
+    if (supportsSharedArrayBuffer) {
+      // Highest performance parallel processing using SharedArrayBuffer + Atomics
+      const sharedBuffer = new SharedArrayBuffer(totalTiles * 4); // 4 bytes per tile (row, col, value)
+      const sharedArray = new Int32Array(sharedBuffer);
+      const changeCountBuffer = new SharedArrayBuffer(4);
+      const changeCountArray = new Int32Array(changeCountBuffer);
+
+      // Initialize the counter safely using Atomics
+      Atomics.store(changeCountArray, 0, 0);
+
+      // Process all workers and save to shared array
+      const workerPromises = createWorkerPromises(workerCount, tilesPerWorker, totalTiles, end_x, end_y, start_x, start_y, unsortedTiles, type);
+
+      await Promise.all(
+        workerPromises.map(async changesPromise => {
+          const changes = await changesPromise;
+          changes.forEach(({ row, col, value }) => {
+            const changeIndex = Atomics.add(changeCountArray, 0, 1);
+            if (changeIndex >= totalTiles) return;
+            const sharedArrayIndex = changeIndex * 3;
+            sharedArray[sharedArrayIndex] = row;
+            sharedArray[sharedArrayIndex + 1] = col;
+            sharedArray[sharedArrayIndex + 2] = value.charCodeAt(0); // Simple string encoding
+          });
+        }),
+      );
+
+      // Read changes from the shared array
+      const finalChangeCount = Atomics.load(changeCountArray, 0);
+      for (let i = 0; i < finalChangeCount; i++) {
+        const row = sharedArray[i * 3];
+        const col = sharedArray[i * 3 + 1];
+        const value = String.fromCharCode(sharedArray[i * 3 + 2]);
+        allChanges.push({ row, col, value });
+      }
+    } else {
+      // Processing in parallel when SharedArrayBuffer is not supported
+      try {
+        const workerPromises = createWorkerPromises(workerCount, tilesPerWorker, totalTiles, end_x, end_y, start_x, start_y, unsortedTiles, type);
+        const workerResults = await Promise.all(workerPromises);
+        allChanges = workerResults.flat();
+      } catch (error) {
+        // Fallback to synchronous processing
+        console.error('Ultra-Parallel Worker tile processing error:', error);
+        allChanges = processTileData(end_x, end_y, start_x, start_y, unsortedTiles, type);
       }
     }
 
-    if (outerCloned && anyChanged) setCachingTiles(newTiles);
+    // Apply all changes
+    applyTileChanges(allChanges);
   };
 
   /** Message handler for tile processing */
@@ -683,7 +546,6 @@ export default function Play() {
 
           // Safe tile type handling
           if (tileType === 'C') return `C${checkerBit}`;
-
           if (tileType === 'F') {
             const flagColor = sourceTile[1] || '0';
             return `F${flagColor}${checkerBit}`;
