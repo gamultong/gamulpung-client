@@ -76,7 +76,6 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
   // Build textures (boom/flags + gradient tiles) and cache; heavy parts are parallelized
   useEffect(() => {
     const textureCache = cachedTexturesRef.current;
-
     const canvasToTexture = async (canvas: HTMLCanvasElement, width: number, height: number): Promise<Texture> => {
       try {
         if (typeof createImageBitmap !== 'undefined') {
@@ -88,14 +87,13 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
           t.baseTexture.setSize(width, height);
           return t;
         }
-      } catch {
-        const t = Texture.from(canvas);
-        t.baseTexture.scaleMode = SCALE_MODES.NEAREST;
-        t.baseTexture.mipmap = MIPMAP_MODES.OFF;
-        t.baseTexture.wrapMode = WRAP_MODES.CLAMP;
-        t.baseTexture.setSize(width, height);
-        return t;
-      }
+      } catch {}
+      const t = Texture.from(canvas);
+      t.baseTexture.scaleMode = SCALE_MODES.NEAREST;
+      t.baseTexture.mipmap = MIPMAP_MODES.OFF;
+      t.baseTexture.wrapMode = WRAP_MODES.CLAMP;
+      t.baseTexture.setSize(width, height);
+      return t;
     };
 
     // gradient tile textures (small and cheap) – keep sync
