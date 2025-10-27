@@ -5,7 +5,6 @@ import S from './page.module.scss';
 /** hooks */
 import { useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
 import useScreenSize from '@/hooks/useScreenSize';
-import { OtherUserSingleCursorState, useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import { useClickStore } from '@/store/interactionStore';
 
 /** components */
@@ -19,6 +18,8 @@ import { Direction, ReceiveMessageEvent, ResponseRankState, SendMessageEvent, XY
 // WebGPU imports removed - using simple CPU processing only
 import { VECTORIZED_TILE_LUT, parseHex } from '@/utils/tiles';
 import { useRankStore } from '@/store/rankingStore';
+import useMessageProcess from '@/hooks/useMessageProcess';
+import { OtherCursorState, useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 
 // hex -> byte conversion is inlined in the hot loop to avoid call overhead
 
@@ -32,7 +33,7 @@ export default function Play() {
   /** stores */
   const { setPosition: setClickPosition } = useClickStore();
   const { setCursors, addCursors, cursors } = useOtherUserCursorsStore();
-  const { isOpen, message, sendMessage, connect, disconnect } = useWebSocketStore();
+  const { isOpen, sendMessage, connect, disconnect } = useWebSocketStore();
   // for states
   const { x: cursorX, y: cursorY, zoom, originX: cursorOriginX, originY: cursorOriginY } = useCursorStore();
   // for actions
@@ -165,13 +166,12 @@ export default function Play() {
    * Re-connect websocket when websocket is closed state.
    * */
   useLayoutEffect(() => {
-    if (!isOpen && startPoint.x !== endPoint.x && endPoint.y !== startPoint.y) {
-      setLeftReviveTime(-1);
-      const [view_width, view_height] = [endPoint.x - startPoint.x + 1, endPoint.y - startPoint.y + 1];
-      connect(WS_URL + `?view_width=${view_width}&view_height=${view_height}`);
-    }
+    if (isOpen || startPoint.x === endPoint.x || endPoint.y === startPoint.y) return;
+    setLeftReviveTime(-1);
+    const [view_width, view_height] = [endPoint.x - startPoint.x + 1, endPoint.y - startPoint.y + 1];
+    connect(WS_URL + `?view_width=${view_width}&view_height=${view_height}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, startPoint, endPoint]);
+  }, [isOpen, startPoint]);
 
   /** Apply tile changes to caching tiles */
   const applyTileChanges = (changes: Array<{ row: number; col: number; value: string }>) => {
@@ -203,7 +203,6 @@ export default function Play() {
     return Array.from(lenObject, (_, workerIndex) => {
       const workerStart = workerIndex * tilesPerWorker;
       const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
-
       return processTileData(end_x, end_y, start_x, start_y, unsortedTiles, type, workerStart, workerEnd);
     });
   };
@@ -311,20 +310,18 @@ export default function Play() {
 
       // Process all workers and save to shared array
       const workerPromises = createWorkerPromises(workerCount, tilesPerWorker, totalTiles, end_x, end_y, start_x, start_y, unsortedTiles, type);
+      const workerResults = await Promise.all(workerPromises);
 
-      await Promise.all(
-        workerPromises.map(async changesPromise => {
-          const changes = await changesPromise;
-          changes.forEach(({ row, col, value }) => {
-            const changeIndex = Atomics.add(changeCountArray, 0, 1);
-            if (changeIndex >= totalTiles) return;
-            const sharedArrayIndex = changeIndex * 3;
-            sharedArray[sharedArrayIndex] = row;
-            sharedArray[sharedArrayIndex + 1] = col;
-            sharedArray[sharedArrayIndex + 2] = value.charCodeAt(0); // Simple string encoding
-          });
-        }),
-      );
+      workerResults.forEach(changes => {
+        changes.forEach(({ row, col, value }) => {
+          const changeIndex = Atomics.add(changeCountArray, 0, 1);
+          if (changeIndex >= totalTiles) return;
+          const sharedArrayIndex = changeIndex * 3;
+          sharedArray[sharedArrayIndex] = row;
+          sharedArray[sharedArrayIndex + 1] = col;
+          sharedArray[sharedArrayIndex + 2] = value.charCodeAt(0); // Simple string encoding
+        });
+      });
 
       // Read changes from the shared array
       const finalChangeCount = Atomics.load(changeCountArray, 0);
@@ -367,7 +364,7 @@ export default function Play() {
           const { tiles, start_p, end_p } = payload;
           const { x: start_x, y: start_y } = start_p;
           const { x: end_x, y: end_y } = end_p;
-          await replaceTiles(end_x, end_y, start_x, start_y, tiles, 'All');
+          replaceTiles(end_x, end_y, start_x, start_y, tiles, 'All');
           break;
         }
         /** When receiving unrequested tiles when sending tile open event */
@@ -439,8 +436,7 @@ export default function Play() {
           const { cursors: deadCursors, revive_at } = payload;
           const revive_time = new Date(revive_at)?.getTime();
           const newCursors = cursors.map(cursor => {
-            for (const deadCursor of deadCursors as OtherUserSingleCursorState[])
-              if (cursor.id === deadCursor.id) return { ...cursor, revive_at: revive_time };
+            for (const deadCursor of deadCursors as OtherCursorState[]) if (cursor.id === deadCursor.id) return { ...cursor, revive_at: revive_time };
             return cursor;
           });
           setCursors(newCursors);
@@ -489,13 +485,7 @@ export default function Play() {
       console.error(e);
     }
   };
-
-  /** Handling Websocket Message */
-  useLayoutEffect(() => {
-    if (!message) return;
-    handleWebSocketMessage(message);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message]);
+  useMessageProcess(handleWebSocketMessage);
 
   /** STABLE & FAST: Reliable tile computation without GPU bugs */
   const computedRenderTiles = useMemo(() => {

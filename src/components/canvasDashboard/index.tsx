@@ -46,7 +46,7 @@ export default function CanvasDashboard({ tileSize, renderRange, maxTileCount }:
                 &nbsp;({clickX === Infinity ? '' : clickX}, {clickY === Infinity ? '' : clickY})
               </p>
               <p className={S.animation} onClick={() => setAnimation(!useAnimation)}>
-                <input type="checkbox" checked={useAnimation} />
+                <input type="checkbox" checked={useAnimation} readOnly />
                 Animation
               </p>
             </div>

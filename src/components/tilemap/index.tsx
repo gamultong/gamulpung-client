@@ -58,19 +58,18 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
     };
     return <T,>(task: () => Promise<T>): Promise<T> =>
       new Promise<T>((resolve, reject) => {
-        const execute = () => {
-          task()
-            .then(resolve)
-            .catch(reject)
-            .finally(() => {
-              activeCount--;
-              runNext();
-            });
+        const execute = (d?: boolean) => {
+          const taskPromise = task();
+          taskPromise.then(resolve);
+          taskPromise.catch(reject);
+          taskPromise.finally(() => {
+            if (!d) activeCount--;
+            runNext();
+          });
         };
-        if (activeCount < maxConcurrent) {
-          activeCount++;
-          execute();
-        } else queue.push(execute);
+
+        if (activeCount >= maxConcurrent) queue.push(execute);
+        else execute(true);
       });
   };
 
@@ -89,13 +88,14 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
           t.baseTexture.setSize(width, height);
           return t;
         }
-      } catch {}
-      const t = Texture.from(canvas);
-      t.baseTexture.scaleMode = SCALE_MODES.NEAREST;
-      t.baseTexture.mipmap = MIPMAP_MODES.OFF;
-      t.baseTexture.wrapMode = WRAP_MODES.CLAMP;
-      t.baseTexture.setSize(width, height);
-      return t;
+      } catch {
+        const t = Texture.from(canvas);
+        t.baseTexture.scaleMode = SCALE_MODES.NEAREST;
+        t.baseTexture.mipmap = MIPMAP_MODES.OFF;
+        t.baseTexture.wrapMode = WRAP_MODES.CLAMP;
+        t.baseTexture.setSize(width, height);
+        return t;
+      }
     };
 
     // gradient tile textures (small and cheap) – keep sync
