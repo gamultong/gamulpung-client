@@ -6,7 +6,7 @@ import RenderPaths from '@/assets/renderPaths.json';
 import { useCursorStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
 import { TileContent } from '@/types';
-import { fillCtxAndPath as fillPathInCtx, makePath2d, hexToRgb, lerp } from '@/utils';
+import { fillCtxAndPath as fillPathInCtx, makePath2d, hexToRgb, lerp, canvasToTexture } from '@/utils';
 import { CURSOR_COLORS } from '@/constants';
 
 interface TilemapProps {
@@ -73,46 +73,56 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
       });
   };
 
-  // Build textures (boom/flags + gradient tiles) and cache; heavy parts are parallelized
   useEffect(() => {
-    const textureCache = cachedTexturesRef.current;
-    const canvasToTexture = async (canvas: HTMLCanvasElement, width: number, height: number): Promise<Texture> => {
-      try {
-        if (typeof createImageBitmap !== 'undefined') {
-          const bitmap = await createImageBitmap(canvas);
-          const t = Texture.from(bitmap as unknown as ImageBitmap);
-          t.baseTexture.scaleMode = SCALE_MODES.NEAREST;
-          t.baseTexture.mipmap = MIPMAP_MODES.OFF;
-          t.baseTexture.wrapMode = WRAP_MODES.CLAMP;
-          t.baseTexture.setSize(width, height);
-          return t;
-        }
-      } catch {}
-      const t = Texture.from(canvas);
-      t.baseTexture.scaleMode = SCALE_MODES.NEAREST;
-      t.baseTexture.mipmap = MIPMAP_MODES.OFF;
-      t.baseTexture.wrapMode = WRAP_MODES.CLAMP;
-      t.baseTexture.setSize(width, height);
-      return t;
+    // Pre-render number textures (1-8) in parallel
+    const size = tileSize;
+    const build = async () => {
+      const promises: Promise<void>[] = [];
+      const limit = createLimiter(8);
+      const local = new Map<number, Texture>();
+      for (let num = 1; num <= countColors.length; num++) {
+        promises.push(
+          limit(async () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = size;
+            const ctx = getCtx(canvas);
+            if (!ctx) return;
+            ctx.clearRect(0, 0, size, size);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = `${(size * 0.6) >>> 0}px LOTTERIACHAB`;
+            ctx.fillStyle = countColors[num - 1];
+            ctx.imageSmoothingEnabled = false;
+            ctx.fillText(`${num}`, size / 2, size / 2);
+            const tex = await canvasToTexture(canvas, size, size, 1);
+            local.set(num, tex);
+          }),
+        );
+      }
+      await Promise.all(promises);
+      numberTexturesRef.current = local;
+      setNumbersReady(true);
     };
+    build();
 
-    // gradient tile textures (small and cheap) – keep sync
-    const createTileTexture = (color1: string, color2: string) => {
-      const key = `${color1}${color2}${tileSize}`;
+    // Build textures (boom/flags + gradient tiles) and cache; heavy parts are parallelized
+    const textureCache = cachedTexturesRef.current;
+    const createTileTexture = (startColor: string, endColor: string) => {
+      const key = `${startColor}${endColor}${tileSize}`;
       if (textureCache.has(key)) return;
       const tempCanvas = document.createElement('canvas');
       const tileMinializedSize = 4;
       tempCanvas.width = tempCanvas.height = tileMinializedSize;
       const ctx = getCtx(tempCanvas);
       if (!ctx) return;
-      const c1 = hexToRgb(color1);
-      const c2 = hexToRgb(color2);
+      const startRGB = hexToRgb(startColor);
+      const endRGB = hexToRgb(endColor);
       for (let x = 0; x < tileMinializedSize; x++) {
         const t = x / (tileMinializedSize - 1);
-        const r = lerp(c1.r, c2.r, t);
-        const g = lerp(c1.g, c2.g, t);
-        const b = lerp(c1.b, c2.b, t);
-        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        const r = lerp(startRGB.r, endRGB.r, t);
+        const g = lerp(startRGB.g, endRGB.g, t);
+        const b = lerp(startRGB.b, endRGB.b, t);
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
         ctx.fillRect(x, 0, 1, tileMinializedSize);
       }
       const texture = Texture.from(tempCanvas);
@@ -132,7 +142,7 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
 
     // parallel generation for boom + flags (with concurrency limit)
     const promises: Promise<void>[] = [];
-    const limit = createLimiter(6);
+    const limit = createLimiter(8);
     // boom
     promises.push(
       limit(async () => {
@@ -172,61 +182,6 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
 
     Promise.all(promises).finally(() => setTexturesReady(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tileSize, zoom]);
-
-  // Pre-render number textures (1-8) in parallel
-  useEffect(() => {
-    const size = tileSize;
-    const build = async () => {
-      const promises: Promise<void>[] = [];
-      const limit = createLimiter(8);
-      const local = new Map<number, Texture>();
-      const canvasToTextureNumber = async (canvas: HTMLCanvasElement): Promise<Texture> => {
-        try {
-          if (typeof createImageBitmap !== 'undefined') {
-            const bitmap = await createImageBitmap(canvas);
-            const t = Texture.from(bitmap as unknown as ImageBitmap);
-            t.baseTexture.scaleMode = SCALE_MODES.NEAREST;
-            t.baseTexture.mipmap = MIPMAP_MODES.OFF;
-            t.baseTexture.wrapMode = WRAP_MODES.CLAMP;
-            t.baseTexture.setSize(size, size);
-            t.baseTexture.resolution = 1;
-            return t;
-          }
-        } catch {}
-        const t = Texture.from(canvas);
-        t.baseTexture.scaleMode = SCALE_MODES.NEAREST;
-        t.baseTexture.mipmap = MIPMAP_MODES.OFF;
-        t.baseTexture.wrapMode = WRAP_MODES.CLAMP;
-        t.baseTexture.setSize(size, size);
-        t.baseTexture.resolution = 1;
-        return t;
-      };
-      for (let num = 1; num <= countColors.length; num++) {
-        promises.push(
-          limit(async () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = canvas.height = size;
-            const ctx = getCtx(canvas);
-            if (!ctx) return;
-            ctx.clearRect(0, 0, size, size);
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.font = `${(size * 0.6) >>> 0}px LOTTERIACHAB`;
-            ctx.fillStyle = countColors[num - 1];
-            ctx.imageSmoothingEnabled = false;
-            ctx.fillText(`${num}`, size / 2, size / 2);
-            const tex = await canvasToTextureNumber(canvas);
-            local.set(num, tex);
-          }),
-        );
-      }
-      await Promise.all(promises);
-      numberTexturesRef.current = local;
-      setNumbersReady(true);
-    };
-    build();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileSize]);
 
   const computeVisibleBounds = (totalRows: number, totalCols: number, padW: number, padH: number, viewW: number, viewH: number, size: number) => {
@@ -246,14 +201,13 @@ export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, 
 
   const isClosedOrFlag = (t: string) => [TileContent.CLOSED, TileContent.FLAGGED].some(f => f === t);
 
-  const getTileTexturesForContent = (content: string | number, defaults: { outerTexture?: Texture; innerTexture?: Texture }) => {
-    if (!content) return { ...defaults, closed: true };
-    const head0 = typeof content === 'string' ? content[0] : `${content}`;
-    if (!isClosedOrFlag(head0)) return { ...defaults, closed: false };
-    const isEven = +String(content).slice(-1) % 2;
+  const getTileTexturesForContent = (content: string, defaults: { outerTexture?: Texture; innerTexture?: Texture }) => {
+    if (!content || !isClosedOrFlag(content[0])) return { ...defaults, closed: false };
+    const isEven = +content.slice(-1) % 2;
     const textureCache = cachedTexturesRef.current;
-    const outerTexture = textureCache.get(`${outer[isEven][0]}${outer[isEven][1]}${tileSize}`) || defaults.outerTexture;
-    const innerTexture = textureCache.get(`${inner[isEven][0]}${inner[isEven][1]}${tileSize}`) || defaults.innerTexture;
+    const [outerEven, innerEven] = [outer[isEven], inner[isEven]];
+    const outerTexture = textureCache.get(`${outerEven[0]}${outerEven[1]}${tileSize}`) || defaults.outerTexture;
+    const innerTexture = textureCache.get(`${innerEven[0]}${innerEven[1]}${tileSize}`) || defaults.innerTexture;
     return { outerTexture, innerTexture, closed: true } as const;
   };
 

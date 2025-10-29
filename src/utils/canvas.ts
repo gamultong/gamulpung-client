@@ -6,6 +6,24 @@ export const fillCtxAndPath = (ctx: CanvasRenderingContext2D, path: Path2D, colo
   return;
 };
 
+import { Texture, SCALE_MODES, MIPMAP_MODES, WRAP_MODES } from 'pixi.js';
+
+export const canvasToTexture = async (canvas: HTMLCanvasElement, width: number, height: number, resolution?: number): Promise<Texture> => {
+  let texture = Texture.from(canvas);
+  try {
+    const bitmap = await createImageBitmap(canvas);
+    texture = Texture.from(bitmap);
+  } catch {
+  } finally {
+    texture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
+    texture.baseTexture.mipmap = MIPMAP_MODES.OFF;
+    texture.baseTexture.wrapMode = WRAP_MODES.CLAMP;
+    texture.baseTexture.setSize(width, height);
+    if (typeof resolution === 'number') texture.baseTexture.resolution = resolution;
+    return texture;
+  }
+};
+
 export const hexToRgb = (hex: string) => {
   const normalized = hex.replace('#', '');
   const bigint = parseInt(normalized, 16);
