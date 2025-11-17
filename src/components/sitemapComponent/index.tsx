@@ -3,7 +3,6 @@
 import { CSSProperties, useCallback, useEffect } from 'react';
 import ReactFlow, { Node, Edge, Controls, Background, useNodesState, useEdgesState, MarkerType, NodeMouseHandler } from 'react-flow-renderer';
 import data from './sitemap.json';
-import useScreenSize from '@/hooks/useScreenSize';
 
 interface DataItem {
   url: string;
@@ -30,7 +29,6 @@ const activeNodeStyle: CSSProperties = {
 };
 
 export default function SiteMapGraph() {
-  const { windowWidth } = useScreenSize();
   const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
 
