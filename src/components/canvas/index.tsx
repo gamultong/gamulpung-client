@@ -392,7 +392,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
     /** initialize tiles */
     const [start, target] = [new TileNode(startX, startY), new TileNode(targetX, targetY)];
-    // 추후 범위를 좁힐 것
+
     const grid = tiles.map((row, i) => row.map((tile, j) => (checkTileHasOpened(tile) ? new TileNode(j, i) : null)));
 
     /** initialize open and close list */

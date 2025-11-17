@@ -31,17 +31,17 @@ interface ClientCursorState extends CursorState {
   moveRight: () => void;
 }
 
-export interface OtherUserSingleCursorState extends CursorState {
+export interface OtherCursorState extends CursorState {
   pointer: XYType;
   message: string;
   messageTime: number;
 }
 
-interface OtherUserCursorsState {
-  cursors: OtherUserSingleCursorState[];
-  addCursors: (cursor: OtherUserSingleCursorState[]) => void;
-  removeCursor: (cursor: OtherUserSingleCursorState) => void;
-  setCursors: (cursors: OtherUserSingleCursorState[]) => void;
+interface OtherUserCursorListState {
+  cursors: OtherCursorState[];
+  addCursors: (cursors: OtherCursorState[]) => void;
+  removeCursor: (cursor: OtherCursorState) => void;
+  setCursors: (cursors: OtherCursorState[]) => void;
 }
 
 export const useCursorStore = create<ClientCursorState>(set => ({
@@ -68,7 +68,7 @@ export const useCursorStore = create<ClientCursorState>(set => ({
   moveRight: () => set(s => ({ x: s.originX + 1 })),
 }));
 
-export const useOtherUserCursorsStore = create<OtherUserCursorsState>(set => ({
+export const useOtherUserCursorsStore = create<OtherUserCursorListState>(set => ({
   cursors: [],
   addCursors: cursors => set(state => ({ cursors: [...state.cursors, ...cursors] })),
   removeCursor: cursor => set(state => ({ cursors: state.cursors.filter(c => c !== cursor) })),

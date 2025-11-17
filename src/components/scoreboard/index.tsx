@@ -3,10 +3,10 @@ import S from './style.module.scss';
 import DownArrowSVG from '@/assets/downArrowSvg';
 import UpArrowSVG from '@/assets/upArrowSvg';
 import CrownSVG from '@/assets/crownsvg';
-import { useHighRankStore } from '@/store/rankingStore';
+import { useRankStore } from '@/store/rankingStore';
 
-export default function ScoreBoard() {
-  const { rankings } = useHighRankStore();
+export default function ScoreBoardComponent() {
+  const { rankings } = useRankStore();
   const [topToggle, setTopToggle] = useState(true);
   const toggleTop = () => setTopToggle(!topToggle);
 

@@ -110,7 +110,7 @@ export default function SiteMapGraph() {
   return (
     <div style={{ width: '100%', height: '70vh' }}>
       <h1 style={{ textAlign: 'center' }}>Site Map Graph</h1>
-      <div style={{ width: windowWidth, height: 'calc(100% - 40px)' }}>
+      <div style={{ width: '100%', height: 'calc(100% - 40px)' }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
