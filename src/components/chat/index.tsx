@@ -69,7 +69,7 @@ export default function ChatComponent() {
     if (message === '' || (startChatTime as number) < now) return;
     /** Send message using websocket. */
     const payload = { message };
-    const event = SendMessageEvent.SEND_CHAT;
+    const event = SendMessageEvent.CHAT;
     const body = JSON.stringify({ event, payload });
     sendMessage(body);
     setMessage('');

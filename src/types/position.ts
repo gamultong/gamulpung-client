@@ -3,6 +3,8 @@ export type XYType = {
   y: number;
 };
 
+export type PositionType = { position: XYType };
+
 export const Direction = {
   RIGHT: 'R',
   LEFT: 'L',
