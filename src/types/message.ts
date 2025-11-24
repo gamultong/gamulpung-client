@@ -1,3 +1,8 @@
+/**
+ * Please Check these API spec's documents.
+ * https://github.com/gamultong/gamulpung-server-new/tree/develop/docs/API_spec/WebSocket
+ */
+
 import { PositionType, XYType } from './position';
 import { WindowSizeType } from './window';
 
