@@ -247,7 +247,6 @@ export default function Play() {
     startIndex: number = 0,
     endIndex: number = -1,
   ) => {
-    console.log(end_x, start_x);
     const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1;
     const tilesPerRow = rowlengthBytes >> 1;
     const columnlength = Math.abs(start_y - end_y + 1);
@@ -258,7 +257,6 @@ export default function Play() {
     const yOffset = isAll ? 0 : end_y - startPoint.y;
     const xOffset = isAll ? 0 : start_x - startPoint.x;
 
-    console.log('col', columnlength, 'row', tilesPerRow, 'rowBytes', rowlengthBytes);
     const actualEndIndex = endIndex === -1 ? columnlength * tilesPerRow : endIndex;
     const changes: Array<{ row: number; col: number; value: string }> = [];
 
@@ -317,28 +315,34 @@ export default function Play() {
     return changes;
   };
 
-  /** parseHex moved to utils */
+  /** Apply incoming hex tile data to the internal tile grid */
   const replaceTiles = async (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
     if (unsortedTiles.length === 0) return;
+
+    // For full window updates, pre-shift the grid with dummy tiles
     if (type === 'All') moveTiles(start_x, start_y, end_x, end_y, Direction.ALL);
 
+    // Basic grid stats based on server-provided world coordinates
     const tilesPerRow = Math.abs(end_x - start_x + 1);
     const columnlength = Math.abs(start_y - end_y + 1);
     const totalTiles = columnlength * tilesPerRow;
     const cpuCores = navigator.hardwareConcurrency || 4;
 
-    // Set the number of workers based on the number of CPU cores
-    const workerCount = Math.min(cpuCores, Math.ceil(totalTiles / 32)); // 1 worker for 32 tiles
+    // Number of workers: at most one per CPU core, roughly one worker per 32 tiles
+    const workerCount = Math.min(cpuCores, Math.ceil(totalTiles / 32));
     const tilesPerWorker = Math.ceil(totalTiles / workerCount);
-    let allChanges: Array<{ row: number; col: number; value: string }> = [];
 
-    // Check if SharedArrayBuffer is supported
+    // Internal processing uses an inner window trimmed by 1 tile on each X side
+    const innerStartX = start_x + 1;
+    const innerEndX = end_x - 1;
+
+    // Check if SharedArrayBuffer is supported (high-performance mode)
     const supportsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && typeof Atomics !== 'undefined';
 
-    const [correctionEndX, correctionStartX] = [end_x - 1, start_x + 1];
+    let allChanges: Array<{ row: number; col: number; value: string }> = [];
 
     if (supportsSharedArrayBuffer) {
-      // Highest performance parallel processing using SharedArrayBuffer + Atomics
+      // Parallel processing using SharedArrayBuffer + Atomics
       const sharedBuffer = new SharedArrayBuffer(totalTiles * 4); // 4 bytes per tile (row, col, value)
       const sharedArray = new Int32Array(sharedBuffer);
       const changeCountBuffer = new SharedArrayBuffer(4);
@@ -347,14 +351,14 @@ export default function Play() {
       // Initialize the counter safely using Atomics
       Atomics.store(changeCountArray, 0, 0);
 
-      // Process all workers and save to shared array
+      // Process tiles in parallel and accumulate into shared array
       const workerPromises = createWorkerPromises(
         workerCount,
         tilesPerWorker,
         totalTiles,
-        correctionEndX,
+        innerEndX,
         end_y,
-        correctionStartX,
+        innerStartX,
         start_y,
         unsortedTiles,
         type,
@@ -372,7 +376,7 @@ export default function Play() {
         });
       });
 
-      // Read changes from the shared array
+      // Read back accumulated changes from the shared array
       const finalChangeCount = Atomics.load(changeCountArray, 0);
       for (let i = 0; i < finalChangeCount; i++) {
         const row = sharedArray[i * 3];
@@ -381,15 +385,15 @@ export default function Play() {
         allChanges.push({ row, col, value });
       }
     } else {
-      // Processing in parallel when SharedArrayBuffer is not supported
+      // Fallback: standard Promise.all parallelism without SharedArrayBuffer
       try {
         const workerPromises = createWorkerPromises(
           workerCount,
           tilesPerWorker,
           totalTiles,
-          correctionEndX,
+          innerEndX,
           end_y,
-          correctionStartX,
+          innerStartX,
           start_y,
           unsortedTiles,
           type,
@@ -397,9 +401,9 @@ export default function Play() {
         const workerResults = await Promise.all(workerPromises);
         allChanges = workerResults.flat();
       } catch (error) {
-        // Fallback to synchronous processing
+        // Final fallback: synchronous processing on main thread
         console.error('Ultra-Parallel Worker tile processing error:', error);
-        allChanges = processTileData(correctionEndX, end_y, correctionStartX, start_y, unsortedTiles, type);
+        allChanges = processTileData(innerEndX, end_y, innerStartX, start_y, unsortedTiles, type);
       }
     }
 
@@ -425,7 +429,6 @@ export default function Play() {
             const { width, height } = getCurrentTileWidthAndHeight();
             const [totalWidth, totalHeight] = [bottom_right.x - top_left.x + 1, top_left.y - bottom_right.y + 1];
             const [resWidth, resHeight] = [(totalWidth / 2) >>> 0, (totalHeight / 2) >>> 0];
-            console.log(top_left, bottom_right);
 
             let isAll: 'PART' | 'All' = 'PART';
             if (resWidth === width && resHeight === height) isAll = 'All';
@@ -613,11 +616,6 @@ export default function Play() {
     sendMessage(event, payload);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursorOriginPosition]);
-
-  useEffect(() => {
-    console.log(renderTiles.map(row => row.join('.')).join('\n'));
-    console.log(getCurrentTileWidthAndHeight(), 'height', renderTiles?.length, 'width', renderTiles[0]?.length);
-  }, [renderTiles]);
 
   useEffect(() => {
     if (leftReviveTime > 0) {
