@@ -14,9 +14,22 @@ import Inactive from '@/components/inactive';
 import CanvasDashboard from '@/components/canvasDashboard';
 import TutorialStep from '@/components/tutorialstep';
 import ScoreBoardComponent from '@/components/scoreboard';
-import { Direction, ReceiveMessageEvent, ResponseRankState, SendMessageEvent, XYType } from '@/types';
+import {
+  CursorIdType,
+  Direction,
+  GetChatPayloadType,
+  GetCursorStatePayloadType,
+  GetMessageType,
+  GetMessageEvent,
+  SendMessageEvent,
+  SendMovePayloadType,
+  SendSetWindowPayloadType,
+  XYType,
+  GetTilesStatePayloadType,
+  GetScoreboardPayloadType,
+} from '@/types';
 // WebGPU imports removed - using simple CPU processing only
-import { VECTORIZED_TILE_LUT, parseHex } from '@/utils/tiles';
+import { VECTORIZED_TILE_LUT } from '@/utils/tiles';
 import { useRankStore } from '@/store/rankingStore';
 import useMessageProcess from '@/hooks/useMessageProcess';
 import { OtherCursorState, useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
@@ -31,13 +44,13 @@ export default function Play() {
   const WS_URL = `${process.env.NEXT_PUBLIC_WS_HOST}/session`;
 
   /** stores */
-  const { setPosition: setClickPosition } = useClickStore();
-  const { setCursors, addCursors, cursors } = useOtherUserCursorsStore();
+  const {} = useClickStore();
+  const { setCursors, cursors } = useOtherUserCursorsStore();
   const { isOpen, sendMessage, connect, disconnect } = useWebSocketStore();
   // for states
-  const { x: cursorX, y: cursorY, zoom, originX: cursorOriginX, originY: cursorOriginY } = useCursorStore();
+  const { position: cursorPosition, zoom, originPosition: cursorOriginPosition } = useCursorStore();
   // for actions
-  const { setColor, setPosition: setCursorPosition, setOringinPosition, setId } = useCursorStore();
+  const { setPosition: setCursorPosition, setOringinPosition, setId, id: clientCursorId } = useCursorStore();
   // for movings
   const { zoomUp, zoomDown, setZoom } = useCursorStore();
   const { setRanking } = useRankStore();
@@ -55,8 +68,12 @@ export default function Play() {
   const [leftReviveTime, setLeftReviveTime] = useState<number>(-1);
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
+  // Canonical tile data is stored in this ref; state is used only for rendering snapshots
+  const cachingTilesRef = useRef<string[][]>([]);
+
   const requestedTilesTimeRef = useRef<number>(0);
   const reviveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const connectedRef = useRef<boolean>(false);
 
   /**
    * Request Tiles
@@ -67,7 +84,7 @@ export default function Play() {
    * @param end_y {number} - end y position
    * @param type {Direction} - Request type (U: Up tiles, D: Down tiles, L: Left tiles, R: Right tiles, A: All tiles)
    *  */
-  const requestTiles = (start_x: number, start_y: number, end_x: number, end_y: number, type: Direction) => {
+  const moveTiles = (start_x: number, start_y: number, end_x: number, end_y: number, type: Direction) => {
     if (!isOpen || !isInitialized) return;
     const now = performance.now();
     // Throttle ALL-tiles requests to avoid spamming server (300 ms window)
@@ -76,31 +93,41 @@ export default function Play() {
     /** add Dummy data to originTiles */
     const [rowlength, columnlength] = [Math.abs(end_x - start_x) + 1, Math.abs(start_y - end_y) + 1];
 
-    setCachingTiles(tiles => {
-      let newTiles = [...tiles];
-      switch (type) {
-        case Direction.UP: // Upper tiles
-          newTiles = [...Array.from({ length: columnlength }, () => Array(rowlength).fill('??')), ...newTiles.slice(0, -columnlength)];
-          break;
-        case Direction.DOWN: // Down tiles
-          newTiles = [...newTiles.slice(columnlength), ...Array.from({ length: columnlength }, () => Array(rowlength).fill('??'))];
-          break;
-        case Direction.LEFT: // Left tiles
-          for (let i = 0; i < columnlength; i++)
-            newTiles[i] = [...Array(rowlength).fill('??'), ...newTiles[i].slice(0, newTiles[0].length - rowlength)];
-          break;
-        case Direction.RIGHT: // Right tiles
-          for (let i = 0; i < columnlength; i++) newTiles[i] = [...newTiles[i].slice(rowlength), ...Array(rowlength).fill('??')];
-          break;
-        case Direction.ALL: // All tiles
-          newTiles = Array.from({ length: columnlength }, () => Array.from({ length: rowlength }, () => '??'));
-      }
-      return newTiles;
-    });
-    const payload = { start_p: { x: start_x, y: start_y }, end_p: { x: end_x, y: end_y } };
-    const body = JSON.stringify({ event: SendMessageEvent.FETCH_TILES, payload });
-    sendMessage(body);
+    const prevTiles = cachingTilesRef.current;
+    let newTiles = [...prevTiles];
+
+    switch (type) {
+      case Direction.UP: // Upper tiles
+        newTiles = [...Array.from({ length: columnlength }, () => Array(rowlength).fill('??')), ...newTiles.slice(0, -columnlength)];
+        break;
+      case Direction.DOWN: // Down tiles
+        newTiles = [...newTiles.slice(columnlength), ...Array.from({ length: columnlength }, () => Array(rowlength).fill('??'))];
+        break;
+      case Direction.LEFT: // Left tiles
+        for (let i = 0; i < columnlength; i++) {
+          if (!newTiles[i]) continue;
+          newTiles[i] = [...Array(rowlength).fill('??'), ...newTiles[i].slice(0, newTiles[i].length - rowlength)];
+        }
+        break;
+      case Direction.RIGHT: // Right tiles
+        for (let i = 0; i < columnlength; i++) {
+          if (!newTiles[i]) continue;
+          newTiles[i] = [...newTiles[i].slice(rowlength), ...Array(rowlength).fill('??')];
+        }
+        break;
+      case Direction.ALL: // All tiles
+        newTiles = Array.from({ length: columnlength }, () => Array.from({ length: rowlength }, () => '??'));
+        break;
+    }
+
+    cachingTilesRef.current = newTiles;
     return;
+  };
+
+  /** Flush ref-based tiles to state for rendering */
+  const flushCachingTilesToState = () => {
+    const tiles = cachingTilesRef.current;
+    setCachingTiles(tiles.map(row => [...row]));
   };
 
   const zoomHandler = (e: KeyboardEvent) => {
@@ -153,6 +180,7 @@ export default function Play() {
       disconnect();
 
       // reset states
+      cachingTilesRef.current = [];
       setCachingTiles([]);
       setRenderTiles([]);
       setIsInitialized(false);
@@ -168,21 +196,22 @@ export default function Play() {
   useLayoutEffect(() => {
     if (isOpen || startPoint.x === endPoint.x || endPoint.y === startPoint.y) return;
     setLeftReviveTime(-1);
-    const [view_width, view_height] = [endPoint.x - startPoint.x + 1, endPoint.y - startPoint.y + 1];
-    connect(WS_URL + `?view_width=${view_width}&view_height=${view_height}`);
+    // const [view_width, view_height] = [endPoint.x - startPoint.x + 1, endPoint.y - startPoint.y + 1];
+    if (!connectedRef.current) {
+      connect(WS_URL);
+      connectedRef.current = true;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, startPoint]);
 
   /** Apply tile changes to caching tiles */
   const applyTileChanges = (changes: Array<{ row: number; col: number; value: string }>) => {
     if (changes.length < 1) return;
-    setCachingTiles(prevTiles => {
-      const newTiles = [...prevTiles];
-      changes.forEach(({ row, col, value }) => {
-        if (!newTiles[row]) newTiles[row] = [...prevTiles[row]];
-        newTiles[row][col] = value;
-      });
-      return newTiles;
+    const tiles = cachingTilesRef.current;
+
+    changes.forEach(({ row, col, value }) => {
+      if (!tiles[row]) return;
+      tiles[row][col] = value;
     });
   };
 
@@ -218,14 +247,22 @@ export default function Play() {
     startIndex: number = 0,
     endIndex: number = -1,
   ) => {
+    console.log(end_x, start_x);
     const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1;
     const tilesPerRow = rowlengthBytes >> 1;
     const columnlength = Math.abs(start_y - end_y + 1);
-    const yOffset = type === 'All' ? (cursorY < end_y ? endPoint.y - startPoint.y - columnlength + 1 : 0) : end_y - startPoint.y;
-    const xOffset = start_x - startPoint.x;
 
+    // For full-window updates (All), tiles are written into a freshly initialized grid,
+    // so offsets should be zero. For partial updates, use world-window based offsets.
+    const isAll = type === 'All';
+    const yOffset = isAll ? 0 : end_y - startPoint.y;
+    const xOffset = isAll ? 0 : start_x - startPoint.x;
+
+    console.log('col', columnlength, 'row', tilesPerRow, 'rowBytes', rowlengthBytes);
     const actualEndIndex = endIndex === -1 ? columnlength * tilesPerRow : endIndex;
     const changes: Array<{ row: number; col: number; value: string }> = [];
+
+    const tiles = cachingTilesRef.current;
 
     for (let tileIndex = startIndex; tileIndex < actualEndIndex; tileIndex++) {
       // Calculate row and column indices
@@ -235,9 +272,9 @@ export default function Play() {
       const reversedI = columnlength - 1 - i;
       const row = reversedI + yOffset;
 
-      if (row < 0 || row >= cachingTiles.length) continue;
+      if (row < 0 || row >= tiles.length) continue;
 
-      const existingRow = cachingTiles[row] || [];
+      const existingRow = tiles[row] || [];
       const rowLen = existingRow.length;
       if (rowLen === 0) continue;
 
@@ -283,9 +320,9 @@ export default function Play() {
   /** parseHex moved to utils */
   const replaceTiles = async (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
     if (unsortedTiles.length === 0) return;
+    if (type === 'All') moveTiles(start_x, start_y, end_x, end_y, Direction.ALL);
 
-    const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1; // 2 hex chars per tile
-    const tilesPerRow = rowlengthBytes >> 1;
+    const tilesPerRow = Math.abs(end_x - start_x + 1);
     const columnlength = Math.abs(start_y - end_y + 1);
     const totalTiles = columnlength * tilesPerRow;
     const cpuCores = navigator.hardwareConcurrency || 4;
@@ -298,6 +335,8 @@ export default function Play() {
     // Check if SharedArrayBuffer is supported
     const supportsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && typeof Atomics !== 'undefined';
 
+    const [correctionEndX, correctionStartX] = [end_x - 1, start_x + 1];
+
     if (supportsSharedArrayBuffer) {
       // Highest performance parallel processing using SharedArrayBuffer + Atomics
       const sharedBuffer = new SharedArrayBuffer(totalTiles * 4); // 4 bytes per tile (row, col, value)
@@ -309,7 +348,17 @@ export default function Play() {
       Atomics.store(changeCountArray, 0, 0);
 
       // Process all workers and save to shared array
-      const workerPromises = createWorkerPromises(workerCount, tilesPerWorker, totalTiles, end_x, end_y, start_x, start_y, unsortedTiles, type);
+      const workerPromises = createWorkerPromises(
+        workerCount,
+        tilesPerWorker,
+        totalTiles,
+        correctionEndX,
+        end_y,
+        correctionStartX,
+        start_y,
+        unsortedTiles,
+        type,
+      );
       const workerResults = await Promise.all(workerPromises);
 
       workerResults.forEach(changes => {
@@ -334,147 +383,107 @@ export default function Play() {
     } else {
       // Processing in parallel when SharedArrayBuffer is not supported
       try {
-        const workerPromises = createWorkerPromises(workerCount, tilesPerWorker, totalTiles, end_x, end_y, start_x, start_y, unsortedTiles, type);
+        const workerPromises = createWorkerPromises(
+          workerCount,
+          tilesPerWorker,
+          totalTiles,
+          correctionEndX,
+          end_y,
+          correctionStartX,
+          start_y,
+          unsortedTiles,
+          type,
+        );
         const workerResults = await Promise.all(workerPromises);
         allChanges = workerResults.flat();
       } catch (error) {
         // Fallback to synchronous processing
         console.error('Ultra-Parallel Worker tile processing error:', error);
-        allChanges = processTileData(end_x, end_y, start_x, start_y, unsortedTiles, type);
+        allChanges = processTileData(correctionEndX, end_y, correctionStartX, start_y, unsortedTiles, type);
       }
     }
 
-    // Apply all changes
+    // Apply all changes to ref and then flush once to state for rendering
     applyTileChanges(allChanges);
+    flushCachingTilesToState();
   };
 
   /** Message handler for tile processing */
   const handleWebSocketMessage = async (wsMessage: string) => {
-    // me
-    const { MY_CURSOR, YOU_DIED, MOVED, ERROR } = ReceiveMessageEvent;
-    // others
-    const { POINTER_SET, CURSORS, CURSORS_DIED, CURSOR_QUIT, CHAT } = ReceiveMessageEvent;
-    // all
-    const { TILES, FLAG_SET, SINGLE_TILE_OPENED, TILES_OPENED, SCOREBOARD } = ReceiveMessageEvent;
+    const { MY_CURSOR, CHAT, CURSORS_STATE, EXPLOSION, QUIT_CURSOR, SCOREBOARD_STATE, TILES_STATE } = GetMessageEvent;
     try {
-      const { event, payload } = JSON.parse(wsMessage);
+      const { header, payload } = JSON.parse(wsMessage) as GetMessageType;
+      const { event } = header;
       switch (event) {
         /** When receiving requested tiles */
-        case TILES: {
-          const { tiles, start_p, end_p } = payload;
-          const { x: start_x, y: start_y } = start_p;
-          const { x: end_x, y: end_y } = end_p;
-          replaceTiles(end_x, end_y, start_x, start_y, tiles, 'All');
+        case TILES_STATE: {
+          const { tiles_li } = payload as GetTilesStatePayloadType;
+          // use replaceTiles
+          for (const tiles of tiles_li) {
+            const { data, range } = tiles;
+            const { top_left, bottom_right } = range;
+            const { width, height } = getCurrentTileWidthAndHeight();
+            const [totalWidth, totalHeight] = [bottom_right.x - top_left.x + 1, top_left.y - bottom_right.y + 1];
+            const [resWidth, resHeight] = [(totalWidth / 2) >>> 0, (totalHeight / 2) >>> 0];
+            console.log(top_left, bottom_right);
+
+            let isAll: 'PART' | 'All' = 'PART';
+            if (resWidth === width && resHeight === height) isAll = 'All';
+            replaceTiles(top_left.x, bottom_right.y, bottom_right.x, top_left.y, data, isAll);
+          }
           break;
         }
-        /** When receiving unrequested tiles when sending tile open event */
-        case FLAG_SET: {
-          const { position, is_set, color } = payload;
-          const { x, y } = position;
-          const newTiles = [...cachingTiles];
-          const colorIndex = typeof color === 'number' ? color : (({ RED: 0, YELLOW: 1, BLUE: 2, PURPLE: 3 } as Record<string, number>)[color] ?? 0);
-          const parity = ((x + y) & 1).toString();
-          newTiles[y - startPoint.y][x - startPoint.x] = is_set ? `F${colorIndex}${parity}` : `C${parity}`;
-          setCachingTiles(newTiles);
+        case EXPLOSION: {
+          // const { position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
+          // setExplosion(position);
           break;
         }
-        case POINTER_SET: {
-          const { id, pointer } = payload;
-          const newCursors = cursors.map(cursor => (id === cursor.id ? { ...cursor, pointer } : cursor));
-          setCursors(newCursors);
+        case SCOREBOARD_STATE: {
+          const { scoreboard } = payload as GetScoreboardPayloadType;
+          setRanking(Object.entries(scoreboard).map(([ranking, score]) => ({ ranking: parseInt(ranking) + 1, score })));
           break;
         }
-        case SINGLE_TILE_OPENED: {
-          const { position, tile } = payload;
-          if (!position || !tile) return;
-          const { x, y } = position;
-          const newTiles = [...cachingTiles];
-          newTiles[y - startPoint.y][x - startPoint.x] = parseHex(tile, x, y);
-          setCachingTiles(newTiles);
-          break;
-        }
-        case TILES_OPENED: {
-          const { tiles, start_p, end_p } = payload;
-          const { x: start_x, y: start_y } = start_p;
-          const { x: end_x, y: end_y } = end_p;
-          replaceTiles(end_x, end_y, start_x, start_y, tiles, 'PART');
+        case CURSORS_STATE: {
+          const { cursors } = payload as GetCursorStatePayloadType;
+          const newCursors: OtherCursorState[] = cursors.map(cursor => ({
+            color: 'red',
+            id: cursor.id,
+            position: cursor.position,
+            message: '',
+            messageTime: 0,
+            pointer: { x: Infinity, y: Infinity },
+            score: cursor.score,
+            revive_at: new Date(cursor.active_at).getTime(),
+          }));
+          // find client cursor
+          const clientCursor = newCursors.find(cursor => cursor.id === clientCursorId)!;
+          const clientPosition = clientCursor.position;
+          setCursors(newCursors.filter(cursor => cursor.id !== clientCursorId));
+          if (!(clientPosition.x === cursorPosition.x && clientPosition.y === cursorPosition.y)) {
+            setCursorPosition(clientPosition);
+            setOringinPosition(clientPosition);
+          }
           break;
         }
         /** Fetches own information only once when connected. */
         case MY_CURSOR: {
-          const { position, pointer, color, id } = payload;
+          const { id } = payload as CursorIdType;
           setId(id);
-          setOringinPosition(position.x, position.y);
-          setCursorPosition(position.x, position.y);
-          setColor(color.toLowerCase());
-          if (pointer) setClickPosition(pointer.x, pointer.y, '');
           setTimeout(() => setIsInitialized(true), 0);
           break;
         }
-        /** Fetches information of other users. */
-        case YOU_DIED: {
-          const { revive_at } = payload;
-          const leftTime = ((new Date(revive_at)?.getTime() - Date.now()) / 1000) >>> 0;
-          setLeftReviveTime(leftTime);
-          break;
-        }
-        case CURSORS: {
-          const { cursors } = payload;
-          type newCursorType = {
-            position: XYType;
-            pointer: XYType;
-            id: string;
-            color: string;
-          };
-          const newCursors = cursors.map(({ position: { x, y }, color, id, pointer }: newCursorType) => {
-            return { id, pointer, x, y, color: color.toLowerCase() };
-          });
-          addCursors(newCursors);
-          break;
-        }
-        case CURSORS_DIED: {
-          const { cursors: deadCursors, revive_at } = payload;
-          const revive_time = new Date(revive_at)?.getTime();
-          const newCursors = cursors.map(cursor => {
-            for (const deadCursor of deadCursors as OtherCursorState[]) if (cursor.id === deadCursor.id) return { ...cursor, revive_at: revive_time };
-            return cursor;
-          });
-          setCursors(newCursors);
-          break;
-        }
-        /** Receives movement events from other users. */
-        case MOVED: {
-          const { id, new_position } = payload;
-          const { x, y } = new_position;
-          const newCursors = cursors.map(cursor => (id === cursor.id ? { ...cursor, x, y } : cursor));
-          setCursors(newCursors);
-          break;
-        }
-        /** Receives other user's quit */
-        case CURSOR_QUIT: {
-          const { id } = payload;
-          const newCursors = [...cursors];
-          const index = newCursors.findIndex(cursor => cursor.id === id);
-          if (index !== -1) newCursors.splice(index, 1);
-          setCursors(newCursors);
-          break;
-        }
-        case SCOREBOARD: {
-          const { scores } = payload as ResponseRankState;
-          setRanking(scores);
+        case QUIT_CURSOR: {
+          const { id } = payload as CursorIdType;
+          setCursors(cursors.filter(cursor => cursor.id !== id));
           break;
         }
         case CHAT: {
-          const { cursor_id, message } = payload;
+          const { id, message } = payload as GetChatPayloadType;
           const newCursors = cursors.map(cursor => {
-            if (cursor.id !== cursor_id) return cursor;
+            if (cursor.id !== id) return cursor;
             return { ...cursor, message, messageTime: Date.now() + 1000 * 8 };
           });
           setCursors(newCursors);
-          break;
-        }
-        case ERROR: {
-          console.error(payload);
           break;
         }
         default: {
@@ -492,8 +501,8 @@ export default function Play() {
     const cachingLength = cachingTiles.length;
     if (cachingLength === 0) return [];
 
-    const offsetX = cursorOriginX - cursorX;
-    const offsetY = cursorOriginY - cursorY;
+    const offsetX = cursorOriginPosition.x - cursorPosition.x;
+    const offsetY = cursorOriginPosition.y - cursorPosition.y;
     const renderBaseX = renderStartPoint.x;
     const renderBaseY = renderStartPoint.y;
 
@@ -546,7 +555,15 @@ export default function Play() {
         });
       });
     }
-  }, [cachingTiles, cursorOriginX, cursorOriginY, cursorX, cursorY, renderStartPoint]);
+  }, [cachingTiles, cursorOriginPosition, cursorPosition, renderStartPoint]);
+
+  const getCurrentTileWidthAndHeight = () => {
+    const newTileSize = ORIGIN_TILE_SIZE * zoom;
+    // Use the exact same calculation as tilePaddingWidth / tilePaddingHeight
+    const width = ((windowWidth * RENDER_RANGE) / newTileSize / 2) >>> 0;
+    const height = ((windowHeight * RENDER_RANGE) / newTileSize / 2) >>> 0;
+    return { width, height };
+  };
 
   /** Apply computed tiles */
   useLayoutEffect(() => {
@@ -563,100 +580,44 @@ export default function Play() {
 
     if (tilePaddingHeight < 1 || tilePaddingWidth < 1) return;
     setStartPoint({
-      x: cursorX - tilePaddingWidth,
-      y: cursorY - tilePaddingHeight,
+      x: cursorPosition.x - tilePaddingWidth,
+      y: cursorPosition.y - tilePaddingHeight,
     });
     setEndPoint({
-      x: cursorX + tilePaddingWidth,
-      y: cursorY + tilePaddingHeight,
+      x: cursorPosition.x + tilePaddingWidth,
+      y: cursorPosition.y + tilePaddingHeight,
     });
 
     setRenderStartPoint({
-      x: cursorOriginX - tilePaddingWidth,
-      y: cursorOriginY - tilePaddingHeight,
+      x: cursorOriginPosition.x - tilePaddingWidth,
+      y: cursorOriginPosition.y - tilePaddingHeight,
     });
     setTileSize(newTileSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowWidth, windowHeight, zoom, cursorOriginX, cursorOriginY, cursorX, cursorY, isInitialized]);
+  }, [windowWidth, windowHeight, zoom, cursorOriginPosition, cursorPosition, isInitialized]);
 
-  /** Handling zoom event */
+  /** Handling zoom event, same as the initial request */
   useLayoutEffect(() => {
     if (!isInitialized) return;
-    const newTileSize = ORIGIN_TILE_SIZE * zoom;
-    const tileVisibleWidth = ((windowWidth * RENDER_RANGE) / newTileSize) >>> 0;
-    const tileVisibleHeight = ((windowHeight * RENDER_RANGE) / newTileSize) >>> 0;
-    const [tilePaddingWidth, tilePaddingHeight] = [(tileVisibleWidth / 2) >>> 0, (tileVisibleHeight / 2) >>> 0];
-    let [heightReductionLength, widthReductionLength] = [0, 0];
-
-    /** For Extending */
-    if (tileVisibleWidth > endPoint.x - startPoint.x + 1 || tileVisibleHeight > endPoint.y - startPoint.y + 1) {
-      heightReductionLength = (tilePaddingHeight - (endPoint.y - startPoint.y) / 2) >>> 0;
-      widthReductionLength = Math.round(tilePaddingWidth - (endPoint.x - startPoint.x) / 2);
-    } else {
-      /** For reducing */
-      heightReductionLength = -Math.round((endPoint.y - startPoint.y - tileVisibleHeight) / 2);
-      widthReductionLength = -Math.round((endPoint.x - startPoint.x - tileVisibleWidth) / 2);
-    }
-    requestTiles(
-      startPoint.x - widthReductionLength,
-      endPoint.y + heightReductionLength,
-      endPoint.x + widthReductionLength,
-      startPoint.y - heightReductionLength,
-      Direction.ALL,
-    );
-    // setting view size
-    const width = ((windowWidth * RENDER_RANGE) / newTileSize) >>> 0;
-    const height = ((windowHeight * RENDER_RANGE) / newTileSize) >>> 0;
-    const payload = { width, height };
-    const body = JSON.stringify({ event: SendMessageEvent.SET_VIEW_SIZE, payload });
-    sendMessage(body);
+    const payload: SendSetWindowPayloadType = getCurrentTileWidthAndHeight();
+    sendMessage(SendMessageEvent.SET_WINDOW, payload);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowWidth, windowHeight, zoom, isInitialized]);
-
-  /** When cursor position has changed. */
-  useEffect(() => {
-    const [widthExtendLength, heightExtendLength] = [cursorX - cursorOriginX, cursorY - cursorOriginY];
-    const [isLeft, isRight] = [widthExtendLength < 0, widthExtendLength > 0];
-    const [isUp, isDown] = [heightExtendLength < 0, heightExtendLength > 0];
-    const { upfrom, upto, downfrom, downto, leftfrom, leftto, rightfrom, rightto } = {
-      upfrom: startPoint.y - 1,
-      upto: startPoint.y + heightExtendLength,
-      downfrom: endPoint.y + heightExtendLength,
-      downto: endPoint.y + 1,
-      leftfrom: startPoint.x + widthExtendLength,
-      leftto: startPoint.x - 1,
-      rightfrom: endPoint.x + 1,
-      rightto: endPoint.x + widthExtendLength,
-    };
-    if (isRight && isDown) {
-      requestTiles(rightfrom, downfrom, rightto, upto, Direction.RIGHT);
-      requestTiles(leftfrom, downfrom, rightto, downto, Direction.DOWN);
-    } else if (isLeft && isDown) {
-      requestTiles(leftfrom, downfrom, leftto, upto, Direction.LEFT);
-      requestTiles(leftfrom, downfrom, rightto, downto, Direction.DOWN);
-    } else if (isRight && isUp) {
-      requestTiles(rightfrom, downfrom, rightto, upto, Direction.RIGHT);
-      requestTiles(leftfrom, upfrom, rightto, upto, Direction.UP);
-    } else if (isLeft && isUp) {
-      requestTiles(leftfrom, downfrom, leftto, upto, Direction.LEFT);
-      requestTiles(leftfrom, upfrom, rightto, upto, Direction.UP);
-    } else if (isRight) requestTiles(rightfrom, endPoint.y, rightto, startPoint.y, Direction.RIGHT);
-    else if (isLeft) requestTiles(leftfrom, endPoint.y, leftto, startPoint.y, Direction.LEFT);
-    else if (isDown) requestTiles(startPoint.x, downfrom, endPoint.x, downto, Direction.DOWN);
-    else if (isUp) requestTiles(startPoint.x, upfrom, endPoint.x, upto, Direction.UP);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cursorX, cursorY]);
 
   /** Send user move event */
   useEffect(() => {
     if (!isInitialized) return;
-    const event = SendMessageEvent.MOVING;
-    const position = { x: cursorOriginX, y: cursorOriginY };
-    const payload = { position };
-    const body = JSON.stringify({ event, payload });
-    sendMessage(body);
+    const event = SendMessageEvent.MOVE;
+    const position: XYType = { x: cursorOriginPosition.x, y: cursorOriginPosition.y };
+    const payload: SendMovePayloadType = { position };
+    sendMessage(event, payload);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cursorOriginX, cursorOriginY]);
+  }, [cursorOriginPosition]);
+
+  useEffect(() => {
+    console.log(renderTiles.map(row => row.join('.')).join('\n'));
+    console.log(getCurrentTileWidthAndHeight(), 'height', renderTiles?.length, 'width', renderTiles[0]?.length);
+  }, [renderTiles]);
 
   useEffect(() => {
     if (leftReviveTime > 0) {
@@ -683,8 +644,8 @@ export default function Play() {
         tiles={renderTiles}
         tileSize={tileSize}
         startPoint={renderStartPoint}
-        cursorOriginX={cursorOriginX}
-        cursorOriginY={cursorOriginY}
+        cursorOriginX={cursorOriginPosition.x}
+        cursorOriginY={cursorOriginPosition.y}
       />
     </div>
   );

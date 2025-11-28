@@ -9,8 +9,8 @@ import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
-import { XYType, VectorImagesType, TileContent, SendMessageEvent } from '@/types';
-import { Click, ClickType, CURSOR_COLORS, CURSOR_DIRECTIONS, OTHER_CURSOR_COLORS } from '@/constants';
+import { XYType, VectorImagesType, TileContent, SendMessageEvent, PositionType } from '@/types';
+import { CURSOR_COLORS, CURSOR_DIRECTIONS, OTHER_CURSOR_COLORS } from '@/constants';
 import { makePath2d, makePath2dFromArray } from '@/utils';
 
 class TileNode {
@@ -63,7 +63,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   /** stores */
   const { windowHeight, windowWidth } = useScreenSize();
   const { setPosition: setClickPosition, x: clickX, y: clickY, setMovecost } = useClickStore();
-  const { x: cursorX, y: cursorY, zoom, color, setPosition: setCursorPosition, goOriginTo } = useCursorStore();
+  const { position: cursorPosition, zoom, color, setPosition: setCursorPosition, goOriginTo } = useCursorStore();
   const { cursors } = useOtherUserCursorsStore();
   const { sendMessage } = useWebSocketStore();
   const { useAnimation } = useAnimationStore();
@@ -138,15 +138,15 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
    * @param relativetileY y position of clicked tile
    * @returns void
    * */
-  const moveCursor = (relativeTileX: number, relativetileY: number, clickedX: number, clickedY: number, type: ClickType) => {
+  const moveCursor = (relativeTileX: number, relativetileY: number, clickedX: number, clickedY: number) => {
     if (movementInterval.current) return;
     let index = 0;
     const foundPaths = findPathUsingAStar(relativeX, relativeY, relativeTileX, relativetileY);
     let currentPath = foundPaths[index];
     if (currentPath?.x === undefined || currentPath?.y === undefined) return;
-    let [innerCursorX, innerCursorY] = [cursorOriginX, cursorOriginY];
+    let [innerCursorX, innerCursorY] = [cursorPosition.x, cursorPosition.y];
     setMovecost(foundPaths.length - 1);
-    setCursorPosition(relativeTileX + startPoint.x, relativetileY + startPoint.y);
+    setCursorPosition({ x: relativeTileX + startPoint.x, y: relativetileY + startPoint.y });
 
     const moveAnimation = (dx: number, dy: number) => {
       const { interactionCanvasRef: I_canvas, otherCursorsRef: C_canvas, otherPointerRef: P_canvas } = canvasRefs;
@@ -167,7 +167,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
     movementInterval.current = setInterval(() => {
       if (++index >= foundPaths.length) {
-        clickEvent(clickedX, clickedY, type);
+        clickEvent(clickedX, clickedY, SendMessageEvent.MOVE);
         setPaths([]);
         cancelCurrentMovement();
         return;
@@ -184,7 +184,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       //   moveCursor(relativeTileX, relativetileY, clickedX, clickedY, type);
       //   return;
       // }
-      goOriginTo(dx, dy);
+      goOriginTo({ x: dx, y: dy });
 
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       currentPath = path;
@@ -193,11 +193,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     }, MOVE_SPEED);
   };
 
-  const clickEvent = (x: number, y: number, click_type: ClickType) => {
-    const position = { x, y };
-    const payload = { position, click_type };
-    const body = JSON.stringify({ event: SendMessageEvent.POINTING, payload });
-    sendMessage(body);
+  // Only Move, Open-tiles, Set-flag
+  const clickEvent = (x: number, y: number, clickType: SendMessageEvent) => {
+    const { MOVE, OPEN_TILES, SET_FLAG } = SendMessageEvent;
+    if ([MOVE, OPEN_TILES, SET_FLAG].some(event => event === clickType)) {
+      const payload: PositionType = { position: { x, y } };
+      sendMessage(clickType, payload);
+    }
   };
 
   /** Click Event Handler */
@@ -214,14 +216,19 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
     setClickPosition(tileX, tileY, clickedTileContent);
 
-    const clickType: ClickType = event.buttons === 2 ? Click.SPECIAL_CLICK : Click.GENERAL_CLICK;
-    clickEvent(tileX, tileY, clickType);
+    const isClosed = clickedTileContent.includes(TileContent.CLOSED);
+    const clickType = event.buttons === 2 ? 'general' : 'special'; // 1 move, open-tiles, 2 set-flag
 
-    if (clickType === Click.SPECIAL_CLICK && !clickedTileContent.includes(TileContent.CLOSED)) return;
-    let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
-    if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];
-    if (paths.length > 0) return;
-    moveCursor(targetTileX, targetTileY, tileX, tileY, clickType);
+    // clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
+    if (isClosed) {
+      if (clickType === 'special') clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
+      if (clickType === 'general') clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
+    } else {
+      let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
+      if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];
+      if (paths.length > 0) return;
+      moveCursor(targetTileX, targetTileY, tileX, tileY);
+    }
   };
 
   /** Check if the clicked tile is already a neighbor of the cursor */
@@ -323,10 +330,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     setupHighResCanvas(canvas, otherCursorsCtx);
     otherCursorsCtx.clearRect(0, 0, windowWidth, windowHeight);
     cursors.forEach(cursor => {
-      const { x, y, color, revive_at } = cursor;
-      const { x: pointerX, y: pointerY } = cursor?.pointer ?? { x, y };
-      const [drawX, drawY] = [x - cursorOriginX + otherCursorPaddingWidth, y - cursorOriginY + otherCursorPaddingHeight];
-      const [distanceX, distanceY] = [x - pointerX, y - pointerY];
+      const { position, color, revive_at } = cursor;
+      const { x: pointerX, y: pointerY } = cursor?.pointer ?? { x: Infinity, y: Infinity };
+      const [drawX, drawY] = [position.x - cursorOriginX + otherCursorPaddingWidth, position.y - cursorOriginY + otherCursorPaddingHeight];
+      const [distanceX, distanceY] = [position.x - pointerX, position.y - pointerY];
       const rotate = distanceX !== 0 || distanceY !== 0 ? Math.atan2(distanceY, distanceX) : 0;
       drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CURSOR_COLORS[color], revive_at, rotate);
     });
@@ -361,7 +368,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   };
 
   // Check if the other cursor is on the tile
-  const checkIsOtherCursorOnTile = (tileX: number, tileY: number) => cursors.some(c => c.x === tileX + startPoint.x && c.y === tileY + startPoint.y);
+  const checkIsOtherCursorOnTile = (tileX: number, tileY: number) =>
+    cursors.some(c => c.position.x === tileX + startPoint.x && c.position.y === tileY + startPoint.y);
 
   /**
    * Find path using A* algorithm avoiding flags and move cursor in 8 directions
@@ -462,8 +470,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     };
     // Setting compensation value for cursor positions
     const compensation = {
-      x: cursorX - cursorOriginX - tilePaddingWidth - leftPaths.x + relativeX + 0.5,
-      y: cursorY - cursorOriginY - tilePaddingHeight - leftPaths.y + relativeY + 0.5,
+      x: cursorPosition.x - cursorOriginX - tilePaddingWidth - leftPaths.x + relativeX + 0.5,
+      y: cursorPosition.y - cursorOriginY - tilePaddingHeight - leftPaths.y + relativeY + 0.5,
     };
 
     // If both distanceX and distanceY are 0, the cursor will not rotate.

@@ -15,7 +15,7 @@ export const SendMessageEvent = {
 } as const;
 export type SendMessageEvent = (typeof SendMessageEvent)[keyof typeof SendMessageEvent];
 
-export const ReceiveMessageEvent = {
+export const GetMessageEvent = {
   CHAT: 'CHAT',
   CURSORS_STATE: 'CURSORS-STATE',
   EXPLOSION: 'EXPLOSION',
@@ -24,7 +24,7 @@ export const ReceiveMessageEvent = {
   SCOREBOARD_STATE: 'SCOREBOARD-STATE',
   TILES_STATE: 'TILES-STATE',
 } as const;
-export type ReceiveMessageEvent = (typeof ReceiveMessageEvent)[keyof typeof ReceiveMessageEvent];
+export type GetMessageEvent = (typeof GetMessageEvent)[keyof typeof GetMessageEvent];
 
 export type SendChatPayloadType = { message: string };
 export type SendMovePayloadType = PositionType;
@@ -32,23 +32,45 @@ export type SendOpenTilesPayloadType = PositionType;
 export type SendSetFlagPayloadType = PositionType;
 export type SendSetWindowPayloadType = WindowSizeType;
 
+export type SendMessagePayloadType =
+  | SendChatPayloadType
+  | SendMovePayloadType
+  | SendOpenTilesPayloadType
+  | SendSetFlagPayloadType
+  | SendSetWindowPayloadType;
+
+export type SendMessageType = {
+  header: { event: SendMessageEvent };
+  payload: SendMessagePayloadType;
+};
+
+export type GetMessageType = {
+  header: { event: GetMessageEvent };
+  payload: GetPayloadType;
+};
+
+export type GetPayloadType =
+  | GetChatPayloadType
+  | GetCursorStatePayloadType
+  | GetExplosionPayloadType
+  | GetScoreboardPayloadType
+  | GetTilesPayloadType
+  | GetTilesStatePayloadType;
+
 /**
  * When Using
  * my cursor, quit cursor
  */
 export type CursorIdType = { id: string };
-
 export type GetChatPayloadType = SendChatPayloadType & CursorIdType;
 
 // iso format string
-export type CursorStateType = CursorIdType & PositionType & { active_at: string };
+export type CursorStateType = CursorIdType & PositionType & { active_at: string; score: number };
 export type GetCursorStatePayloadType = { cursors: CursorStateType[] };
-export type GetExplosionPayloadType = WindowSizeType;
+export type GetExplosionPayloadType = PositionType;
 
 // When getting & changing SCOREBOARD-STATE
-export type GetScoreboardPayloadType = {
-  scoreboard: { [key: number]: number };
-};
+export type GetScoreboardPayloadType = { scoreboard: { [key: number]: number } };
 
 export type GetTilesPayloadType = {
   data: string; // Same the previous version.
@@ -58,7 +80,5 @@ export type GetTilesPayloadType = {
   };
 };
 
-export type GetTilesStatePayloadType = {
-  // When getting & changing TILES-STATE
-  tiles_li: GetTilesPayloadType[];
-};
+// When getting & changing TILES-STATE
+export type GetTilesStatePayloadType = { tiles_li: GetTilesPayloadType[] };

@@ -21,7 +21,7 @@ export default function ChatComponent() {
 
   /** stores */
   const { sendMessage } = useWebSocketStore();
-  const { color, originX, originY, zoom } = useCursorStore();
+  const { color, originPosition, zoom } = useCursorStore();
   const { cursors } = useOtherUserCursorsStore();
   const { windowHeight, windowWidth } = useScreenSize();
 
@@ -70,8 +70,7 @@ export default function ChatComponent() {
     /** Send message using websocket. */
     const payload = { message };
     const event = SendMessageEvent.CHAT;
-    const body = JSON.stringify({ event, payload });
-    sendMessage(body);
+    sendMessage(event, payload);
     setMessage('');
   };
 
@@ -111,8 +110,8 @@ export default function ChatComponent() {
           key={`${cursor.id}-${index}`}
           className={S.chat}
           style={{
-            left: `${windowWidth / 2 + (cursor.x - originX - 1 / zoom / 2) * zoom * 80}px`,
-            top: `${windowHeight / 2 + (cursor.y - originY - 1 / zoom / 2) * zoom * 80}px`,
+            left: `${windowWidth / 2 + (cursor.position.x - originPosition.x - 1 / zoom / 2) * zoom * 80}px`,
+            top: `${windowHeight / 2 + (cursor.position.y - originPosition.y - 1 / zoom / 2) * zoom * 80}px`,
             backgroundColor: cursor.color,
             color: cursor.color === 'yellow' ? 'black' : 'white',
             opacity: getOpacity(cursor.messageTime),
