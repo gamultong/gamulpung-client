@@ -224,7 +224,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       if (clickType === 'special') clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
       if (clickType === 'general') clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
     } else {
-      if (clickType === 'general') return; // only move
+      if (clickType === 'special') return; // only move
       let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
       if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];
       if (paths.length > 0) return;

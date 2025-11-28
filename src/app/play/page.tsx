@@ -251,11 +251,12 @@ export default function Play() {
     const tilesPerRow = rowlengthBytes >> 1;
     const columnlength = Math.abs(start_y - end_y + 1);
 
-    // For full-window updates (All), tiles are written into a freshly initialized grid,
-    // so offsets should be zero. For partial updates, use world-window based offsets.
+    // This is temporary fix for the issue of the tiles not being updated correctly when the window is zoomed in or out.
     const isAll = type === 'All';
-    const yOffset = isAll ? 0 : end_y - startPoint.y;
+    const yOffset = end_y - startPoint.y;
     const xOffset = isAll ? 0 : start_x - startPoint.x;
+
+    // console.log(xOffset, start_x, end_x, startPoint.x, endPoint.x);
 
     const actualEndIndex = endIndex === -1 ? columnlength * tilesPerRow : endIndex;
     const changes: Array<{ row: number; col: number; value: string }> = [];
