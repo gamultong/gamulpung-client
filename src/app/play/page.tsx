@@ -254,7 +254,7 @@ export default function Play() {
     // This is temporary fix for the issue of the tiles not being updated correctly when the window is zoomed in or out.
     const isAll = type === 'All';
     const yOffset = end_y - startPoint.y;
-    const xOffset = isAll ? 0 : start_x - startPoint.x;
+    const xOffset = isAll ? 0 : start_x - startPoint.x - 1;
 
     // console.log(xOffset, start_x, end_x, startPoint.x, endPoint.x);
 
