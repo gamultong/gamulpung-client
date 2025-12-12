@@ -223,6 +223,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     if (isClosed) {
       if (clickType === 'special') clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
       if (clickType === 'general') clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
+    } else if (clickedTileContent.includes(TileContent.FLAGGED)) {
+      clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
     } else {
       if (clickType === 'special') return; // only move
       let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);

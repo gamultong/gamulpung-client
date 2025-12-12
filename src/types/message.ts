@@ -12,6 +12,7 @@ export const SendMessageEvent = {
   OPEN_TILES: 'OPEN-TILES',
   SET_FLAG: 'SET-FLAG',
   SET_WINDOW: 'SET-WINDOW',
+  CREATE_CURSOR: 'CREATE-CURSOR',
 } as const;
 export type SendMessageEvent = (typeof SendMessageEvent)[keyof typeof SendMessageEvent];
 
@@ -31,13 +32,15 @@ export type SendMovePayloadType = PositionType;
 export type SendOpenTilesPayloadType = PositionType;
 export type SendSetFlagPayloadType = PositionType;
 export type SendSetWindowPayloadType = WindowSizeType;
+export type SendCreateCursorPayloadType = WindowSizeType;
 
 export type SendMessagePayloadType =
   | SendChatPayloadType
   | SendMovePayloadType
   | SendOpenTilesPayloadType
   | SendSetFlagPayloadType
-  | SendSetWindowPayloadType;
+  | SendSetWindowPayloadType
+  | SendCreateCursorPayloadType;
 
 export type SendMessageType = {
   header: { event: SendMessageEvent };

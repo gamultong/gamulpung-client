@@ -27,6 +27,8 @@ import {
   XYType,
   GetTilesStatePayloadType,
   GetScoreboardPayloadType,
+  SendCreateCursorPayloadType,
+  GetExplosionPayloadType,
 } from '@/types';
 // WebGPU imports removed - using simple CPU processing only
 import { VECTORIZED_TILE_LUT } from '@/utils/tiles';
@@ -65,7 +67,7 @@ export default function Play() {
   const [renderStartPoint, setRenderStartPoint] = useState<XYType>({ x: 0, y: 0 });
   const [cachingTiles, setCachingTiles] = useState<string[][]>([]);
   const [renderTiles, setRenderTiles] = useState<string[][]>([...cachingTiles.map(row => [...row])]);
-  const [leftReviveTime, setLeftReviveTime] = useState<number>(-1);
+  const [leftReviveTime, setLeftReviveTime] = useState<number>(-1); // secs
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
   // Canonical tile data is stored in this ref; state is used only for rendering snapshots
@@ -438,8 +440,14 @@ export default function Play() {
           break;
         }
         case EXPLOSION: {
-          // const { position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
-          // setExplosion(position);
+          // 터지는 범위 1칸씩 대각선 포함.
+          const { position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
+          const { x, y } = position;
+          const { x: cursorX, y: cursorY } = cursorPosition;
+          if (cursorX >= x - 1 && cursorX <= x + 1 && cursorY >= y - 1 && cursorY <= y + 1) {
+            // set revive time
+            setLeftReviveTime(10);
+          }
           break;
         }
         case SCOREBOARD_STATE: {
@@ -474,6 +482,8 @@ export default function Play() {
           const { id } = payload as CursorIdType;
           setId(id);
           setTimeout(() => setIsInitialized(true), 0);
+          const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
+          sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
           break;
         }
         case QUIT_CURSOR: {
@@ -605,6 +615,7 @@ export default function Play() {
     if (!isInitialized) return;
     const payload: SendSetWindowPayloadType = getCurrentTileWidthAndHeight();
     sendMessage(SendMessageEvent.SET_WINDOW, payload);
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowWidth, windowHeight, zoom, isInitialized]);
 
