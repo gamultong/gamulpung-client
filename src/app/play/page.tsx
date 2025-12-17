@@ -85,7 +85,7 @@ export default function Play() {
    * @param end_x {number} - end x position
    * @param end_y {number} - end y position
    * @param type {Direction} - Request type (U: Up tiles, D: Down tiles, L: Left tiles, R: Right tiles, A: All tiles)
-   *  */
+   * */
   const moveTiles = (start_x: number, start_y: number, end_x: number, end_y: number, type: Direction) => {
     if (!isOpen || !isInitialized) return;
     const now = performance.now();
