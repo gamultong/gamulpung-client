@@ -4,23 +4,20 @@ import { create } from 'zustand';
 
 interface CursorState {
   id: string;
-  x: number;
-  y: number;
+  position: XYType;
   color: CursorColor;
   revive_at?: number;
+  score: number;
 }
 
 interface ClientCursorState extends CursorState {
   id: string;
-  originX: number;
-  originY: number;
+  originPosition: XYType;
   setId: (id: string) => void;
   setColor: (newColor: CursorColor) => void;
-  setPosition: (x: number, y: number) => void;
-  setX: (x: number) => void;
-  setY: (y: number) => void;
-  goOriginTo: (x: number, y: number) => void;
-  setOringinPosition: (x: number, y: number) => void;
+  setPosition: (position: XYType) => void;
+  goOriginTo: (position: XYType) => void;
+  setOringinPosition: (position: XYType) => void;
   zoom: number;
   setZoom: (zoom: number) => void;
   zoomUp: () => void;
@@ -29,6 +26,7 @@ interface ClientCursorState extends CursorState {
   moveDown: () => void;
   moveLeft: () => void;
   moveRight: () => void;
+  setScore: (score: number) => void;
 }
 
 export interface OtherCursorState extends CursorState {
@@ -46,26 +44,24 @@ interface OtherUserCursorListState {
 
 export const useCursorStore = create<ClientCursorState>(set => ({
   id: '',
-  x: 0,
-  y: 0,
+  position: { x: 0, y: 0 },
   color: 'blue',
-  originX: 0,
-  originY: 0,
+  originPosition: { x: 0, y: 0 },
   zoom: 1,
+  score: 0,
   setId: id => set({ id }),
   setColor: color => set({ color }),
-  setX: x => set({ x }),
-  setY: y => set({ y }),
   setZoom: zoom => set({ zoom }),
-  setOringinPosition: (x, y) => set({ originX: x, originY: y }),
-  goOriginTo: (x, y) => set(s => ({ originX: x + s.originX, originY: y + s.originY })),
-  setPosition: (x, y) => set({ x, y }),
+  setOringinPosition: (position: XYType) => set({ originPosition: position }),
+  goOriginTo: (position: XYType) => set(s => ({ originPosition: { x: s.originPosition.x + position.x, y: s.originPosition.y + position.y } })),
+  setPosition: (position: XYType) => set({ position }),
   zoomUp: () => set(s => ({ zoom: s.zoom * 1.5 < 1.7 ? s.zoom * 1.5 : s.zoom })),
   zoomDown: () => set(s => ({ zoom: s.zoom / 1.5 > 0.15 ? s.zoom / 1.5 : s.zoom })),
-  moveUp: () => set(s => ({ y: s.originY - 1 })),
-  moveDown: () => set(s => ({ y: s.originY + 1 })),
-  moveLeft: () => set(s => ({ x: s.originX - 1 })),
-  moveRight: () => set(s => ({ x: s.originX + 1 })),
+  moveUp: () => set(s => ({ position: { x: s.position.x, y: s.position.y - 1 } })),
+  moveDown: () => set(s => ({ position: { x: s.position.x, y: s.position.y + 1 } })),
+  moveLeft: () => set(s => ({ position: { x: s.position.x - 1, y: s.position.y } })),
+  moveRight: () => set(s => ({ position: { x: s.position.x + 1, y: s.position.y } })),
+  setScore: score => set({ score }),
 }));
 
 export const useOtherUserCursorsStore = create<OtherUserCursorListState>(set => ({

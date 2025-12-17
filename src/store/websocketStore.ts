@@ -1,3 +1,4 @@
+import { SendMessageEvent, SendMessagePayloadType, SendMessageType } from '@/types';
 import { create } from 'zustand';
 
 interface WebSocketState {
@@ -5,7 +6,7 @@ interface WebSocketState {
   isOpen: boolean;
   connect: (url: string) => void;
   disconnect: () => void;
-  sendMessage: (message: string) => void;
+  sendMessage: (event: SendMessageEvent, payload: SendMessagePayloadType) => void;
   message: string;
 }
 
@@ -24,10 +25,14 @@ const useWebSocketStore = create<WebSocketState>(set => ({
     socket?.close();
     set({ socket: null, isOpen: false });
   },
-  sendMessage: (message: string) => {
-    if (!message) return;
+  sendMessage: (event: SendMessageEvent, payload: SendMessagePayloadType) => {
     const { socket, isOpen } = useWebSocketStore.getState();
-    if (isOpen && socket) socket.send(message);
+    const body: SendMessageType = {
+      header: { event },
+      payload,
+    };
+    console.log(body, isOpen, socket);
+    if (isOpen && socket) socket.send(JSON.stringify(body));
     // Removed unnecessary set({}) that was causing infinite loops
   },
 }));
