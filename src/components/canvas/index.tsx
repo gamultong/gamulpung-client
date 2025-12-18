@@ -79,8 +79,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   /** States */
   const [isInitializing, setIsInitializing] = useState<boolean>(true);
-  const [paths, setPaths] = useState<XYType[]>([]);
-  const [leftPaths, setLeftPaths] = useState<XYType>({ x: 0, y: 0 });
+  const [movingPaths, setMovingPaths] = useState<XYType[]>([]);
+  const [leftMovingPaths, setLeftMovingPaths] = useState<XYType>({ x: 0, y: 0 });
   const [forwardPath, setForwardPath] = useState<XYType>();
   const [cachedVectorAssets, setCachedVectorAssets] = useState<VectorImagesType>();
 
@@ -168,7 +168,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     movementInterval.current = setInterval(() => {
       if (++index >= foundPaths.length) {
         clickEvent(clickedX, clickedY, SendMessageEvent.MOVE);
-        setPaths([]);
+        setMovingPaths([]);
         cancelCurrentMovement();
         return;
       }
@@ -188,7 +188,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       currentPath = path;
-      setPaths(foundPaths.slice(index));
+      setMovingPaths(foundPaths.slice(index));
       if (useAnimation) moveAnimation(dx, dy);
     }, MOVE_SPEED);
   };
@@ -229,7 +229,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       if (clickType === 'special') return; // only move
       let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
       if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];
-      if (paths.length > 0) return;
+      if (movingPaths.length > 0) return;
       moveCursor(targetTileX, targetTileY, tileX, tileY);
     }
   };
@@ -414,8 +414,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
     while (openNodeList.length > 0) {
       const nowNode = openNodeList.reduce((a, b) => (a.fTotal < b.fTotal ? a : b));
+      const leftPaths = getLeftPaths(nowNode, startX, startY);
+      setLeftMovingPaths(leftPaths);
       if (nowNode.x === target.x && nowNode.y === target.y) {
-        setLeftPaths(getLeftPaths(nowNode, startX, startY));
         const path = [];
         for (let temp = nowNode; temp; temp = temp.parent!) path.unshift({ x: temp.x - startX, y: temp.y - startY });
         return path;
@@ -463,6 +464,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     const cursorColor = CURSOR_COLORS[color];
     const borderPixel = 5 * zoom;
 
+    // for rendering cursor position
     const cursorPosition = {
       x: (relativeX / paddingTiles) * tileSize,
       y: (relativeY / paddingTiles) * tileSize,
@@ -473,8 +475,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     };
     // Setting compensation value for cursor positions
     const compensation = {
-      x: cursorPosition.x - cursorOriginX - tilePaddingWidth - leftPaths.x + relativeX + 0.5,
-      y: cursorPosition.y - cursorOriginY - tilePaddingHeight - leftPaths.y + relativeY + 0.5,
+      x: clickX - cursorOriginX - leftMovingPaths.x - tilePaddingWidth + relativeX + 0.5,
+      y: clickY - cursorOriginY - leftMovingPaths.y - tilePaddingHeight + relativeY + 0.5,
     };
 
     // If both distanceX and distanceY are 0, the cursor will not rotate.
@@ -485,20 +487,21 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     drawOtherUserPointers(borderPixel);
 
     // Draw Cursor Movement path
-    const scaledPoints = paths?.map(vec => {
+    const scaledPoints = movingPaths?.map(vec => {
       const [vX, vY] = [vec.x + compensation.x, vec.y + compensation.y];
       return { x: vX * tileSize, y: vY * tileSize };
     });
     if (scaledPoints.length <= 1) return;
 
+    const baseCornerRadius = tileSize * 0.15;
+    // Initializing moving path
     interactionCtx.beginPath();
     interactionCtx.strokeStyle = cursorColor;
     interactionCtx.lineWidth = tileSize / 10;
     interactionCtx.lineJoin = interactionCtx.lineCap = 'round';
     interactionCtx.miterLimit = 2;
-
-    const baseCornerRadius = tileSize * 0.15;
     interactionCtx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
+
     for (let i = 1; i < scaledPoints.length - 1; i++) {
       const [prev, curr, next] = [...scaledPoints.slice(i - 1, i + 2)];
       const [prevVectorX, prevVectorY] = [curr.x - prev.x, curr.y - prev.y];
@@ -547,8 +550,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
     const cursor = makePath2d(cursorPaths);
     const stun = makePath2dFromArray(stunPaths);
-    const flag = { flag: makePath2d(flagPaths[0]), pole: makePath2d(flagPaths[1]) };
-    const boom = { inner: makePath2d(boomPaths[0]), outer: makePath2d(boomPaths[1]) };
+    const [flagPath, pole] = flagPaths.map(makePath2d);
+    const [inner, outer] = boomPaths.map(makePath2d);
+    const flag = { flag: flagPath, pole };
+    const boom = { inner, outer };
     setCachedVectorAssets({ cursor, stun, flag, boom });
 
     setIsInitializing(false);
@@ -561,7 +566,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   useEffect(() => {
     if (!isInitializing) renderInteractionCanvas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cursorOriginX, cursorOriginY, startPoint, clickX, clickY, color, cursors]);
+  }, [cursorOriginX, cursorOriginY, startPoint, clickX, clickY, color, cursors, leftMovingPaths]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -258,8 +258,6 @@ export default function Play() {
     const yOffset = end_y - startPoint.y;
     const xOffset = isAll ? 0 : start_x - startPoint.x - 1;
 
-    // console.log(xOffset, start_x, end_x, startPoint.x, endPoint.x);
-
     const actualEndIndex = endIndex === -1 ? columnlength * tilesPerRow : endIndex;
     const changes: Array<{ row: number; col: number; value: string }> = [];
 
