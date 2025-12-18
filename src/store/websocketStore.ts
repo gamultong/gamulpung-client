@@ -31,7 +31,6 @@ const useWebSocketStore = create<WebSocketState>(set => ({
       header: { event },
       payload,
     };
-    console.log(body, isOpen, socket);
     if (isOpen && socket) socket.send(JSON.stringify(body));
     // Removed unnecessary set({}) that was causing infinite loops
   },
