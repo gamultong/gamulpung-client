@@ -16,8 +16,14 @@ const useWebSocketStore = create<WebSocketState>(set => ({
   isOpen: false,
   connect: (url: string): WebSocket => {
     const socket = new WebSocket(url);
-    socket.onopen = () => set({ socket, isOpen: true });
-    socket.onclose = () => set({ socket: null, isOpen: false });
+    socket.onopen = () => {
+      console.info('WebSocket is opened');
+      set({ socket, isOpen: true });
+    };
+    socket.onclose = () => {
+      console.info('WebSocket is closed');
+      set({ socket: null, isOpen: false });
+    };
     socket.onmessage = event => set({ message: event.data });
     return socket;
   },
@@ -32,7 +38,6 @@ const useWebSocketStore = create<WebSocketState>(set => ({
     const body: SendMessageType = { header: { event }, payload };
     if (isOpen && socket) socket.send(JSON.stringify(body));
     else console.error('WebSocket is closed');
-    // Removed unnecessary set({}) that was causing infinite loops
   },
 }));
 

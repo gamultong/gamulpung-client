@@ -134,13 +134,12 @@ export default function Play() {
 
   const zoomHandler = (e: KeyboardEvent) => {
     const key = e.key.toLowerCase();
+    if (['-', '='].includes(key)) e.preventDefault();
     switch (key) {
       case '-':
-        e.preventDefault();
         zoomDown();
         break;
       case '=':
-        e.preventDefault();
         zoomUp();
         break;
       // case 'w':
@@ -162,7 +161,7 @@ export default function Play() {
     }
   };
 
-  /** Disconnect websocket when Component has been unmounted */
+  /** Initialize Browser Events and Disconnect websocket when this Component is unmounted */
   useLayoutEffect(() => {
     document.documentElement.style.overflow = 'hidden';
     setIsInitialized(false);
