@@ -199,12 +199,8 @@ export default function Play() {
     setLeftReviveTime(-1);
     // const [view_width, view_height] = [endPoint.x - startPoint.x + 1, endPoint.y - startPoint.y + 1];
     if (!connectedRef.current) {
-      const socket = connect(WS_URL);
-      socket.onopen = () => {
-        const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
-        sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
-        connectedRef.current = true;
-      };
+      connect(WS_URL);
+      connectedRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, startPoint]);
@@ -454,6 +450,8 @@ export default function Play() {
         case SCOREBOARD_STATE: {
           const { scoreboard } = payload as GetScoreboardPayloadType;
           setRanking(Object.entries(scoreboard).map(([ranking, score]) => ({ ranking: parseInt(ranking) + 1, score })));
+          const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
+          sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
           break;
         }
         case CURSORS_STATE: {
