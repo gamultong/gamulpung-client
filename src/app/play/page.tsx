@@ -297,7 +297,7 @@ export default function Play() {
       const col = t + xOffset;
 
       // Vectorized string conversion (O(1) LookUp)
-      let value: string;
+      let value: string = '??'; // default value for Exception handling
       if (tileType < 8) value = tileType === 0 ? 'O' : tileType.toString();
       // Bomb
       else if (tileType === 8) value = 'B';
@@ -307,7 +307,7 @@ export default function Play() {
       else if (tileType >= 16 && tileType < 24) {
         const flagColor = Math.floor((tileType - 16) / 2);
         value = `F${flagColor}${checker}`;
-      } else value = '??'; // Exception handling
+      }
 
       if (existingRow[col] !== value) changes.push({ row, col, value });
     }
