@@ -200,8 +200,12 @@ export default function Play() {
     setLeftReviveTime(-1);
     // const [view_width, view_height] = [endPoint.x - startPoint.x + 1, endPoint.y - startPoint.y + 1];
     if (!connectedRef.current) {
-      connect(WS_URL);
-      connectedRef.current = true;
+      const socket = connect(WS_URL);
+      socket.onopen = () => {
+        const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
+        sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
+        connectedRef.current = true;
+      };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, startPoint]);
