@@ -134,13 +134,12 @@ export default function Play() {
 
   const zoomHandler = (e: KeyboardEvent) => {
     const key = e.key.toLowerCase();
+    if (['-', '='].includes(key)) e.preventDefault();
     switch (key) {
       case '-':
-        e.preventDefault();
         zoomDown();
         break;
       case '=':
-        e.preventDefault();
         zoomUp();
         break;
       // case 'w':
@@ -162,7 +161,7 @@ export default function Play() {
     }
   };
 
-  /** Disconnect websocket when Component has been unmounted */
+  /** Initialize Browser Events and Disconnect websocket when this Component is unmounted */
   useLayoutEffect(() => {
     document.documentElement.style.overflow = 'hidden';
     setIsInitialized(false);
@@ -298,7 +297,7 @@ export default function Play() {
       const col = t + xOffset;
 
       // Vectorized string conversion (O(1) LookUp)
-      let value: string;
+      let value: string = '??'; // default value for Exception handling
       if (tileType < 8) value = tileType === 0 ? 'O' : tileType.toString();
       // Bomb
       else if (tileType === 8) value = 'B';
@@ -308,7 +307,7 @@ export default function Play() {
       else if (tileType >= 16 && tileType < 24) {
         const flagColor = Math.floor((tileType - 16) / 2);
         value = `F${flagColor}${checker}`;
-      } else value = '??'; // Exception handling
+      }
 
       if (existingRow[col] !== value) changes.push({ row, col, value });
     }
@@ -451,6 +450,8 @@ export default function Play() {
         case SCOREBOARD_STATE: {
           const { scoreboard } = payload as GetScoreboardPayloadType;
           setRanking(Object.entries(scoreboard).map(([ranking, score]) => ({ ranking: parseInt(ranking) + 1, score })));
+          const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
+          sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
           break;
         }
         case CURSORS_STATE: {

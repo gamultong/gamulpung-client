@@ -273,32 +273,14 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
         const centerOffset = BASE_OFFSET >> 2; // tileSize / 8
 
-        switch (angle) {
-          case 0: // up
-            ctx.translate(BASE_OFFSET, centerOffset);
-            break;
-          case 1: // rightup
-            ctx.translate(tileSize - centerOffset, centerOffset);
-            break;
-          case 2: // right
-            ctx.translate(tileSize - centerOffset, BASE_OFFSET);
-            break;
-          case 3: // rightdown
-            ctx.translate(tileSize - centerOffset, tileSize - centerOffset);
-            break;
-          case 4: // down
-            ctx.translate(BASE_OFFSET, tileSize - centerOffset);
-            break;
-          case 5: // leftdown
-            ctx.translate(centerOffset, tileSize - centerOffset);
-            break;
-          case 6: // left
-            ctx.translate(centerOffset, BASE_OFFSET);
-            break;
-          case 7: // leftup
-            ctx.translate(centerOffset, centerOffset);
-            break;
-        }
+        if (angle === 0) ctx.translate(BASE_OFFSET, centerOffset);
+        else if (angle === 1) ctx.translate(tileSize - centerOffset, centerOffset);
+        else if (angle === 2) ctx.translate(tileSize - centerOffset, BASE_OFFSET);
+        else if (angle === 3) ctx.translate(tileSize - centerOffset, tileSize - centerOffset);
+        else if (angle === 4) ctx.translate(BASE_OFFSET, tileSize - centerOffset);
+        else if (angle === 5) ctx.translate(centerOffset, tileSize - centerOffset);
+        else if (angle === 6) ctx.translate(centerOffset, BASE_OFFSET);
+        else if (angle === 7) ctx.translate(centerOffset, centerOffset);
       } else ctx.translate(BASE_OFFSET, BASE_OFFSET);
 
       ctx.rotate(rotated - Math.PI / 4);
