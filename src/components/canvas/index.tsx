@@ -217,15 +217,15 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     setClickPosition(tileX, tileY, clickedTileContent);
 
     const isClosed = clickedTileContent.includes(TileContent.CLOSED);
+    const isFlagged = clickedTileContent.includes(TileContent.FLAGGED);
     const clickType = event.buttons !== 2 ? 'general' : 'special'; // 1 move, open-tiles, 2 set-flag
 
     // clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
     if (isClosed) {
       if (clickType === 'special') clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
       if (clickType === 'general') clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
-    } else if (clickedTileContent.includes(TileContent.FLAGGED)) {
-      clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
-    } else {
+    } else if (isFlagged) clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
+    else {
       if (clickType === 'special') return; // only move
       let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
       if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];

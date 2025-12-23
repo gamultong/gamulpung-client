@@ -450,6 +450,8 @@ export default function Play() {
         case SCOREBOARD_STATE: {
           const { scoreboard } = payload as GetScoreboardPayloadType;
           setRanking(Object.entries(scoreboard).map(([ranking, score]) => ({ ranking: parseInt(ranking) + 1, score })));
+          console.log(isOpen);
+          if (!isOpen || clientCursorId) return;
           const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
           sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
           break;
@@ -481,8 +483,6 @@ export default function Play() {
           const { id } = payload as CursorIdType;
           setId(id);
           setTimeout(() => setIsInitialized(true), 0);
-          const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
-          sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
           break;
         }
         case QUIT_CURSOR: {
