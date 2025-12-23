@@ -264,10 +264,10 @@ export default function Play() {
 
     for (let tileIndex = startIndex; tileIndex < actualEndIndex; tileIndex++) {
       // Calculate row and column indices
-      const i = Math.floor(tileIndex / tilesPerRow);
-      const t = tileIndex % tilesPerRow;
+      const rowIndex = Math.floor(tileIndex / tilesPerRow);
+      const colIndex = tileIndex % tilesPerRow;
 
-      const reversedI = columnlength - 1 - i;
+      const reversedI = columnlength - 1 - rowIndex;
       const row = reversedI + yOffset;
 
       if (row < 0 || row >= tiles.length) continue;
@@ -277,24 +277,24 @@ export default function Play() {
       if (rowLen === 0) continue;
 
       const yAbs = end_y - reversedI;
-      const rowParityBase = (start_x + yAbs) & 1;
 
       const tStart = Math.max(0, -xOffset);
       const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
-      if (t < tStart || t >= tEnd) continue;
+      if (colIndex < tStart || colIndex >= tEnd) continue;
 
-      const p = i * rowlengthBytes + (t << 1);
-      const c0 = unsortedTiles.charCodeAt(p);
-      const c1 = unsortedTiles.charCodeAt(p + 1);
+      const byteOffset = rowIndex * rowlengthBytes + (colIndex << 1);
+      const firstByte = unsortedTiles.charCodeAt(byteOffset);
+      const secondByte = unsortedTiles.charCodeAt(byteOffset + 1);
 
       // 16bit combination vectorized LUT LookUp (O(1) operation)
-      const lookupIndex = (c0 << 8) | c1;
+      const lookupIndex = (firstByte << 8) | secondByte;
       const tileType = VECTORIZED_TILE_LUT[lookupIndex];
 
       if (tileType === 255) continue; // Check invalid hex
 
-      const checker = rowParityBase ^ (t & 1);
-      const col = t + xOffset;
+      const col = colIndex + xOffset;
+      // Use absolute coordinates for checker calculation to match computedRenderTiles
+      const checker = (col + yAbs) & 1;
 
       // Vectorized string conversion (O(1) LookUp)
       let value: string = '??'; // default value for Exception handling
@@ -437,7 +437,7 @@ export default function Play() {
           break;
         }
         case EXPLOSION: {
-          // 터지는 범위 1칸씩 대각선 포함.
+          // The Explosion range is 1 tile including diagonal.
           const { position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
           const { x, y } = position;
           const { x: cursorX, y: cursorY } = cursorPosition;
