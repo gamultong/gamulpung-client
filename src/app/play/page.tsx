@@ -437,20 +437,18 @@ export default function Play() {
           break;
         }
         case EXPLOSION: {
-          // 터지는 범위 1칸씩 대각선 포함.
+          // The explosion range is 1 tile including diagonal.
           const { position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
           const { x, y } = position;
           const { x: cursorX, y: cursorY } = cursorPosition;
-          if (cursorX >= x - 1 && cursorX <= x + 1 && cursorY >= y - 1 && cursorY <= y + 1) {
-            // set revive time
-            setLeftReviveTime(10);
-          }
+          // set revive time
+          const [rangeX, rangeY] = [cursorX - x, cursorY - y];
+          if (rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1) setLeftReviveTime(10);
           break;
         }
         case SCOREBOARD_STATE: {
           const { scoreboard } = payload as GetScoreboardPayloadType;
           setRanking(Object.entries(scoreboard).map(([ranking, score]) => ({ ranking: parseInt(ranking) + 1, score })));
-          console.log(isOpen);
           if (!isOpen || clientCursorId) return;
           const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
           sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);

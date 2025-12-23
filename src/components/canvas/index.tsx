@@ -218,9 +218,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
     const isClosed = clickedTileContent.includes(TileContent.CLOSED);
     const isFlagged = clickedTileContent.includes(TileContent.FLAGGED);
-    const clickType = event.buttons !== 2 ? 'general' : 'special'; // 1 move, open-tiles, 2 set-flag
+    // 1 is left click, move, open-tiles, 2 is right click, set-flag
+    const clickType = event.buttons !== 2 ? 'general' : 'special';
 
-    // clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
     if (isClosed) {
       if (clickType === 'special') clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
       if (clickType === 'general') clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
