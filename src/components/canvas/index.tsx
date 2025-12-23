@@ -513,12 +513,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   useLayoutEffect(() => {
     if (!isInitializing && tiles.length > 0) return;
 
-    // 폰트를 비동기로 로드하되, 실패해도 계속 진행
+    // load font asynchronously, but continue even if it fails
     const loadFontOptional = async () => {
       try {
-        // 폰트가 이미 로드되었는지 확인
         if (document.fonts.check('1em LOTTERIACHAB')) return;
-
         const lotteriaChabFont = new FontFace(
           'LOTTERIACHAB',
           "url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2302@1.0/LOTTERIACHAB.woff2') format('woff2')",
