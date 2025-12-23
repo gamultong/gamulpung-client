@@ -264,10 +264,10 @@ export default function Play() {
 
     for (let tileIndex = startIndex; tileIndex < actualEndIndex; tileIndex++) {
       // Calculate row and column indices
-      const i = Math.floor(tileIndex / tilesPerRow);
-      const t = tileIndex % tilesPerRow;
+      const rowIndex = Math.floor(tileIndex / tilesPerRow);
+      const colIndex = tileIndex % tilesPerRow;
 
-      const reversedI = columnlength - 1 - i;
+      const reversedI = columnlength - 1 - rowIndex;
       const row = reversedI + yOffset;
 
       if (row < 0 || row >= tiles.length) continue;
@@ -281,9 +281,9 @@ export default function Play() {
 
       const tStart = Math.max(0, -xOffset);
       const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
-      if (t < tStart || t >= tEnd) continue;
+      if (colIndex < tStart || colIndex >= tEnd) continue;
 
-      const p = i * rowlengthBytes + (t << 1);
+      const p = rowIndex * rowlengthBytes + (colIndex << 1);
       const c0 = unsortedTiles.charCodeAt(p);
       const c1 = unsortedTiles.charCodeAt(p + 1);
 
@@ -293,8 +293,8 @@ export default function Play() {
 
       if (tileType === 255) continue; // Check invalid hex
 
-      const checker = rowParityBase ^ (t & 1);
-      const col = t + xOffset;
+      const checker = rowParityBase ^ (colIndex & 1);
+      const col = colIndex + xOffset;
 
       // Vectorized string conversion (O(1) LookUp)
       let value: string = '??'; // default value for Exception handling
