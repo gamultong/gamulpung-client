@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@pixi/react": "^7.1.2",
-    "next": "^14.2.25",
+    "next": "^14.2.35",
     "pixi.js": "^7.4.2",
     "react-flow-renderer": "^10.3.17",
     "sass": "^1.80.7",
@@ -24,7 +24,7 @@
     "@types/react-dom": "^18.3.5",
     "@types/showdown": "^2.0.6",
     "eslint": "^8.57.1",
-    "eslint-config-next": "^15.1.0",
+    "eslint-config-next": "^14.2.35",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.1",
     "prettier": "^3.3.3",
