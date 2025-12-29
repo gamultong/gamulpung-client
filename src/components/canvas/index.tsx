@@ -152,7 +152,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     if (currentPath?.x === undefined || currentPath?.y === undefined) return;
     let [innerCursorX, innerCursorY] = [cursorPosition.x, cursorPosition.y];
     setMovecost(foundPaths.length - 1);
-    setCursorPosition({ x: relativeTileX + startPoint.x, y: relativetileY + startPoint.y });
 
     const moveAnimation = (dx: number, dy: number) => {
       const { interactionCanvasRef: I_canvas, otherCursorsRef: C_canvas, otherPointerRef: P_canvas } = canvasRefs;
@@ -173,20 +172,21 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
     movementInterval.current = setInterval(() => {
       if (++index >= foundPaths.length) {
+        // 최종 위치로 확실히 업데이트
+        setCursorPosition({ x: relativeTileX + startPoint.x, y: relativetileY + startPoint.y });
         clickEvent(clickedX, clickedY, SendMessageEvent.MOVE);
         setMovingPaths([]);
         cancelCurrentMovement();
 
         // Execute callback after movement completes
-        if (onComplete) {
-          onComplete(clickedX, clickedY);
-        }
+        onComplete?.(clickedX, clickedY);
         return;
       }
       const path = foundPaths[index];
       if (!path) return;
       const [dx, dy] = [Math.sign(path.x - currentPath.x), Math.sign(path.y - currentPath.y)];
       setForwardPath({ x: dx, y: dy });
+      console.log(dx, dy);
 
       // if the other cursor is on the tile, find another path
       // if (checkIsOtherCursorOnTile(dx + innerCursorX, dy + innerCursorY)) {
@@ -196,8 +196,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       //   return;
       // }
       goOriginTo({ x: dx, y: dy });
-
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
+      setCursorPosition({ x: innerCursorX, y: innerCursorY });
+
       currentPath = path;
       setMovingPaths(foundPaths.slice(index));
       if (useAnimation) moveAnimation(dx, dy);
