@@ -186,7 +186,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       if (!path) return;
       const [dx, dy] = [Math.sign(path.x - currentPath.x), Math.sign(path.y - currentPath.y)];
       setForwardPath({ x: dx, y: dy });
-      console.log(dx, dy);
 
       // if the other cursor is on the tile, find another path
       // if (checkIsOtherCursorOnTile(dx + innerCursorX, dy + innerCursorY)) {

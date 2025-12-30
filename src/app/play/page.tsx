@@ -294,7 +294,7 @@ export default function Play() {
 
       const col = colIndex + xOffset;
       // Use absolute coordinates for checker calculation to match computedRenderTiles
-      const checker = (col + yAbs) & 1;
+      const checker = (col + yAbs + startPoint.x) & 1;
 
       // Vectorized string conversion (O(1) LookUp)
       let value: string = '??'; // default value for Exception handling
@@ -554,7 +554,7 @@ export default function Play() {
           // Safe checkerboard calculation
           const renderX = renderBaseX + col;
           const renderY = renderBaseY + row;
-          const checkerBit = (renderX + renderY) & 1;
+          const checkerBit = (renderX + renderY + startPoint.x) & 1;
 
           // Safe tile type handling
           if (tileType === 'C') return `C${checkerBit}`;
@@ -568,7 +568,7 @@ export default function Play() {
         });
       });
     }
-  }, [cachingTiles, cursorOriginPosition, cursorPosition, renderStartPoint]);
+  }, [cachingTiles, cursorOriginPosition, cursorPosition, renderStartPoint, startPoint]);
 
   const getCurrentTileWidthAndHeight = () => {
     const newTileSize = ORIGIN_TILE_SIZE * zoom;
