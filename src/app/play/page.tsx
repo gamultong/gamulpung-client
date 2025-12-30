@@ -516,9 +516,6 @@ export default function Play() {
 
     const offsetX = cursorOriginPosition.x - cursorPosition.x;
     const offsetY = cursorOriginPosition.y - cursorPosition.y;
-    const renderBaseX = renderStartPoint.x;
-    const renderBaseY = renderStartPoint.y;
-
     // INSTANT: Perfect alignment - no processing needed
     if (offsetX === 0 && offsetY === 0) return cachingTiles; // O(1) return!
 
@@ -552,9 +549,7 @@ export default function Play() {
           if (!['C', 'F'].includes(tileType)) return sourceTile;
 
           // Safe checkerboard calculation
-          const renderX = renderBaseX + col;
-          const renderY = renderBaseY + row;
-          const checkerBit = (renderX + renderY + startPoint.x) & 1;
+          const checkerBit = (row + col + startPoint.x) & 1;
 
           // Safe tile type handling
           if (tileType === 'C') return `C${checkerBit}`;
@@ -568,6 +563,7 @@ export default function Play() {
         });
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cachingTiles, cursorOriginPosition, cursorPosition, renderStartPoint, startPoint]);
 
   const getCurrentTileWidthAndHeight = () => {
