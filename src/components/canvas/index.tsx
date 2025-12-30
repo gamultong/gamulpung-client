@@ -194,9 +194,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       //   moveCursor(relativeTileX, relativetileY, clickedX, clickedY, type);
       //   return;
       // }
-      goOriginTo({ x: dx, y: dy });
-      [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       setCursorPosition({ x: innerCursorX, y: innerCursorY });
+      [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
+      goOriginTo({ x: dx, y: dy });
 
       currentPath = path;
       setMovingPaths(foundPaths.slice(index));
