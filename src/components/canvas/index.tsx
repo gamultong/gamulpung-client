@@ -138,7 +138,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
    * @param relativetileY y position of clicked tile
    * @returns void
    * */
-  const moveCursor = (relativeTileX: number, relativetileY: number, clickedX: number, clickedY: number) => {
+  const moveCursor = (
+    relativeTileX: number,
+    relativetileY: number,
+    clickedX: number,
+    clickedY: number,
+    onComplete?: (x: number, y: number) => void,
+  ) => {
     if (movementInterval.current) return;
     let index = 0;
     const foundPaths = findPathUsingAStar(relativeX, relativeY, relativeTileX, relativetileY);
@@ -146,7 +152,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     if (currentPath?.x === undefined || currentPath?.y === undefined) return;
     let [innerCursorX, innerCursorY] = [cursorPosition.x, cursorPosition.y];
     setMovecost(foundPaths.length - 1);
-    setCursorPosition({ x: relativeTileX + startPoint.x, y: relativetileY + startPoint.y });
 
     const moveAnimation = (dx: number, dy: number) => {
       const { interactionCanvasRef: I_canvas, otherCursorsRef: C_canvas, otherPointerRef: P_canvas } = canvasRefs;
@@ -167,9 +172,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
     movementInterval.current = setInterval(() => {
       if (++index >= foundPaths.length) {
-        clickEvent(clickedX, clickedY, SendMessageEvent.MOVE);
+        // 최종 위치로 확실히 업데이트
+        setCursorPosition({ x: relativeTileX + startPoint.x, y: relativetileY + startPoint.y });
         setMovingPaths([]);
         cancelCurrentMovement();
+
+        // Execute callback after movement completes
+        onComplete?.(clickedX, clickedY);
         return;
       }
       const path = foundPaths[index];
@@ -184,9 +193,11 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       //   moveCursor(relativeTileX, relativetileY, clickedX, clickedY, type);
       //   return;
       // }
-      goOriginTo({ x: dx, y: dy });
-
+      setCursorPosition({ x: innerCursorX, y: innerCursorY });
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
+      goOriginTo({ x: dx, y: dy });
+      sendMessage(SendMessageEvent.MOVE, { position: { x: innerCursorX, y: innerCursorY } });
+
       currentPath = path;
       setMovingPaths(foundPaths.slice(index));
       if (useAnimation) moveAnimation(dx, dy);
@@ -200,6 +211,12 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       const payload: PositionType = { position: { x, y } };
       sendMessage(clickType, payload);
     }
+  };
+
+  // Map click type to corresponding action event
+  const CLICK_TYPE_TO_EVENT: Record<string, SendMessageEvent> = {
+    special: SendMessageEvent.SET_FLAG,
+    general: SendMessageEvent.OPEN_TILES,
   };
 
   /** Click Event Handler */
@@ -217,21 +234,39 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     setClickPosition(tileX, tileY, clickedTileContent);
 
     const isClosed = clickedTileContent.includes(TileContent.CLOSED);
+    const isFlagged = clickedTileContent.includes(TileContent.FLAGGED);
+    const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
+    const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
     const clickType = event.buttons !== 2 ? 'general' : 'special'; // 1 move, open-tiles, 2 set-flag
 
-    // clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
-    if (isClosed) {
-      if (clickType === 'special') clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
-      if (clickType === 'general') clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
-    } else if (clickedTileContent.includes(TileContent.FLAGGED)) {
-      clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
-    } else {
-      if (clickType === 'special') return; // only move
-      let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
-      if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];
-      if (movingPaths.length > 0) return;
-      moveCursor(targetTileX, targetTileY, tileX, tileY);
+    // Handle in-range actions immediately (only for closed/flagged tiles)
+    if (isInRange) {
+      if ((isClosed || isFlagged) && clickType === 'special') {
+        clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
+      } else if (isClosed && clickType === 'general') {
+        clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
+      }
+      // Open tiles should continue to default movement logic
+      if (isClosed || isFlagged) return;
     }
+
+    // Handle out-of-range clicks: move to nearest opened tile, then perform action
+    if (!isInRange && (isClosed || isFlagged)) {
+      const { x: targetX, y: targetY } = findOpenedNeighborsAroundTarget(tileX, tileY);
+      if (targetX === Infinity || targetY === Infinity || movingPaths.length > 0) return;
+
+      const actionEvent = CLICK_TYPE_TO_EVENT[clickType];
+      if (!actionEvent) return;
+
+      moveCursor(targetX, targetY, tileX, tileY, (x, y) => clickEvent(x, y, actionEvent));
+      return;
+    }
+
+    // Default movement for opened tiles (general click only)
+    if (clickType === 'special' && movingPaths.length > 0) return;
+    let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
+    if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];
+    moveCursor(targetTileX, targetTileY, tileX, tileY);
   };
 
   /** Check if the clicked tile is already a neighbor of the cursor */
@@ -241,11 +276,34 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const findOpenedNeighbors = (currentX: number, currentY: number) => {
     let result = { x: Infinity, y: Infinity };
     [[0, 0], ...CURSOR_DIRECTIONS].some(([dx, dy]) => {
-      const x = currentX + dx;
-      const y = currentY + dy;
+      const [x, y] = [currentX + dx, currentY + dy];
       if (!tiles[y] || !tiles[y][x]) return false;
       if (!checkTileHasOpened(tiles[y][x])) return false;
       result = { x, y };
+      return true;
+    });
+    return result;
+  };
+
+  /** Find opened neighbors around a target absolute tile position */
+  const findOpenedNeighborsAroundTarget = (targetX: number, targetY: number) => {
+    let result = { x: Infinity, y: Infinity };
+    // Check 8 directions + self position around the target
+    [[0, 0], ...CURSOR_DIRECTIONS].some(([dx, dy]) => {
+      const absX = targetX + dx;
+      const absY = targetY + dy;
+      // Convert to relative coordinates
+      const relativeX = absX - startPoint.x;
+      const relativeY = absY - startPoint.y;
+
+      if (relativeY < 0 || relativeY >= tiles.length || relativeX < 0 || relativeX >= tiles[relativeY]?.length) {
+        return false;
+      }
+
+      const tileContent = tiles[relativeY][relativeX];
+      if (!checkTileHasOpened(tileContent)) return false;
+
+      result = { x: relativeX, y: relativeY };
       return true;
     });
     return result;

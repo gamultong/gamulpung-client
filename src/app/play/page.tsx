@@ -22,7 +22,6 @@ import {
   GetMessageType,
   GetMessageEvent,
   SendMessageEvent,
-  SendMovePayloadType,
   SendSetWindowPayloadType,
   XYType,
   GetTilesStatePayloadType,
@@ -264,10 +263,10 @@ export default function Play() {
 
     for (let tileIndex = startIndex; tileIndex < actualEndIndex; tileIndex++) {
       // Calculate row and column indices
-      const i = Math.floor(tileIndex / tilesPerRow);
-      const t = tileIndex % tilesPerRow;
+      const rowIndex = Math.floor(tileIndex / tilesPerRow);
+      const colIndex = tileIndex % tilesPerRow;
 
-      const reversedI = columnlength - 1 - i;
+      const reversedI = columnlength - 1 - rowIndex;
       const row = reversedI + yOffset;
 
       if (row < 0 || row >= tiles.length) continue;
@@ -277,24 +276,24 @@ export default function Play() {
       if (rowLen === 0) continue;
 
       const yAbs = end_y - reversedI;
-      const rowParityBase = (start_x + yAbs) & 1;
 
       const tStart = Math.max(0, -xOffset);
       const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
-      if (t < tStart || t >= tEnd) continue;
+      if (colIndex < tStart || colIndex >= tEnd) continue;
 
-      const p = i * rowlengthBytes + (t << 1);
-      const c0 = unsortedTiles.charCodeAt(p);
-      const c1 = unsortedTiles.charCodeAt(p + 1);
+      const byteOffset = rowIndex * rowlengthBytes + (colIndex << 1);
+      const firstByte = unsortedTiles.charCodeAt(byteOffset);
+      const secondByte = unsortedTiles.charCodeAt(byteOffset + 1);
 
       // 16bit combination vectorized LUT LookUp (O(1) operation)
-      const lookupIndex = (c0 << 8) | c1;
+      const lookupIndex = (firstByte << 8) | secondByte;
       const tileType = VECTORIZED_TILE_LUT[lookupIndex];
 
       if (tileType === 255) continue; // Check invalid hex
 
-      const checker = rowParityBase ^ (t & 1);
-      const col = t + xOffset;
+      const col = colIndex + xOffset;
+      // Use absolute coordinates for checker calculation to match computedRenderTiles
+      const checker = (col + yAbs + startPoint.x) & 1;
 
       // Vectorized string conversion (O(1) LookUp)
       let value: string = '??'; // default value for Exception handling
@@ -437,7 +436,7 @@ export default function Play() {
           break;
         }
         case EXPLOSION: {
-          // 터지는 범위 1칸씩 대각선 포함.
+          // The Explosion range is 1 tile including diagonal.
           const { position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
           const { x, y } = position;
           const { x: cursorX, y: cursorY } = cursorPosition;
@@ -451,7 +450,7 @@ export default function Play() {
           const { scoreboard } = payload as GetScoreboardPayloadType;
           setRanking(Object.entries(scoreboard).map(([ranking, score]) => ({ ranking: parseInt(ranking) + 1, score })));
           const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
-          sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
+          if (!clientCursorId) sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
           break;
         }
         case CURSORS_STATE: {
@@ -467,12 +466,14 @@ export default function Play() {
             revive_at: new Date(cursor.active_at).getTime(),
           }));
           // find client cursor
-          const clientCursor = newCursors.find(cursor => cursor.id === clientCursorId)!;
-          const clientPosition = clientCursor.position;
           setCursors(newCursors.filter(cursor => cursor.id !== clientCursorId));
-          if (!(clientPosition.x === cursorPosition.x && clientPosition.y === cursorPosition.y)) {
-            setCursorPosition(clientPosition);
-            setOringinPosition(clientPosition);
+          const myCursor = newCursors.find(cursor => cursor.id === clientCursorId)!;
+          if (myCursor) {
+            const { position } = myCursor;
+            if (!(position.x === cursorPosition.x && position.y === cursorPosition.y)) {
+              setCursorPosition(position);
+              setOringinPosition(position);
+            }
           }
           break;
         }
@@ -481,8 +482,6 @@ export default function Play() {
           const { id } = payload as CursorIdType;
           setId(id);
           setTimeout(() => setIsInitialized(true), 0);
-          const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
-          sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
           break;
         }
         case QUIT_CURSOR: {
@@ -516,9 +515,6 @@ export default function Play() {
 
     const offsetX = cursorOriginPosition.x - cursorPosition.x;
     const offsetY = cursorOriginPosition.y - cursorPosition.y;
-    const renderBaseX = renderStartPoint.x;
-    const renderBaseY = renderStartPoint.y;
-
     // INSTANT: Perfect alignment - no processing needed
     if (offsetX === 0 && offsetY === 0) return cachingTiles; // O(1) return!
 
@@ -552,9 +548,7 @@ export default function Play() {
           if (!['C', 'F'].includes(tileType)) return sourceTile;
 
           // Safe checkerboard calculation
-          const renderX = renderBaseX + col;
-          const renderY = renderBaseY + row;
-          const checkerBit = (renderX + renderY) & 1;
+          const checkerBit = (row + col + startPoint.x) & 1;
 
           // Safe tile type handling
           if (tileType === 'C') return `C${checkerBit}`;
@@ -568,7 +562,8 @@ export default function Play() {
         });
       });
     }
-  }, [cachingTiles, cursorOriginPosition, cursorPosition, renderStartPoint]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cachingTiles, cursorOriginPosition]);
 
   const getCurrentTileWidthAndHeight = () => {
     const newTileSize = ORIGIN_TILE_SIZE * zoom;
@@ -617,16 +612,6 @@ export default function Play() {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowWidth, windowHeight, zoom, isInitialized]);
-
-  /** Send user move event */
-  useEffect(() => {
-    if (!isInitialized) return;
-    const event = SendMessageEvent.MOVE;
-    const position: XYType = { x: cursorOriginPosition.x, y: cursorOriginPosition.y };
-    const payload: SendMovePayloadType = { position };
-    sendMessage(event, payload);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cursorOriginPosition]);
 
   useEffect(() => {
     if (leftReviveTime > 0) {
