@@ -466,18 +466,21 @@ export default function Play() {
             revive_at: new Date(cursor.active_at).getTime(),
           }));
           // find client cursor
-          const myCursor = newCursors.find(cursor => cursor.id === clientCursorId)!;
-          const myPosition = myCursor.position;
           setCursors(newCursors.filter(cursor => cursor.id !== clientCursorId));
-          if (!(myPosition.x === cursorPosition.x && myPosition.y === cursorPosition.y)) {
-            setCursorPosition(myPosition);
-            setOringinPosition(myPosition);
+          const myCursor = newCursors.find(cursor => cursor.id === clientCursorId)!;
+          if (myCursor) {
+            const { position } = myCursor;
+            if (!(position.x === cursorPosition.x && position.y === cursorPosition.y)) {
+              setCursorPosition(position);
+              setOringinPosition(position);
+            }
           }
           break;
         }
         /** Fetches own information only once when connected. */
         case MY_CURSOR: {
           const { id } = payload as CursorIdType;
+          console.log(id);
           setId(id);
           setTimeout(() => setIsInitialized(true), 0);
           break;
