@@ -480,7 +480,6 @@ export default function Play() {
         /** Fetches own information only once when connected. */
         case MY_CURSOR: {
           const { id } = payload as CursorIdType;
-          console.log(id);
           setId(id);
           setTimeout(() => setIsInitialized(true), 0);
           break;
@@ -518,8 +517,6 @@ export default function Play() {
     const offsetY = cursorOriginPosition.y - cursorPosition.y;
     // INSTANT: Perfect alignment - no processing needed
     if (offsetX === 0 && offsetY === 0) return cachingTiles; // O(1) return!
-
-    console.log(cursorPosition, offsetX, offsetY);
 
     // STABLE CPU processing - no disappearing tiles
     return processWithStableCPU();
