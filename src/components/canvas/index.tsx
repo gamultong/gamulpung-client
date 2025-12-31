@@ -174,7 +174,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       if (++index >= foundPaths.length) {
         // 최종 위치로 확실히 업데이트
         setCursorPosition({ x: relativeTileX + startPoint.x, y: relativetileY + startPoint.y });
-        clickEvent(clickedX, clickedY, SendMessageEvent.MOVE);
         setMovingPaths([]);
         cancelCurrentMovement();
 
@@ -197,6 +196,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       setCursorPosition({ x: innerCursorX, y: innerCursorY });
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       goOriginTo({ x: dx, y: dy });
+      sendMessage(SendMessageEvent.MOVE, { position: { x: innerCursorX, y: innerCursorY } });
 
       currentPath = path;
       setMovingPaths(foundPaths.slice(index));

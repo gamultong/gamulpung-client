@@ -22,7 +22,6 @@ import {
   GetMessageType,
   GetMessageEvent,
   SendMessageEvent,
-  SendMovePayloadType,
   SendSetWindowPayloadType,
   XYType,
   GetTilesStatePayloadType,
@@ -451,7 +450,7 @@ export default function Play() {
           const { scoreboard } = payload as GetScoreboardPayloadType;
           setRanking(Object.entries(scoreboard).map(([ranking, score]) => ({ ranking: parseInt(ranking) + 1, score })));
           const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
-          sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
+          if (!clientCursorId) sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
           break;
         }
         case CURSORS_STATE: {
@@ -467,12 +466,12 @@ export default function Play() {
             revive_at: new Date(cursor.active_at).getTime(),
           }));
           // find client cursor
-          const clientCursor = newCursors.find(cursor => cursor.id === clientCursorId)!;
-          const clientPosition = clientCursor.position;
+          const myCursor = newCursors.find(cursor => cursor.id === clientCursorId)!;
+          const myPosition = myCursor.position;
           setCursors(newCursors.filter(cursor => cursor.id !== clientCursorId));
-          if (!(clientPosition.x === cursorPosition.x && clientPosition.y === cursorPosition.y)) {
-            setCursorPosition(clientPosition);
-            setOringinPosition(clientPosition);
+          if (!(myPosition.x === cursorPosition.x && myPosition.y === cursorPosition.y)) {
+            setCursorPosition(myPosition);
+            setOringinPosition(myPosition);
           }
           break;
         }
@@ -481,8 +480,6 @@ export default function Play() {
           const { id } = payload as CursorIdType;
           setId(id);
           setTimeout(() => setIsInitialized(true), 0);
-          const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
-          sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
           break;
         }
         case QUIT_CURSOR: {
@@ -518,6 +515,8 @@ export default function Play() {
     const offsetY = cursorOriginPosition.y - cursorPosition.y;
     // INSTANT: Perfect alignment - no processing needed
     if (offsetX === 0 && offsetY === 0) return cachingTiles; // O(1) return!
+
+    console.log(cursorPosition, offsetX, offsetY);
 
     // STABLE CPU processing - no disappearing tiles
     return processWithStableCPU();
@@ -564,7 +563,7 @@ export default function Play() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cachingTiles, cursorOriginPosition, cursorPosition, renderStartPoint, startPoint]);
+  }, [cachingTiles, cursorOriginPosition]);
 
   const getCurrentTileWidthAndHeight = () => {
     const newTileSize = ORIGIN_TILE_SIZE * zoom;
@@ -613,16 +612,6 @@ export default function Play() {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowWidth, windowHeight, zoom, isInitialized]);
-
-  /** Send user move event */
-  useEffect(() => {
-    if (!isInitialized) return;
-    const event = SendMessageEvent.MOVE;
-    const position: XYType = { x: cursorOriginPosition.x, y: cursorOriginPosition.y };
-    const payload: SendMovePayloadType = { position };
-    sendMessage(event, payload);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cursorOriginPosition]);
 
   useEffect(() => {
     if (leftReviveTime > 0) {
