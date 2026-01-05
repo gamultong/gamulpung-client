@@ -63,7 +63,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   /** stores */
   const { windowHeight, windowWidth } = useScreenSize();
   const { setPosition: setClickPosition, x: clickX, y: clickY, setMovecost } = useClickStore();
-  const { position: cursorPosition, zoom, color, setPosition: setCursorPosition, goOriginTo } = useCursorStore();
+  const { position: cursorPosition, zoom, color, setPosition: setCursorPosition } = useCursorStore();
   const { cursors } = useOtherUserCursorsStore();
   const { sendMessage } = useWebSocketStore();
   const { useAnimation } = useAnimationStore();
@@ -193,14 +193,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       //   moveCursor(relativeTileX, relativetileY, clickedX, clickedY, type);
       //   return;
       // }
-      setCursorPosition({ x: innerCursorX, y: innerCursorY });
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
-      goOriginTo({ x: dx, y: dy });
       sendMessage(SendMessageEvent.MOVE, { position: { x: innerCursorX, y: innerCursorY } });
 
       currentPath = path;
       setMovingPaths(foundPaths.slice(index));
       if (useAnimation) moveAnimation(dx, dy);
+      console.log('animation', performance.now());
     }, MOVE_SPEED);
   };
 

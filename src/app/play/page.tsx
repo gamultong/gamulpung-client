@@ -16,7 +16,6 @@ import TutorialStep from '@/components/tutorialstep';
 import ScoreBoardComponent from '@/components/scoreboard';
 import {
   CursorIdType,
-  Direction,
   GetChatPayloadType,
   GetCursorStatePayloadType,
   GetMessageType,
@@ -28,6 +27,7 @@ import {
   GetScoreboardPayloadType,
   SendCreateCursorPayloadType,
   GetExplosionPayloadType,
+  Direction,
 } from '@/types';
 // WebGPU imports removed - using simple CPU processing only
 import { VECTORIZED_TILE_LUT } from '@/utils/tiles';
@@ -36,6 +36,7 @@ import useMessageProcess from '@/hooks/useMessageProcess';
 import { OtherCursorState, useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 
 // hex -> byte conversion is inlined in the hot loop to avoid call overhead
+const FILL_CHAR = '??';
 
 export default function Play() {
   /** constants */
@@ -46,12 +47,12 @@ export default function Play() {
 
   /** stores */
   const {} = useClickStore();
-  const { setCursors, cursors } = useOtherUserCursorsStore();
+  const { setCursors, cursors: nowCursors } = useOtherUserCursorsStore();
   const { isOpen, sendMessage, connect, disconnect } = useWebSocketStore();
   // for states
   const { position: cursorPosition, zoom, originPosition: cursorOriginPosition } = useCursorStore();
   // for actions
-  const { setPosition: setCursorPosition, setOringinPosition, setId, id: clientCursorId } = useCursorStore();
+  const { setPosition: setCursorPosition, setOringinPosition, setId, id: clientCursorId, setScore } = useCursorStore();
   // for movings
   const { zoomUp, zoomDown, setZoom } = useCursorStore();
   const { setRanking } = useRankStore();
@@ -83,52 +84,36 @@ export default function Play() {
    * @param start_y {number} - start y position
    * @param end_x {number} - end x position
    * @param end_y {number} - end y position
-   * @param type {Direction} - Request type (U: Up tiles, D: Down tiles, L: Left tiles, R: Right tiles, A: All tiles)
+   * @param type {Direction} - direction of the cursor
    * */
-  const moveTiles = (start_x: number, start_y: number, end_x: number, end_y: number, type: Direction) => {
+  const moveCursor = (start_x: number, start_y: number, end_x: number, end_y: number, type: Direction) => {
     if (!isOpen || !isInitialized) return;
     const now = performance.now();
     // Throttle ALL-tiles requests to avoid spamming server (300 ms window)
-    if (type === Direction.ALL && now - requestedTilesTimeRef.current < 300) return;
+    if (
+      // type === Direction.ALL &&
+      now - requestedTilesTimeRef.current <
+      300
+    )
+      return;
     requestedTilesTimeRef.current = now;
     /** add Dummy data to originTiles */
-    const [rowlength, columnlength] = [Math.abs(end_x - start_x) + 1, Math.abs(start_y - end_y) + 1];
-
+    const [rowLen, colLen] = [Math.abs(end_x - start_x) + 1, Math.abs(start_y - end_y) + 1];
+    const [rowLenObj, colLenObj] = [{ length: rowLen }, { length: colLen }];
+    const { UP, ALL, DOWN, LEFT, RIGHT } = Direction;
     const prevTiles = cachingTilesRef.current;
-    let newTiles = [...prevTiles];
+    let map = [...prevTiles];
 
-    switch (type) {
-      case Direction.UP: // Upper tiles
-        newTiles = [...Array.from({ length: columnlength }, () => Array(rowlength).fill('??')), ...newTiles.slice(0, -columnlength)];
-        break;
-      case Direction.DOWN: // Down tiles
-        newTiles = [...newTiles.slice(columnlength), ...Array.from({ length: columnlength }, () => Array(rowlength).fill('??'))];
-        break;
-      case Direction.LEFT: // Left tiles
-        for (let i = 0; i < columnlength; i++) {
-          if (!newTiles[i]) continue;
-          newTiles[i] = [...Array(rowlength).fill('??'), ...newTiles[i].slice(0, newTiles[i].length - rowlength)];
-        }
-        break;
-      case Direction.RIGHT: // Right tiles
-        for (let i = 0; i < columnlength; i++) {
-          if (!newTiles[i]) continue;
-          newTiles[i] = [...newTiles[i].slice(rowlength), ...Array(rowlength).fill('??')];
-        }
-        break;
-      case Direction.ALL: // All tiles
-        newTiles = Array.from({ length: columnlength }, () => Array.from({ length: rowlength }, () => '??'));
-        break;
-    }
+    const fillRow = Array(rowLen).fill(FILL_CHAR);
+    const fillCol = Array.from(colLenObj, () => fillRow);
 
-    cachingTilesRef.current = newTiles;
+    if (type === UP) map = [...fillCol, ...map.slice(0, -colLen)];
+    if (type === DOWN) map = [...map.slice(colLen), ...fillCol];
+    if (type === LEFT) for (let i = 0; i < colLen && map[i]; i++) map[i] = [...fillRow, ...map[i].slice(0, map[i].length - rowLen)];
+    if (type === RIGHT) for (let i = 0; i < colLen && map[i]; i++) map[i] = [...map[i].slice(rowLen), ...fillRow];
+    if (type === ALL) map = Array.from(colLenObj, () => Array.from(rowLenObj, () => FILL_CHAR));
+    cachingTilesRef.current = map;
     return;
-  };
-
-  /** Flush ref-based tiles to state for rendering */
-  const flushCachingTilesToState = () => {
-    const tiles = cachingTilesRef.current;
-    setCachingTiles(tiles.map(row => [...row]));
   };
 
   const zoomHandler = (e: KeyboardEvent) => {
@@ -296,7 +281,7 @@ export default function Play() {
       const checker = (col + yAbs + startPoint.x) & 1;
 
       // Vectorized string conversion (O(1) LookUp)
-      let value: string = '??'; // default value for Exception handling
+      let value: string = FILL_CHAR; // default value for Exception handling
       if (tileType < 8) value = tileType === 0 ? 'O' : tileType.toString();
       // Bomb
       else if (tileType === 8) value = 'B';
@@ -319,8 +304,7 @@ export default function Play() {
     if (unsortedTiles.length === 0) return;
 
     // For full window updates, pre-shift the grid with dummy tiles
-    if (type === 'All') moveTiles(start_x, start_y, end_x, end_y, Direction.ALL);
-
+    if (type === 'All') moveCursor(start_x, start_y, end_x, end_y, Direction.ALL);
     // Basic grid stats based on server-provided world coordinates
     const tilesPerRow = Math.abs(end_x - start_x + 1);
     const columnlength = Math.abs(start_y - end_y + 1);
@@ -408,7 +392,9 @@ export default function Play() {
 
     // Apply all changes to ref and then flush once to state for rendering
     applyTileChanges(allChanges);
-    flushCachingTilesToState();
+    console.log(cachingTilesRef.current.map(row => row.map(cell => cell[0]).join('')).join('\n'));
+    console.log('replace', performance.now());
+    setCachingTiles(cachingTilesRef.current.map(row => [...row]));
   };
 
   /** Message handler for tile processing */
@@ -422,6 +408,7 @@ export default function Play() {
         case TILES_STATE: {
           const { tiles_li } = payload as GetTilesStatePayloadType;
           // use replaceTiles
+          const promises = [];
           for (const tiles of tiles_li) {
             const { data, range } = tiles;
             const { top_left, bottom_right } = range;
@@ -431,8 +418,9 @@ export default function Play() {
 
             let isAll: 'PART' | 'All' = 'PART';
             if (resWidth === width && resHeight === height) isAll = 'All';
-            replaceTiles(top_left.x, bottom_right.y, bottom_right.x, top_left.y, data, isAll);
+            promises.push(replaceTiles(top_left.x, bottom_right.y, bottom_right.x, top_left.y, data, isAll));
           }
+          Promise.all(promises);
           break;
         }
         case EXPLOSION: {
@@ -448,7 +436,7 @@ export default function Play() {
         }
         case SCOREBOARD_STATE: {
           const { scoreboard } = payload as GetScoreboardPayloadType;
-          setRanking(Object.entries(scoreboard).map(([ranking, score]) => ({ ranking: parseInt(ranking) + 1, score })));
+          setRanking(Object.entries(scoreboard).map(([ranking, score]) => ({ ranking: +ranking, score })));
           const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
           if (!clientCursorId) sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
           break;
@@ -466,10 +454,18 @@ export default function Play() {
             revive_at: new Date(cursor.active_at).getTime(),
           }));
           // find client cursor
-          setCursors(newCursors.filter(cursor => cursor.id !== clientCursorId));
+          const getCursors = newCursors.filter(cursor => cursor.id !== clientCursorId);
+          // 변화가 일어날 때만 오는 데, 이미 있는 커서는 위치만 변하고, 새로 온 커서는 새로 추가됩니다.
+          const addCursors = getCursors.filter(cursor => !nowCursors.some(c => c.id === cursor.id));
+          const updatedCursors = nowCursors.map(cursor => {
+            const getCursor = getCursors.find(c => c.id === cursor.id);
+            return getCursor ? getCursor : cursor;
+          });
+          setCursors([...addCursors, ...updatedCursors]);
           const myCursor = newCursors.find(cursor => cursor.id === clientCursorId)!;
           if (myCursor) {
             const { position } = myCursor;
+            setScore(myCursor.score);
             if (!(position.x === cursorPosition.x && position.y === cursorPosition.y)) {
               setCursorPosition(position);
               setOringinPosition(position);
@@ -486,12 +482,12 @@ export default function Play() {
         }
         case QUIT_CURSOR: {
           const { id } = payload as CursorIdType;
-          setCursors(cursors.filter(cursor => cursor.id !== id));
+          setCursors(nowCursors.filter(cursor => cursor.id !== id));
           break;
         }
         case CHAT: {
           const { id, message } = payload as GetChatPayloadType;
-          const newCursors = cursors.map(cursor => {
+          const newCursors = nowCursors.map(cursor => {
             if (cursor.id !== id) return cursor;
             return { ...cursor, message, messageTime: Date.now() + 1000 * 8 };
           });
@@ -527,28 +523,30 @@ export default function Play() {
         const sourceRowIndex = row + offsetY;
 
         // Bounds check for source row
-        if (sourceRowIndex < 0 || sourceRowIndex >= cachingLength) return new Array(cachingRow.length).fill('??');
+        if (sourceRowIndex < 0 || sourceRowIndex >= cachingLength) return new Array(cachingRow.length).fill(FILL_CHAR);
 
         const sourceRow = cachingTiles[sourceRowIndex];
-        if (!sourceRow) return new Array(cachingRow.length).fill('??');
+        if (!sourceRow) return new Array(cachingRow.length).fill(FILL_CHAR);
 
         // Process each column safely
         return cachingRow.map((_, col) => {
           const sourceColIndex = col + offsetX;
 
           // Bounds check for source column
-          if (sourceColIndex < 0 || sourceColIndex >= sourceRow.length) return '??';
+          if (sourceColIndex < 0 || sourceColIndex >= sourceRow.length) return FILL_CHAR;
 
           const sourceTile = sourceRow[sourceColIndex];
-          if (!sourceTile || sourceTile === '??') return '??';
+          if (!sourceTile || sourceTile === FILL_CHAR) return FILL_CHAR;
 
           const tileType = sourceTile[0];
 
           // Fast path for most tiles - no transformation needed
           if (!['C', 'F'].includes(tileType)) return sourceTile;
 
-          // Safe checkerboard calculation
-          const checkerBit = (row + col + startPoint.x) & 1;
+          // Use absolute coordinates for checkerboard calculation (matches processTileData)
+          const absX = renderStartPoint.x + col;
+          const absY = renderStartPoint.y + row;
+          const checkerBit = (absX + absY) & 1;
 
           // Safe tile type handling
           if (tileType === 'C') return `C${checkerBit}`;
@@ -563,7 +561,7 @@ export default function Play() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cachingTiles, cursorOriginPosition]);
+  }, [cachingTiles, cursorOriginPosition, renderStartPoint]);
 
   const getCurrentTileWidthAndHeight = () => {
     const newTileSize = ORIGIN_TILE_SIZE * zoom;

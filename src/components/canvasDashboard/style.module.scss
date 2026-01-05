@@ -15,6 +15,14 @@
     right: 50px;
     bottom: 50px;
     width: 200px;
+    .score {
+      padding: 10px 15px;
+      border-radius: 12px;
+      display: flex;
+      justify-content: right;
+      background-color: rgba(0, 0, 0, 35%);
+      margin-bottom: 16px;
+    }
     .coordinates {
       padding: 18px 30px;
       border-radius: 24px;
