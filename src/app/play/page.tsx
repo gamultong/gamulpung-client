@@ -27,6 +27,7 @@ import {
   GetScoreboardPayloadType,
   SendCreateCursorPayloadType,
   GetExplosionPayloadType,
+  Direction,
 } from '@/types';
 // WebGPU imports removed - using simple CPU processing only
 import { VECTORIZED_TILE_LUT } from '@/utils/tiles';
@@ -83,8 +84,9 @@ export default function Play() {
    * @param start_y {number} - start y position
    * @param end_x {number} - end x position
    * @param end_y {number} - end y position
+   * @param type {Direction} - direction of the cursor
    * */
-  const moveTiles = (start_x: number, start_y: number, end_x: number, end_y: number) => {
+  const moveCursor = (start_x: number, start_y: number, end_x: number, end_y: number, type: Direction) => {
     if (!isOpen || !isInitialized) return;
     const now = performance.now();
     // Throttle ALL-tiles requests to avoid spamming server (300 ms window)
@@ -98,20 +100,18 @@ export default function Play() {
     /** add Dummy data to originTiles */
     const [rowLen, colLen] = [Math.abs(end_x - start_x) + 1, Math.abs(start_y - end_y) + 1];
     const [rowLenObj, colLenObj] = [{ length: rowLen }, { length: colLen }];
-    // const { UP, ALL, DOWN, LEFT, RIGHT } = Direction;
+    const { UP, ALL, DOWN, LEFT, RIGHT } = Direction;
     const prevTiles = cachingTilesRef.current;
     let map = [...prevTiles];
 
-    // const fillRow = Array(rowLen).fill(FILL_CHAR);
-    // const fillCol = Array.from(colLenObj, () => fillRow);
+    const fillRow = Array(rowLen).fill(FILL_CHAR);
+    const fillCol = Array.from(colLenObj, () => fillRow);
 
-    // if (type === UP) map = [...fillCol, ...map.slice(0, -colLen)];
-    // if (type === DOWN) map = [...map.slice(colLen), ...fillCol];
-    // if (type === LEFT) for (let i = 0; i < colLen && map[i]; i++) map[i] = [...fillRow, ...map[i].slice(0, map[i].length - rowLen)];
-    // if (type === RIGHT) for (let i = 0; i < colLen && map[i]; i++) map[i] = [...map[i].slice(rowLen), ...fillRow];
-    // if (type === ALL)
-    map = Array.from(colLenObj, () => Array.from(rowLenObj, () => FILL_CHAR));
-
+    if (type === UP) map = [...fillCol, ...map.slice(0, -colLen)];
+    if (type === DOWN) map = [...map.slice(colLen), ...fillCol];
+    if (type === LEFT) for (let i = 0; i < colLen && map[i]; i++) map[i] = [...fillRow, ...map[i].slice(0, map[i].length - rowLen)];
+    if (type === RIGHT) for (let i = 0; i < colLen && map[i]; i++) map[i] = [...map[i].slice(rowLen), ...fillRow];
+    if (type === ALL) map = Array.from(colLenObj, () => Array.from(rowLenObj, () => FILL_CHAR));
     cachingTilesRef.current = map;
     return;
   };
@@ -304,8 +304,7 @@ export default function Play() {
     if (unsortedTiles.length === 0) return;
 
     // For full window updates, pre-shift the grid with dummy tiles
-    if (type === 'All') moveTiles(start_x, start_y, end_x, end_y);
-
+    if (type === 'All') moveCursor(start_x, start_y, end_x, end_y, Direction.ALL);
     // Basic grid stats based on server-provided world coordinates
     const tilesPerRow = Math.abs(end_x - start_x + 1);
     const columnlength = Math.abs(start_y - end_y + 1);
@@ -393,6 +392,8 @@ export default function Play() {
 
     // Apply all changes to ref and then flush once to state for rendering
     applyTileChanges(allChanges);
+    console.log(cachingTilesRef.current.map(row => row.map(cell => cell[0]).join('')).join('\n'));
+    console.log('replace', performance.now());
     setCachingTiles(cachingTilesRef.current.map(row => [...row]));
   };
 

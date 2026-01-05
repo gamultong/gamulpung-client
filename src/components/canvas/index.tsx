@@ -193,13 +193,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       //   moveCursor(relativeTileX, relativetileY, clickedX, clickedY, type);
       //   return;
       // }
-      setCursorPosition({ x: innerCursorX, y: innerCursorY });
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       sendMessage(SendMessageEvent.MOVE, { position: { x: innerCursorX, y: innerCursorY } });
 
       currentPath = path;
       setMovingPaths(foundPaths.slice(index));
       if (useAnimation) moveAnimation(dx, dy);
+      console.log('animation', performance.now());
     }, MOVE_SPEED);
   };
 
