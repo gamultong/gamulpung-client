@@ -51,7 +51,7 @@ export default function Play() {
   // for states
   const { position: cursorPosition, zoom, originPosition: cursorOriginPosition } = useCursorStore();
   // for actions
-  const { setPosition: setCursorPosition, setOringinPosition, setId, id: clientCursorId } = useCursorStore();
+  const { setPosition: setCursorPosition, setOringinPosition, setId, id: clientCursorId, setScore } = useCursorStore();
   // for movings
   const { zoomUp, zoomDown, setZoom } = useCursorStore();
   const { setRanking } = useRankStore();
@@ -435,7 +435,7 @@ export default function Play() {
         }
         case SCOREBOARD_STATE: {
           const { scoreboard } = payload as GetScoreboardPayloadType;
-          setRanking(Object.entries(scoreboard).map(([ranking, score]) => ({ ranking: parseInt(ranking) + 1, score })));
+          setRanking(Object.entries(scoreboard).map(([ranking, score]) => ({ ranking: +ranking, score })));
           const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
           if (!clientCursorId) sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
           break;
@@ -464,6 +464,7 @@ export default function Play() {
           const myCursor = newCursors.find(cursor => cursor.id === clientCursorId)!;
           if (myCursor) {
             const { position } = myCursor;
+            setScore(myCursor.score);
             if (!(position.x === cursorPosition.x && position.y === cursorPosition.y)) {
               setCursorPosition(position);
               setOringinPosition(position);

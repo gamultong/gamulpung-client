@@ -17,7 +17,7 @@ type CanvasDashboardProps = {
 
 export default function CanvasDashboard({ tileSize, renderRange, maxTileCount }: CanvasDashboardProps) {
   const zoomScale = 1.5;
-  const { zoom, zoomDown, zoomUp, originPosition: cursorOriginPosition } = useCursorStore();
+  const { zoom, zoomDown, zoomUp, originPosition: cursorOriginPosition, score } = useCursorStore();
   const { windowWidth: w, windowHeight: h } = useScreenSize();
   const { x: clickX, y: clickY } = useClickStore();
   const { useAnimation, setAnimation } = useAnimationStore();
@@ -36,6 +36,7 @@ export default function CanvasDashboard({ tileSize, renderRange, maxTileCount }:
         </div>
         {bottomToggle && (
           <>
+            <div className={S.score}>{score} pts</div>
             <div className={S.coordinates}>
               <p>
                 &nbsp;
