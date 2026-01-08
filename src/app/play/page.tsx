@@ -34,6 +34,7 @@ import { VECTORIZED_TILE_LUT } from '@/utils/tiles';
 import { useRankStore } from '@/store/rankingStore';
 import useMessageProcess from '@/hooks/useMessageProcess';
 import { OtherCursorState, useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
+import { useTileStore, useTiles } from '@/store/tileStore';
 
 // hex -> byte conversion is inlined in the hot loop to avoid call overhead
 const FILL_CHAR = '??';
@@ -56,22 +57,29 @@ export default function Play() {
   // for movings
   const { zoomUp, zoomDown, setZoom } = useCursorStore();
   const { setRanking } = useRankStore();
+  // tile store - use selectors for better performance
+  const cachingTiles = useTiles();
+  const {
+    startPoint,
+    endPoint,
+    renderStartPoint,
+    setTiles,
+    setRenderTiles,
+    setStartPoint,
+    setEndPoint,
+    setRenderStartPoint,
+    setTileSize,
+    moveCursor: moveCursorInStore,
+    applyTileChanges,
+    reset: resetTiles,
+  } = useTileStore();
 
   /** hooks */
   const { windowWidth, windowHeight } = useScreenSize();
 
   /** states */
-  const [tileSize, setTileSize] = useState<number>(0); //px
-  const [startPoint, setStartPoint] = useState<XYType>({ x: 0, y: 0 });
-  const [endPoint, setEndPoint] = useState<XYType>({ x: 0, y: 0 });
-  const [renderStartPoint, setRenderStartPoint] = useState<XYType>({ x: 0, y: 0 });
-  const [cachingTiles, setCachingTiles] = useState<string[][]>([]);
-  const [renderTiles, setRenderTiles] = useState<string[][]>([...cachingTiles.map(row => [...row])]);
   const [leftReviveTime, setLeftReviveTime] = useState<number>(-1); // secs
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
-
-  // Canonical tile data is stored in this ref; state is used only for rendering snapshots
-  const cachingTilesRef = useRef<string[][]>([]);
 
   const requestedTilesTimeRef = useRef<number>(0);
   const reviveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -97,23 +105,8 @@ export default function Play() {
     )
       return;
     requestedTilesTimeRef.current = now;
-    /** add Dummy data to originTiles */
-    const [rowLen, colLen] = [Math.abs(end_x - start_x) + 1, Math.abs(start_y - end_y) + 1];
-    const [rowLenObj, colLenObj] = [{ length: rowLen }, { length: colLen }];
-    const { UP, ALL, DOWN, LEFT, RIGHT } = Direction;
-    const prevTiles = cachingTilesRef.current;
-    let map = [...prevTiles];
-
-    const fillRow = Array(rowLen).fill(FILL_CHAR);
-    const fillCol = Array.from(colLenObj, () => fillRow);
-
-    if (type === UP) map = [...fillCol, ...map.slice(0, -colLen)];
-    if (type === DOWN) map = [...map.slice(colLen), ...fillCol];
-    if (type === LEFT) for (let i = 0; i < colLen && map[i]; i++) map[i] = [...fillRow, ...map[i].slice(0, map[i].length - rowLen)];
-    if (type === RIGHT) for (let i = 0; i < colLen && map[i]; i++) map[i] = [...map[i].slice(rowLen), ...fillRow];
-    if (type === ALL) map = Array.from(colLenObj, () => Array.from(rowLenObj, () => FILL_CHAR));
-    cachingTilesRef.current = map;
-    return;
+    // Use zustand store's moveCursor function
+    moveCursorInStore(start_x, start_y, end_x, end_y, type);
   };
 
   const zoomHandler = (e: KeyboardEvent) => {
@@ -165,9 +158,7 @@ export default function Play() {
       disconnect();
 
       // reset states
-      cachingTilesRef.current = [];
-      setCachingTiles([]);
-      setRenderTiles([]);
+      resetTiles();
       setIsInitialized(false);
       setLeftReviveTime(-1);
     };
@@ -189,16 +180,7 @@ export default function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, startPoint]);
 
-  /** Apply tile changes to caching tiles */
-  const applyTileChanges = (changes: Array<{ row: number; col: number; value: string }>) => {
-    if (changes.length < 1) return;
-    const tiles = cachingTilesRef.current;
-
-    changes.forEach(({ row, col, value }) => {
-      if (!tiles[row]) return;
-      tiles[row][col] = value;
-    });
-  };
+  // applyTileChanges is now from zustand store
 
   /** Create worker promises for tile processing */
   const createWorkerPromises = (
@@ -213,11 +195,12 @@ export default function Play() {
     type: 'All' | 'PART',
   ) => {
     const lenObject = { length: workerCount };
+    const currentStartPoint = startPoint;
 
     return Array.from(lenObject, (_, workerIndex) => {
       const workerStart = workerIndex * tilesPerWorker;
       const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
-      return processTileData(end_x, end_y, start_x, start_y, unsortedTiles, type, workerStart, workerEnd);
+      return processTileData(end_x, end_y, start_x, start_y, unsortedTiles, type, currentStartPoint, workerStart, workerEnd);
     });
   };
 
@@ -229,6 +212,7 @@ export default function Play() {
     start_y: number,
     unsortedTiles: string,
     type: 'All' | 'PART',
+    currentStartPoint: XYType,
     startIndex: number = 0,
     endIndex: number = -1,
   ) => {
@@ -238,13 +222,14 @@ export default function Play() {
 
     // This is temporary fix for the issue of the tiles not being updated correctly when the window is zoomed in or out.
     const isAll = type === 'All';
-    const yOffset = end_y - startPoint.y;
-    const xOffset = isAll ? 0 : start_x - startPoint.x - 1;
+    const yOffset = end_y - currentStartPoint.y;
+    const xOffset = isAll ? 0 : start_x - currentStartPoint.x - 1;
 
     const actualEndIndex = endIndex === -1 ? columnlength * tilesPerRow : endIndex;
     const changes: Array<{ row: number; col: number; value: string }> = [];
 
-    const tiles = cachingTilesRef.current;
+    // Get current tiles from store
+    const tiles = useTileStore.getState().tiles;
 
     for (let tileIndex = startIndex; tileIndex < actualEndIndex; tileIndex++) {
       // Calculate row and column indices
@@ -278,7 +263,7 @@ export default function Play() {
 
       const col = colIndex + xOffset;
       // Use absolute coordinates for checker calculation to match computedRenderTiles
-      const checker = (col + yAbs + startPoint.x) & 1;
+      const checker = (col + yAbs + currentStartPoint.x) & 1;
 
       // Vectorized string conversion (O(1) LookUp)
       let value: string = FILL_CHAR; // default value for Exception handling
@@ -386,15 +371,17 @@ export default function Play() {
       } catch (error) {
         // Final fallback: synchronous processing on main thread
         console.error('Ultra-Parallel Worker tile processing error:', error);
-        allChanges = processTileData(innerEndX, end_y, innerStartX, start_y, unsortedTiles, type);
+        allChanges = processTileData(innerEndX, end_y, innerStartX, start_y, unsortedTiles, type, startPoint);
       }
     }
 
-    // Apply all changes to ref and then flush once to state for rendering
+    // Apply all changes to tiles
     applyTileChanges(allChanges);
-    console.log(cachingTilesRef.current.map(row => row.map(cell => cell[0]).join('')).join('\n'));
+    const updatedTiles = useTileStore.getState().tiles;
+    console.log(updatedTiles.map(row => row.map(cell => cell[0]).join('')).join('\n'));
     console.log('replace', performance.now());
-    setCachingTiles(cachingTilesRef.current.map(row => [...row]));
+    // applyTileChanges already updates tiles, so we just need to trigger a re-render
+    setTiles([...updatedTiles.map(row => [...row])]);
   };
 
   /** Message handler for tile processing */
@@ -574,7 +561,7 @@ export default function Play() {
   /** Apply computed tiles */
   useLayoutEffect(() => {
     setRenderTiles(computedRenderTiles);
-  }, [computedRenderTiles]);
+  }, [computedRenderTiles, setRenderTiles]);
 
   /** Reset screen range when cursor position or screen size changes */
   useLayoutEffect(() => {
@@ -629,13 +616,10 @@ export default function Play() {
       {leftReviveTime > 0 && <Inactive time={leftReviveTime} />}
       <TutorialStep />
       <ScoreBoardComponent />
-      <CanvasDashboard tileSize={tileSize} renderRange={RENDER_RANGE} maxTileCount={MAX_TILE_COUNT} />
+      <CanvasDashboard renderRange={RENDER_RANGE} maxTileCount={MAX_TILE_COUNT} />
       <CanvasRenderComponent
         leftReviveTime={leftReviveTime}
         paddingTiles={RENDER_RANGE}
-        tiles={renderTiles}
-        tileSize={tileSize}
-        startPoint={renderStartPoint}
         cursorOriginX={cursorOriginPosition.x}
         cursorOriginY={cursorOriginPosition.y}
       />
