@@ -7,10 +7,10 @@ import useScreenSize from '@/hooks/useScreenSize';
 import { useClickStore, useAnimationStore } from '@/store/interactionStore';
 import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
-import { useRenderTiles, useRenderStartPoint, useTileSize } from '@/store/tileStore';
+import { useRenderTiles, useRenderStartPoint, useTileSize, useStartPoint, useEndPoint, useTileStore } from '@/store/tileStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
-import { XYType, VectorImagesType, TileContent, SendMessageEvent, PositionType } from '@/types';
+import { XYType, VectorImagesType, TileContent, SendMessageEvent, PositionType, Direction } from '@/types';
 import { CURSOR_COLORS, CURSOR_DIRECTIONS, OTHER_CURSOR_COLORS } from '@/constants';
 import { makePath2d, makePath2dFromArray } from '@/utils';
 
@@ -45,6 +45,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
   const tiles = useRenderTiles();
   const tileSize = useTileSize();
   const startPoint = useRenderStartPoint();
+  const viewStartPoint = useStartPoint();
+  const viewEndPoint = useEndPoint();
+  const { padtiles } = useTileStore();
   /** constants */
   const MOVE_SPEED = 200; // ms
   const BASE_OFFSET = tileSize >> 1; // tileSize / 2
@@ -187,6 +190,18 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       //   moveCursor(relativeTileX, relativetileY, clickedX, clickedY, type);
       //   return;
       // }
+
+      // Determine direction for padding before animation
+      let direction = '';
+      if (dy === 1) direction += Direction.DOWN; // y-axis is reversed, so dy === 1 means moving down
+      if (dy === -1) direction += Direction.UP; // y-axis is reversed, so dy === -1 means moving up
+      if (dx === 1) direction += Direction.RIGHT;
+      if (dx === -1) direction += Direction.LEFT;
+
+      // Apply padding before animation starts
+      if (direction && viewStartPoint && viewEndPoint)
+        padtiles(viewStartPoint.x, viewEndPoint.y, viewEndPoint.x, viewStartPoint.y, direction as Direction);
+
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       sendMessage(SendMessageEvent.MOVE, { position: { x: innerCursorX, y: innerCursorY } });
 

@@ -69,7 +69,7 @@ export default function Play() {
     setEndPoint,
     setRenderStartPoint,
     setTileSize,
-    moveCursor: moveCursorInStore,
+    padtiles,
     applyTileChanges,
     reset: resetTiles,
   } = useTileStore();
@@ -81,33 +81,8 @@ export default function Play() {
   const [leftReviveTime, setLeftReviveTime] = useState<number>(-1); // secs
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
-  const requestedTilesTimeRef = useRef<number>(0);
   const reviveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const connectedRef = useRef<boolean>(false);
-
-  /**
-   * Request Tiles
-   * Please send start y and end y coordinates are reversed because the y-axis is reversed.
-   * @param start_x {number} - start x position
-   * @param start_y {number} - start y position
-   * @param end_x {number} - end x position
-   * @param end_y {number} - end y position
-   * @param type {Direction} - direction of the cursor
-   * */
-  const moveCursor = (start_x: number, start_y: number, end_x: number, end_y: number, type: Direction) => {
-    if (!isOpen || !isInitialized) return;
-    const now = performance.now();
-    // Throttle ALL-tiles requests to avoid spamming server (300 ms window)
-    if (
-      // type === Direction.ALL &&
-      now - requestedTilesTimeRef.current <
-      300
-    )
-      return;
-    requestedTilesTimeRef.current = now;
-    // Use zustand store's moveCursor function
-    moveCursorInStore(start_x, start_y, end_x, end_y, type);
-  };
 
   const zoomHandler = (e: KeyboardEvent) => {
     const key = e.key.toLowerCase();
@@ -287,9 +262,10 @@ export default function Play() {
   /** Apply incoming hex tile data to the internal tile grid */
   const replaceTiles = async (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
     if (unsortedTiles.length === 0) return;
+    console.log('replaceTiles', type, performance.now());
 
     // For full window updates, pre-shift the grid with dummy tiles
-    if (type === 'All') moveCursor(start_x, start_y, end_x, end_y, Direction.ALL);
+    if (type === 'All') padtiles(start_x, start_y, end_x, end_y, Direction.ALL);
     // Basic grid stats based on server-provided world coordinates
     const tilesPerRow = Math.abs(end_x - start_x + 1);
     const columnlength = Math.abs(start_y - end_y + 1);
