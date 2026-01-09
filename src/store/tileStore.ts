@@ -74,6 +74,7 @@ export const useTileStore = create<TileStore>((set, get) => ({
     if (type === RIGHT || type === DOWN_RIGHT || type === UP_RIGHT)
       for (let i = 0; i < map.length && map[i]; i++) map[i] = [...map[i].slice(1, map[i].length), FILL_CHAR];
 
+    console.log('pad after', type, performance.now(), map.map(row => row.map(cell => cell[0]).join('')).join('\n'));
     set({ tiles: map });
   },
 

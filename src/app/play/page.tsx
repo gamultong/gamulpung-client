@@ -418,7 +418,6 @@ export default function Play() {
           }));
           // find client cursor
           const getCursors = newCursors.filter(cursor => cursor.id !== clientCursorId);
-          // 변화가 일어날 때만 오는 데, 이미 있는 커서는 위치만 변하고, 새로 온 커서는 새로 추가됩니다.
           const addCursors = getCursors.filter(cursor => !nowCursors.some(c => c.id === cursor.id));
           const updatedCursors = nowCursors.map(cursor => {
             const getCursor = getCursors.find(c => c.id === cursor.id);
