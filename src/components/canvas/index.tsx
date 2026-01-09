@@ -7,9 +7,10 @@ import useScreenSize from '@/hooks/useScreenSize';
 import { useClickStore, useAnimationStore } from '@/store/interactionStore';
 import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
+import { useRenderTiles, useRenderStartPoint, useTileSize, useStartPoint, useEndPoint, useTileStore } from '@/store/tileStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
-import { XYType, VectorImagesType, TileContent, SendMessageEvent, PositionType } from '@/types';
+import { XYType, VectorImagesType, TileContent, SendMessageEvent, PositionType, Direction } from '@/types';
 import { CURSOR_COLORS, CURSOR_DIRECTIONS, OTHER_CURSOR_COLORS } from '@/constants';
 import { makePath2d, makePath2dFromArray } from '@/utils';
 
@@ -33,24 +34,20 @@ class TileNode {
 
 /** 타입 정의 */
 interface CanvasRenderComponentProps {
-  tiles: string[][];
-  tileSize: number;
   cursorOriginX: number;
   cursorOriginY: number;
   paddingTiles: number;
-  startPoint: { x: number; y: number };
   leftReviveTime: number;
 }
 
-const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
-  paddingTiles,
-  tiles,
-  tileSize,
-  cursorOriginX,
-  cursorOriginY,
-  startPoint,
-  leftReviveTime,
-}) => {
+const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTiles, cursorOriginX, cursorOriginY, leftReviveTime }) => {
+  // Get tiles and related data from zustand store
+  const tiles = useRenderTiles();
+  const tileSize = useTileSize();
+  const startPoint = useRenderStartPoint();
+  const viewStartPoint = useStartPoint();
+  const viewEndPoint = useEndPoint();
+  const { padtiles } = useTileStore();
   /** constants */
   const MOVE_SPEED = 200; // ms
   const BASE_OFFSET = tileSize >> 1; // tileSize / 2
@@ -193,6 +190,18 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       //   moveCursor(relativeTileX, relativetileY, clickedX, clickedY, type);
       //   return;
       // }
+
+      // Determine direction for padding before animation
+      let direction = '';
+      if (dy === 1) direction += Direction.DOWN; // y-axis is reversed, so dy === 1 means moving down
+      if (dy === -1) direction += Direction.UP; // y-axis is reversed, so dy === -1 means moving up
+      if (dx === 1) direction += Direction.RIGHT;
+      if (dx === -1) direction += Direction.LEFT;
+
+      // Apply padding before animation starts
+      if (direction && viewStartPoint && viewEndPoint)
+        padtiles(viewStartPoint.x, viewEndPoint.y, viewEndPoint.x, viewStartPoint.y, direction as Direction);
+
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       sendMessage(SendMessageEvent.MOVE, { position: { x: innerCursorX, y: innerCursorY } });
 
@@ -627,7 +636,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       {!isInitializing && (
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
           <ChatComponent />
-          <Tilemap className={S.canvas} tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} tileSize={tileSize} tiles={tiles} />
+          <Tilemap className={S.canvas} tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} />
           <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="MyCursor" ref={canvasRefs.myCursorRef} width={windowWidth} height={windowHeight} />

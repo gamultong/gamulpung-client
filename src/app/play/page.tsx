@@ -3,7 +3,7 @@
 import S from './page.module.scss';
 
 /** hooks */
-import { useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useMemo, useRef, useCallback } from 'react';
 import useScreenSize from '@/hooks/useScreenSize';
 import { useClickStore } from '@/store/interactionStore';
 
@@ -14,29 +14,12 @@ import Inactive from '@/components/inactive';
 import CanvasDashboard from '@/components/canvasDashboard';
 import TutorialStep from '@/components/tutorialstep';
 import ScoreBoardComponent from '@/components/scoreboard';
-import {
-  CursorIdType,
-  GetChatPayloadType,
-  GetCursorStatePayloadType,
-  GetMessageType,
-  GetMessageEvent,
-  SendMessageEvent,
-  SendSetWindowPayloadType,
-  XYType,
-  GetTilesStatePayloadType,
-  GetScoreboardPayloadType,
-  SendCreateCursorPayloadType,
-  GetExplosionPayloadType,
-  Direction,
-} from '@/types';
+import { SendMessageEvent, SendSetWindowPayloadType, XYType, Direction } from '@/types';
 // WebGPU imports removed - using simple CPU processing only
 import { VECTORIZED_TILE_LUT } from '@/utils/tiles';
-import { useRankStore } from '@/store/rankingStore';
-import useMessageProcess from '@/hooks/useMessageProcess';
-import { OtherCursorState, useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
-
-// hex -> byte conversion is inlined in the hot loop to avoid call overhead
-const FILL_CHAR = '??';
+import useMessageHandler from '@/hooks/useMessageHandler';
+import { useCursorStore } from '@/store/cursorStore';
+import { FILL_CHAR, useTileStore, useTiles } from '@/store/tileStore';
 
 export default function Play() {
   /** constants */
@@ -47,74 +30,37 @@ export default function Play() {
 
   /** stores */
   const {} = useClickStore();
-  const { setCursors, cursors: nowCursors } = useOtherUserCursorsStore();
   const { isOpen, sendMessage, connect, disconnect } = useWebSocketStore();
   // for states
   const { position: cursorPosition, zoom, originPosition: cursorOriginPosition } = useCursorStore();
-  // for actions
-  const { setPosition: setCursorPosition, setOringinPosition, setId, id: clientCursorId, setScore } = useCursorStore();
   // for movings
   const { zoomUp, zoomDown, setZoom } = useCursorStore();
-  const { setRanking } = useRankStore();
+  // tile store - use selectors for better performance
+  const cachingTiles = useTiles();
+  const {
+    startPoint,
+    endPoint,
+    renderStartPoint,
+    setTiles,
+    setRenderTiles,
+    setStartPoint,
+    setEndPoint,
+    setRenderStartPoint,
+    setTileSize,
+    padtiles,
+    applyTileChanges,
+    reset: resetTiles,
+  } = useTileStore();
 
   /** hooks */
   const { windowWidth, windowHeight } = useScreenSize();
 
   /** states */
-  const [tileSize, setTileSize] = useState<number>(0); //px
-  const [startPoint, setStartPoint] = useState<XYType>({ x: 0, y: 0 });
-  const [endPoint, setEndPoint] = useState<XYType>({ x: 0, y: 0 });
-  const [renderStartPoint, setRenderStartPoint] = useState<XYType>({ x: 0, y: 0 });
-  const [cachingTiles, setCachingTiles] = useState<string[][]>([]);
-  const [renderTiles, setRenderTiles] = useState<string[][]>([...cachingTiles.map(row => [...row])]);
   const [leftReviveTime, setLeftReviveTime] = useState<number>(-1); // secs
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
-  // Canonical tile data is stored in this ref; state is used only for rendering snapshots
-  const cachingTilesRef = useRef<string[][]>([]);
-
-  const requestedTilesTimeRef = useRef<number>(0);
   const reviveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const connectedRef = useRef<boolean>(false);
-
-  /**
-   * Request Tiles
-   * Please send start y and end y coordinates are reversed because the y-axis is reversed.
-   * @param start_x {number} - start x position
-   * @param start_y {number} - start y position
-   * @param end_x {number} - end x position
-   * @param end_y {number} - end y position
-   * @param type {Direction} - direction of the cursor
-   * */
-  const moveCursor = (start_x: number, start_y: number, end_x: number, end_y: number, type: Direction) => {
-    if (!isOpen || !isInitialized) return;
-    const now = performance.now();
-    // Throttle ALL-tiles requests to avoid spamming server (300 ms window)
-    if (
-      // type === Direction.ALL &&
-      now - requestedTilesTimeRef.current <
-      300
-    )
-      return;
-    requestedTilesTimeRef.current = now;
-    /** add Dummy data to originTiles */
-    const [rowLen, colLen] = [Math.abs(end_x - start_x) + 1, Math.abs(start_y - end_y) + 1];
-    const [rowLenObj, colLenObj] = [{ length: rowLen }, { length: colLen }];
-    const { UP, ALL, DOWN, LEFT, RIGHT } = Direction;
-    const prevTiles = cachingTilesRef.current;
-    let map = [...prevTiles];
-
-    const fillRow = Array(rowLen).fill(FILL_CHAR);
-    const fillCol = Array.from(colLenObj, () => fillRow);
-
-    if (type === UP) map = [...fillCol, ...map.slice(0, -colLen)];
-    if (type === DOWN) map = [...map.slice(colLen), ...fillCol];
-    if (type === LEFT) for (let i = 0; i < colLen && map[i]; i++) map[i] = [...fillRow, ...map[i].slice(0, map[i].length - rowLen)];
-    if (type === RIGHT) for (let i = 0; i < colLen && map[i]; i++) map[i] = [...map[i].slice(rowLen), ...fillRow];
-    if (type === ALL) map = Array.from(colLenObj, () => Array.from(rowLenObj, () => FILL_CHAR));
-    cachingTilesRef.current = map;
-    return;
-  };
 
   const zoomHandler = (e: KeyboardEvent) => {
     const key = e.key.toLowerCase();
@@ -165,9 +111,7 @@ export default function Play() {
       disconnect();
 
       // reset states
-      cachingTilesRef.current = [];
-      setCachingTiles([]);
-      setRenderTiles([]);
+      resetTiles();
       setIsInitialized(false);
       setLeftReviveTime(-1);
     };
@@ -189,187 +133,154 @@ export default function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, startPoint]);
 
-  /** Apply tile changes to caching tiles */
-  const applyTileChanges = (changes: Array<{ row: number; col: number; value: string }>) => {
-    if (changes.length < 1) return;
-    const tiles = cachingTilesRef.current;
-
-    changes.forEach(({ row, col, value }) => {
-      if (!tiles[row]) return;
-      tiles[row][col] = value;
-    });
-  };
-
-  /** Create worker promises for tile processing */
-  const createWorkerPromises = (
-    workerCount: number,
-    tilesPerWorker: number,
-    totalTiles: number,
-    end_x: number,
-    end_y: number,
-    start_x: number,
-    start_y: number,
-    unsortedTiles: string,
-    type: 'All' | 'PART',
-  ) => {
-    const lenObject = { length: workerCount };
-
-    return Array.from(lenObject, (_, workerIndex) => {
-      const workerStart = workerIndex * tilesPerWorker;
-      const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
-      return processTileData(end_x, end_y, start_x, start_y, unsortedTiles, type, workerStart, workerEnd);
-    });
-  };
+  // applyTileChanges is now from zustand store
 
   /** Common tile processing logic */
-  const processTileData = (
-    end_x: number,
-    end_y: number,
-    start_x: number,
-    start_y: number,
-    unsortedTiles: string,
-    type: 'All' | 'PART',
-    startIndex: number = 0,
-    endIndex: number = -1,
-  ) => {
-    const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1;
-    const tilesPerRow = rowlengthBytes >> 1;
-    const columnlength = Math.abs(start_y - end_y + 1);
+  const processTileData = useCallback(
+    (
+      end_x: number,
+      end_y: number,
+      start_x: number,
+      start_y: number,
+      unsortedTiles: string,
+      type: 'All' | 'PART',
+      currentStartPoint: XYType,
+      startIndex: number = 0,
+      endIndex: number = -1,
+    ) => {
+      const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1;
+      const tilesPerRow = rowlengthBytes >> 1;
+      const columnlength = Math.abs(start_y - end_y + 1);
 
-    // This is temporary fix for the issue of the tiles not being updated correctly when the window is zoomed in or out.
-    const isAll = type === 'All';
-    const yOffset = end_y - startPoint.y;
-    const xOffset = isAll ? 0 : start_x - startPoint.x - 1;
+      // This is temporary fix for the issue of the tiles not being updated correctly when the window is zoomed in or out.
+      const isAll = type === 'All';
+      const yOffset = end_y - currentStartPoint.y;
+      const xOffset = isAll ? 0 : start_x - currentStartPoint.x - 1;
 
-    const actualEndIndex = endIndex === -1 ? columnlength * tilesPerRow : endIndex;
-    const changes: Array<{ row: number; col: number; value: string }> = [];
+      const actualEndIndex = endIndex === -1 ? columnlength * tilesPerRow : endIndex;
+      const changes: Array<{ row: number; col: number; value: string }> = [];
 
-    const tiles = cachingTilesRef.current;
+      // Get current tiles from store
+      const tiles = useTileStore.getState().tiles;
 
-    for (let tileIndex = startIndex; tileIndex < actualEndIndex; tileIndex++) {
-      // Calculate row and column indices
-      const rowIndex = Math.floor(tileIndex / tilesPerRow);
-      const colIndex = tileIndex % tilesPerRow;
+      for (let tileIndex = startIndex; tileIndex < actualEndIndex; tileIndex++) {
+        // Calculate row and column indices
+        const rowIndex = Math.floor(tileIndex / tilesPerRow);
+        const colIndex = tileIndex % tilesPerRow;
 
-      const reversedI = columnlength - 1 - rowIndex;
-      const row = reversedI + yOffset;
+        const reversedI = columnlength - 1 - rowIndex;
+        const row = reversedI + yOffset;
 
-      if (row < 0 || row >= tiles.length) continue;
+        if (row < 0 || row >= tiles.length) continue;
 
-      const existingRow = tiles[row] || [];
-      const rowLen = existingRow.length;
-      if (rowLen === 0) continue;
+        const existingRow = tiles[row] || [];
+        const rowLen = existingRow.length;
+        if (rowLen === 0) continue;
 
-      const yAbs = end_y - reversedI;
+        const yAbs = end_y - reversedI;
 
-      const tStart = Math.max(0, -xOffset);
-      const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
-      if (colIndex < tStart || colIndex >= tEnd) continue;
+        const tStart = Math.max(0, -xOffset);
+        const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
+        if (colIndex < tStart || colIndex >= tEnd) continue;
 
-      const byteOffset = rowIndex * rowlengthBytes + (colIndex << 1);
-      const firstByte = unsortedTiles.charCodeAt(byteOffset);
-      const secondByte = unsortedTiles.charCodeAt(byteOffset + 1);
+        const byteOffset = rowIndex * rowlengthBytes + (colIndex << 1);
+        const firstByte = unsortedTiles.charCodeAt(byteOffset);
+        const secondByte = unsortedTiles.charCodeAt(byteOffset + 1);
 
-      // 16bit combination vectorized LUT LookUp (O(1) operation)
-      const lookupIndex = (firstByte << 8) | secondByte;
-      const tileType = VECTORIZED_TILE_LUT[lookupIndex];
+        // 16bit combination vectorized LUT LookUp (O(1) operation)
+        const lookupIndex = (firstByte << 8) | secondByte;
+        const tileType = VECTORIZED_TILE_LUT[lookupIndex];
 
-      if (tileType === 255) continue; // Check invalid hex
+        if (tileType === 255) continue; // Check invalid hex
 
-      const col = colIndex + xOffset;
-      // Use absolute coordinates for checker calculation to match computedRenderTiles
-      const checker = (col + yAbs + startPoint.x) & 1;
+        const col = colIndex + xOffset;
+        // Use absolute coordinates for checker calculation to match computedRenderTiles
+        const checker = (col + yAbs + currentStartPoint.x) & 1;
 
-      // Vectorized string conversion (O(1) LookUp)
-      let value: string = FILL_CHAR; // default value for Exception handling
-      if (tileType < 8) value = tileType === 0 ? 'O' : tileType.toString();
-      // Bomb
-      else if (tileType === 8) value = 'B';
-      // CLosed
-      else if (tileType === 24) value = `C${checker}`;
-      // Flag tiles
-      else if (tileType >= 16 && tileType < 24) {
-        const flagColor = Math.floor((tileType - 16) / 2);
-        value = `F${flagColor}${checker}`;
+        // Vectorized string conversion (O(1) LookUp)
+        let value: string = FILL_CHAR; // default value for Exception handling
+        if (tileType < 8) value = tileType === 0 ? 'O' : tileType.toString();
+        // Bomb
+        else if (tileType === 8) value = 'B';
+        // CLosed
+        else if (tileType === 24) value = `C${checker}`;
+        // Flag tiles
+        else if (tileType >= 16 && tileType < 24) {
+          const flagColor = Math.floor((tileType - 16) / 2);
+          value = `F${flagColor}${checker}`;
+        }
+
+        if (existingRow[col] !== value) changes.push({ row, col, value });
       }
 
-      if (existingRow[col] !== value) changes.push({ row, col, value });
-    }
+      return changes;
+    },
+    [],
+  );
 
-    return changes;
-  };
+  /** Create worker promises for tile processing */
+  const createWorkerPromises = useCallback(
+    (
+      workerCount: number,
+      tilesPerWorker: number,
+      totalTiles: number,
+      end_x: number,
+      end_y: number,
+      start_x: number,
+      start_y: number,
+      unsortedTiles: string,
+      type: 'All' | 'PART',
+    ) => {
+      const lenObject = { length: workerCount };
+      const currentStartPoint = startPoint;
+
+      return Array.from(lenObject, (_, workerIndex) => {
+        const workerStart = workerIndex * tilesPerWorker;
+        const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
+        return processTileData(end_x, end_y, start_x, start_y, unsortedTiles, type, currentStartPoint, workerStart, workerEnd);
+      });
+    },
+    [startPoint, processTileData],
+  );
 
   /** Apply incoming hex tile data to the internal tile grid */
-  const replaceTiles = async (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
-    if (unsortedTiles.length === 0) return;
+  const replaceTiles = useCallback(
+    async (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
+      if (unsortedTiles.length === 0) return;
+      console.log('replaceTiles', type, performance.now());
 
-    // For full window updates, pre-shift the grid with dummy tiles
-    if (type === 'All') moveCursor(start_x, start_y, end_x, end_y, Direction.ALL);
-    // Basic grid stats based on server-provided world coordinates
-    const tilesPerRow = Math.abs(end_x - start_x + 1);
-    const columnlength = Math.abs(start_y - end_y + 1);
-    const totalTiles = columnlength * tilesPerRow;
-    const cpuCores = navigator.hardwareConcurrency || 4;
+      // For full window updates, pre-shift the grid with dummy tiles
+      if (type === 'All') padtiles(start_x, start_y, end_x, end_y, Direction.ALL);
+      // Basic grid stats based on server-provided world coordinates
+      const tilesPerRow = Math.abs(end_x - start_x + 1);
+      const columnlength = Math.abs(start_y - end_y + 1);
+      const totalTiles = columnlength * tilesPerRow;
+      const cpuCores = navigator.hardwareConcurrency || 4;
 
-    // Number of workers: at most one per CPU core, roughly one worker per 32 tiles
-    const workerCount = Math.min(cpuCores, Math.ceil(totalTiles / 32));
-    const tilesPerWorker = Math.ceil(totalTiles / workerCount);
+      // Number of workers: at most one per CPU core, roughly one worker per 32 tiles
+      const workerCount = Math.min(cpuCores, Math.ceil(totalTiles / 32));
+      const tilesPerWorker = Math.ceil(totalTiles / workerCount);
 
-    // Internal processing uses an inner window trimmed by 1 tile on each X side
-    const innerStartX = start_x + 1;
-    const innerEndX = end_x - 1;
+      // Internal processing uses an inner window trimmed by 1 tile on each X side
+      const innerStartX = start_x + 1;
+      const innerEndX = end_x - 1;
 
-    // Check if SharedArrayBuffer is supported (high-performance mode)
-    const supportsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && typeof Atomics !== 'undefined';
+      // Check if SharedArrayBuffer is supported (high-performance mode)
+      const supportsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && typeof Atomics !== 'undefined';
 
-    let allChanges: Array<{ row: number; col: number; value: string }> = [];
+      let allChanges: Array<{ row: number; col: number; value: string }> = [];
 
-    if (supportsSharedArrayBuffer) {
-      // Parallel processing using SharedArrayBuffer + Atomics
-      const sharedBuffer = new SharedArrayBuffer(totalTiles * 4); // 4 bytes per tile (row, col, value)
-      const sharedArray = new Int32Array(sharedBuffer);
-      const changeCountBuffer = new SharedArrayBuffer(4);
-      const changeCountArray = new Int32Array(changeCountBuffer);
+      if (supportsSharedArrayBuffer) {
+        // Parallel processing using SharedArrayBuffer + Atomics
+        const sharedBuffer = new SharedArrayBuffer(totalTiles * 4); // 4 bytes per tile (row, col, value)
+        const sharedArray = new Int32Array(sharedBuffer);
+        const changeCountBuffer = new SharedArrayBuffer(4);
+        const changeCountArray = new Int32Array(changeCountBuffer);
 
-      // Initialize the counter safely using Atomics
-      Atomics.store(changeCountArray, 0, 0);
+        // Initialize the counter safely using Atomics
+        Atomics.store(changeCountArray, 0, 0);
 
-      // Process tiles in parallel and accumulate into shared array
-      const workerPromises = createWorkerPromises(
-        workerCount,
-        tilesPerWorker,
-        totalTiles,
-        innerEndX,
-        end_y,
-        innerStartX,
-        start_y,
-        unsortedTiles,
-        type,
-      );
-      const workerResults = await Promise.all(workerPromises);
-
-      workerResults.forEach(changes => {
-        changes.forEach(({ row, col, value }) => {
-          const changeIndex = Atomics.add(changeCountArray, 0, 1);
-          if (changeIndex >= totalTiles) return;
-          const sharedArrayIndex = changeIndex * 3;
-          sharedArray[sharedArrayIndex] = row;
-          sharedArray[sharedArrayIndex + 1] = col;
-          sharedArray[sharedArrayIndex + 2] = value.charCodeAt(0); // Simple string encoding
-        });
-      });
-
-      // Read back accumulated changes from the shared array
-      const finalChangeCount = Atomics.load(changeCountArray, 0);
-      for (let i = 0; i < finalChangeCount; i++) {
-        const row = sharedArray[i * 3];
-        const col = sharedArray[i * 3 + 1];
-        const value = String.fromCharCode(sharedArray[i * 3 + 2]);
-        allChanges.push({ row, col, value });
-      }
-    } else {
-      // Fallback: standard Promise.all parallelism without SharedArrayBuffer
-      try {
+        // Process tiles in parallel and accumulate into shared array
         const workerPromises = createWorkerPromises(
           workerCount,
           tilesPerWorker,
@@ -382,127 +293,75 @@ export default function Play() {
           type,
         );
         const workerResults = await Promise.all(workerPromises);
-        allChanges = workerResults.flat();
-      } catch (error) {
-        // Final fallback: synchronous processing on main thread
-        console.error('Ultra-Parallel Worker tile processing error:', error);
-        allChanges = processTileData(innerEndX, end_y, innerStartX, start_y, unsortedTiles, type);
-      }
-    }
 
-    // Apply all changes to ref and then flush once to state for rendering
-    applyTileChanges(allChanges);
-    console.log(cachingTilesRef.current.map(row => row.map(cell => cell[0]).join('')).join('\n'));
-    console.log('replace', performance.now());
-    setCachingTiles(cachingTilesRef.current.map(row => [...row]));
-  };
+        workerResults.forEach(changes => {
+          changes.forEach(({ row, col, value }) => {
+            const changeIndex = Atomics.add(changeCountArray, 0, 1);
+            if (changeIndex >= totalTiles) return;
+            const sharedArrayIndex = changeIndex * 3;
+            sharedArray[sharedArrayIndex] = row;
+            sharedArray[sharedArrayIndex + 1] = col;
+            sharedArray[sharedArrayIndex + 2] = value.charCodeAt(0); // Simple string encoding
+          });
+        });
+
+        // Read back accumulated changes from the shared array
+        const finalChangeCount = Atomics.load(changeCountArray, 0);
+        for (let i = 0; i < finalChangeCount; i++) {
+          const row = sharedArray[i * 3];
+          const col = sharedArray[i * 3 + 1];
+          const value = String.fromCharCode(sharedArray[i * 3 + 2]);
+          allChanges.push({ row, col, value });
+        }
+      } else {
+        // Fallback: standard Promise.all parallelism without SharedArrayBuffer
+        try {
+          const workerPromises = createWorkerPromises(
+            workerCount,
+            tilesPerWorker,
+            totalTiles,
+            innerEndX,
+            end_y,
+            innerStartX,
+            start_y,
+            unsortedTiles,
+            type,
+          );
+          const workerResults = await Promise.all(workerPromises);
+          allChanges = workerResults.flat();
+        } catch (error) {
+          // Final fallback: synchronous processing on main thread
+          console.error('Ultra-Parallel Worker tile processing error:', error);
+          allChanges = processTileData(innerEndX, end_y, innerStartX, start_y, unsortedTiles, type, startPoint);
+        }
+      }
+
+      // Apply all changes to tiles
+      applyTileChanges(allChanges);
+      const updatedTiles = useTileStore.getState().tiles;
+      console.log(updatedTiles.map(row => row.map(cell => cell[0]).join('')).join('\n'));
+      console.log('replace', performance.now());
+      // applyTileChanges already updates tiles, so we just need to trigger a re-render
+      setTiles([...updatedTiles.map(row => [...row])]);
+    },
+    [padtiles, createWorkerPromises, processTileData, startPoint, applyTileChanges, setTiles],
+  );
+
+  const getCurrentTileWidthAndHeight = useCallback(() => {
+    const newTileSize = ORIGIN_TILE_SIZE * zoom;
+    // Use the exact same calculation as tilePaddingWidth / tilePaddingHeight
+    const width = ((windowWidth * RENDER_RANGE) / newTileSize / 2) >>> 0;
+    const height = ((windowHeight * RENDER_RANGE) / newTileSize / 2) >>> 0;
+    return { width, height };
+  }, [zoom, windowWidth, windowHeight]);
 
   /** Message handler for tile processing */
-  const handleWebSocketMessage = async (wsMessage: string) => {
-    const { MY_CURSOR, CHAT, CURSORS_STATE, EXPLOSION, QUIT_CURSOR, SCOREBOARD_STATE, TILES_STATE } = GetMessageEvent;
-    try {
-      const { header, payload } = JSON.parse(wsMessage) as GetMessageType;
-      const { event } = header;
-      switch (event) {
-        /** When receiving requested tiles */
-        case TILES_STATE: {
-          const { tiles_li } = payload as GetTilesStatePayloadType;
-          // use replaceTiles
-          const promises = [];
-          for (const tiles of tiles_li) {
-            const { data, range } = tiles;
-            const { top_left, bottom_right } = range;
-            const { width, height } = getCurrentTileWidthAndHeight();
-            const [totalWidth, totalHeight] = [bottom_right.x - top_left.x + 1, top_left.y - bottom_right.y + 1];
-            const [resWidth, resHeight] = [(totalWidth / 2) >>> 0, (totalHeight / 2) >>> 0];
-
-            let isAll: 'PART' | 'All' = 'PART';
-            if (resWidth === width && resHeight === height) isAll = 'All';
-            promises.push(replaceTiles(top_left.x, bottom_right.y, bottom_right.x, top_left.y, data, isAll));
-          }
-          Promise.all(promises);
-          break;
-        }
-        case EXPLOSION: {
-          // The Explosion range is 1 tile including diagonal.
-          const { position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
-          const { x, y } = position;
-          const { x: cursorX, y: cursorY } = cursorPosition;
-          if (cursorX >= x - 1 && cursorX <= x + 1 && cursorY >= y - 1 && cursorY <= y + 1) {
-            // set revive time
-            setLeftReviveTime(10);
-          }
-          break;
-        }
-        case SCOREBOARD_STATE: {
-          const { scoreboard } = payload as GetScoreboardPayloadType;
-          setRanking(Object.entries(scoreboard).map(([ranking, score]) => ({ ranking: +ranking, score })));
-          const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
-          if (!clientCursorId) sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
-          break;
-        }
-        case CURSORS_STATE: {
-          const { cursors } = payload as GetCursorStatePayloadType;
-          const newCursors: OtherCursorState[] = cursors.map(cursor => ({
-            color: 'red',
-            id: cursor.id,
-            position: cursor.position,
-            message: '',
-            messageTime: 0,
-            pointer: { x: Infinity, y: Infinity },
-            score: cursor.score,
-            revive_at: new Date(cursor.active_at).getTime(),
-          }));
-          // find client cursor
-          const getCursors = newCursors.filter(cursor => cursor.id !== clientCursorId);
-          // 변화가 일어날 때만 오는 데, 이미 있는 커서는 위치만 변하고, 새로 온 커서는 새로 추가됩니다.
-          const addCursors = getCursors.filter(cursor => !nowCursors.some(c => c.id === cursor.id));
-          const updatedCursors = nowCursors.map(cursor => {
-            const getCursor = getCursors.find(c => c.id === cursor.id);
-            return getCursor ? getCursor : cursor;
-          });
-          setCursors([...addCursors, ...updatedCursors]);
-          const myCursor = newCursors.find(cursor => cursor.id === clientCursorId)!;
-          if (myCursor) {
-            const { position } = myCursor;
-            setScore(myCursor.score);
-            if (!(position.x === cursorPosition.x && position.y === cursorPosition.y)) {
-              setCursorPosition(position);
-              setOringinPosition(position);
-            }
-          }
-          break;
-        }
-        /** Fetches own information only once when connected. */
-        case MY_CURSOR: {
-          const { id } = payload as CursorIdType;
-          setId(id);
-          setTimeout(() => setIsInitialized(true), 0);
-          break;
-        }
-        case QUIT_CURSOR: {
-          const { id } = payload as CursorIdType;
-          setCursors(nowCursors.filter(cursor => cursor.id !== id));
-          break;
-        }
-        case CHAT: {
-          const { id, message } = payload as GetChatPayloadType;
-          const newCursors = nowCursors.map(cursor => {
-            if (cursor.id !== id) return cursor;
-            return { ...cursor, message, messageTime: Date.now() + 1000 * 8 };
-          });
-          setCursors(newCursors);
-          break;
-        }
-        default: {
-          break;
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-  useMessageProcess(handleWebSocketMessage);
+  useMessageHandler({
+    getCurrentTileWidthAndHeight,
+    replaceTiles,
+    setLeftReviveTime,
+    setIsInitialized,
+  });
 
   /** STABLE & FAST: Reliable tile computation without GPU bugs */
   const computedRenderTiles = useMemo(() => {
@@ -563,18 +422,10 @@ export default function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cachingTiles, cursorOriginPosition, renderStartPoint]);
 
-  const getCurrentTileWidthAndHeight = () => {
-    const newTileSize = ORIGIN_TILE_SIZE * zoom;
-    // Use the exact same calculation as tilePaddingWidth / tilePaddingHeight
-    const width = ((windowWidth * RENDER_RANGE) / newTileSize / 2) >>> 0;
-    const height = ((windowHeight * RENDER_RANGE) / newTileSize / 2) >>> 0;
-    return { width, height };
-  };
-
   /** Apply computed tiles */
   useLayoutEffect(() => {
     setRenderTiles(computedRenderTiles);
-  }, [computedRenderTiles]);
+  }, [computedRenderTiles, setRenderTiles]);
 
   /** Reset screen range when cursor position or screen size changes */
   useLayoutEffect(() => {
@@ -629,13 +480,10 @@ export default function Play() {
       {leftReviveTime > 0 && <Inactive time={leftReviveTime} />}
       <TutorialStep />
       <ScoreBoardComponent />
-      <CanvasDashboard tileSize={tileSize} renderRange={RENDER_RANGE} maxTileCount={MAX_TILE_COUNT} />
+      <CanvasDashboard renderRange={RENDER_RANGE} maxTileCount={MAX_TILE_COUNT} />
       <CanvasRenderComponent
         leftReviveTime={leftReviveTime}
         paddingTiles={RENDER_RANGE}
-        tiles={renderTiles}
-        tileSize={tileSize}
-        startPoint={renderStartPoint}
         cursorOriginX={cursorOriginPosition.x}
         cursorOriginY={cursorOriginPosition.y}
       />

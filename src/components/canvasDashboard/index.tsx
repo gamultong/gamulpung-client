@@ -7,15 +7,17 @@ import UpArrowSVG from '@/assets/upArrowSvg';
 import useScreenSize from '@/hooks/useScreenSize';
 import { useClickStore, useAnimationStore } from '@/store/interactionStore';
 import { useCursorStore } from '@/store/cursorStore';
+import { useTileSize } from '@/store/tileStore';
 import { useState } from 'react';
 
 type CanvasDashboardProps = {
-  tileSize: number;
   renderRange: number;
   maxTileCount: number;
 };
 
-export default function CanvasDashboard({ tileSize, renderRange, maxTileCount }: CanvasDashboardProps) {
+export default function CanvasDashboard({ renderRange, maxTileCount }: CanvasDashboardProps) {
+  // Get tileSize from zustand store
+  const tileSize = useTileSize();
   const zoomScale = 1.5;
   const { zoom, zoomDown, zoomUp, originPosition: cursorOriginPosition, score } = useCursorStore();
   const { windowWidth: w, windowHeight: h } = useScreenSize();

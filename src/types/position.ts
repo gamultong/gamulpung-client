@@ -11,5 +11,9 @@ export const Direction = {
   UP: 'U',
   DOWN: 'D',
   ALL: 'A',
+  UP_RIGHT: 'UR',
+  DOWN_RIGHT: 'DR',
+  UP_LEFT: 'UL',
+  DOWN_LEFT: 'DL',
 } as const;
 export type Direction = (typeof Direction)[keyof typeof Direction];

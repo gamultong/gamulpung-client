@@ -8,16 +8,18 @@ import useScreenSize from '@/hooks/useScreenSize';
 import { TileContent } from '@/types';
 import { fillCtxAndPath as fillPathInCtx, makePath2d, hexToRgb, lerp, canvasToTexture } from '@/utils';
 import { CURSOR_COLORS } from '@/constants';
+import { useRenderTiles, useTileSize } from '@/store/tileStore';
 
 interface TilemapProps {
-  tiles: string[][];
-  tileSize: number;
   tilePadWidth: number;
   tilePadHeight: number;
   className?: string;
 }
 
-export default function Tilemap({ tiles, tileSize, tilePadWidth, tilePadHeight, className }: TilemapProps) {
+export default function Tilemap({ tilePadWidth, tilePadHeight, className }: TilemapProps) {
+  // Get tiles and tileSize from zustand store
+  const tiles = useRenderTiles();
+  const tileSize = useTileSize();
   // constants
   const { flagPaths, tileColors, countColors, boomPaths } = RenderPaths;
   const { outer, inner } = tileColors;
