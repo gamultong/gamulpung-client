@@ -19,10 +19,7 @@ import { SendMessageEvent, SendSetWindowPayloadType, XYType, Direction } from '@
 import { VECTORIZED_TILE_LUT } from '@/utils/tiles';
 import useMessageHandler from '@/hooks/useMessageHandler';
 import { useCursorStore } from '@/store/cursorStore';
-import { useTileStore, useTiles } from '@/store/tileStore';
-
-// hex -> byte conversion is inlined in the hot loop to avoid call overhead
-const FILL_CHAR = '??';
+import { FILL_CHAR, useTileStore, useTiles } from '@/store/tileStore';
 
 export default function Play() {
   /** constants */

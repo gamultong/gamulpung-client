@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Direction, XYType } from '@/types';
 
-const FILL_CHAR = '??';
+export const FILL_CHAR = '??';
 
 interface TileStore {
   // 실제 타일 데이터 (canonical data)
