@@ -60,7 +60,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
   /** stores */
   const { windowHeight, windowWidth } = useScreenSize();
   const { setPosition: setClickPosition, x: clickX, y: clickY, setMovecost } = useClickStore();
-  const { position: cursorPosition, zoom, color, setPosition: setCursorPosition } = useCursorStore();
+  const { position: cursorPosition, zoom, color, setPosition: setCursorPosition, setOriginPosition } = useCursorStore();
   const { cursors } = useOtherUserCursorsStore();
   const { sendMessage } = useWebSocketStore();
   const { useAnimation } = useAnimationStore();
@@ -198,15 +198,20 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       if (dx === 1) direction += Direction.RIGHT;
       if (dx === -1) direction += Direction.LEFT;
 
+      [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
+      const position: XYType = { x: innerCursorX, y: innerCursorY };
+      sendMessage(SendMessageEvent.MOVE, { position });
+
+      setOriginPosition(position);
+      setCursorPosition(position);
+
+      currentPath = path;
+      setMovingPaths(foundPaths.slice(index));
+
       // Apply padding before animation starts
       if (direction && viewStartPoint && viewEndPoint)
         padtiles(viewStartPoint.x, viewEndPoint.y, viewEndPoint.x, viewStartPoint.y, direction as Direction);
 
-      [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
-      sendMessage(SendMessageEvent.MOVE, { position: { x: innerCursorX, y: innerCursorY } });
-
-      currentPath = path;
-      setMovingPaths(foundPaths.slice(index));
       if (useAnimation) moveAnimation(dx, dy);
       console.log('animation', performance.now());
     }, MOVE_SPEED);
