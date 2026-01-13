@@ -147,8 +147,22 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     const foundPaths = findPathUsingAStar(relativeX, relativeY, relativeTileX, relativetileY);
     let currentPath = foundPaths[index];
     if (currentPath?.x === undefined || currentPath?.y === undefined) return;
+
+    // Optimize path: remove unnecessary last step if already at target
+    const optimizedPaths = [...foundPaths];
+    if (optimizedPaths.length > 2) {
+      const secondLastPath = optimizedPaths[optimizedPaths.length - 2];
+      const secondLastAbsoluteX = relativeX + secondLastPath.x;
+      const secondLastAbsoluteY = relativeY + secondLastPath.y;
+
+      // If second last step is already at target, remove last step (unnecessary movement)
+      if (secondLastAbsoluteX === relativeTileX && secondLastAbsoluteY === relativetileY) {
+        optimizedPaths.pop();
+      }
+    }
+
     let [innerCursorX, innerCursorY] = [cursorPosition.x, cursorPosition.y];
-    setMovecost(foundPaths.length - 1);
+    setMovecost(optimizedPaths.length - 1);
 
     const moveAnimation = (dx: number, dy: number) => {
       const { interactionCanvasRef: I_canvas, otherCursorsRef: C_canvas, otherPointerRef: P_canvas } = canvasRefs;
@@ -168,7 +182,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     };
 
     movementInterval.current = setInterval(() => {
-      if (++index >= foundPaths.length) {
+      if (++index >= optimizedPaths.length) {
         // 최종 위치로 확실히 업데이트
         setCursorPosition({ x: relativeTileX + startPoint.x, y: relativetileY + startPoint.y });
         setMovingPaths([]);
@@ -178,7 +192,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
         onComplete?.(clickedX, clickedY);
         return;
       }
-      const path = foundPaths[index];
+      const path = optimizedPaths[index];
       if (!path) return;
       const [dx, dy] = [Math.sign(path.x - currentPath.x), Math.sign(path.y - currentPath.y)];
       setForwardPath({ x: dx, y: dy });
@@ -206,7 +220,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       setCursorPosition(position);
 
       currentPath = path;
-      setMovingPaths(foundPaths.slice(index));
+      setMovingPaths(optimizedPaths.slice(index));
 
       // Apply padding before animation starts
       if (direction && viewStartPoint && viewEndPoint)
@@ -268,6 +282,16 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       const { x: targetX, y: targetY } = findOpenedNeighborsAroundTarget(tileX, tileY);
       if (targetX === Infinity || targetY === Infinity || movingPaths.length > 0) return;
 
+      // Check if we're already at the target position
+      const targetAbsoluteX = targetX + startPoint.x;
+      const targetAbsoluteY = targetY + startPoint.y;
+      if (targetAbsoluteX === cursorOriginX && targetAbsoluteY === cursorOriginY) {
+        // Already at target, just perform action
+        const actionEvent = CLICK_TYPE_TO_EVENT[clickType];
+        if (actionEvent) clickEvent(tileX, tileY, actionEvent);
+        return;
+      }
+
       const actionEvent = CLICK_TYPE_TO_EVENT[clickType];
       if (!actionEvent) return;
 
@@ -301,8 +325,33 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
   /** Find opened neighbors around a target absolute tile position */
   const findOpenedNeighborsAroundTarget = (targetX: number, targetY: number) => {
     let result = { x: Infinity, y: Infinity };
+    const currentRelativeX = cursorOriginX - startPoint.x;
+    const currentRelativeY = cursorOriginY - startPoint.y;
+
+    // First, check if current position is a valid neighbor of target
+    const currentIsNeighbor =
+      CURSOR_DIRECTIONS.some(([dx, dy]) => {
+        return cursorOriginX === targetX + dx && cursorOriginY === targetY + dy;
+      }) ||
+      (cursorOriginX === targetX && cursorOriginY === targetY);
+
+    if (currentIsNeighbor) {
+      // Check if current position is opened and accessible
+      if (
+        currentRelativeY >= 0 &&
+        currentRelativeY < tiles.length &&
+        currentRelativeX >= 0 &&
+        currentRelativeX < tiles[currentRelativeY]?.length &&
+        checkTileHasOpened(tiles[currentRelativeY][currentRelativeX])
+      ) {
+        return { x: currentRelativeX, y: currentRelativeY };
+      }
+    }
+
+    // If current position is not valid, find the closest opened neighbor
+    let minDistance = Infinity;
     // Check 8 directions + self position around the target
-    [[0, 0], ...CURSOR_DIRECTIONS].some(([dx, dy]) => {
+    [[0, 0], ...CURSOR_DIRECTIONS].forEach(([dx, dy]) => {
       const absX = targetX + dx;
       const absY = targetY + dy;
       // Convert to relative coordinates
@@ -310,14 +359,18 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       const relativeY = absY - startPoint.y;
 
       if (relativeY < 0 || relativeY >= tiles.length || relativeX < 0 || relativeX >= tiles[relativeY]?.length) {
-        return false;
+        return;
       }
 
       const tileContent = tiles[relativeY][relativeX];
-      if (!checkTileHasOpened(tileContent)) return false;
+      if (!checkTileHasOpened(tileContent)) return;
 
-      result = { x: relativeX, y: relativeY };
-      return true;
+      // Calculate distance from current position
+      const distance = Math.abs(relativeX - currentRelativeX) + Math.abs(relativeY - currentRelativeY);
+      if (distance < minDistance) {
+        minDistance = distance;
+        result = { x: relativeX, y: relativeY };
+      }
     });
     return result;
   };
@@ -435,6 +488,34 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
    * @param targetY y position of target point
    * */
   const findPathUsingAStar = (startX: number, startY: number, targetX: number, targetY: number) => {
+    // Early return: if already at target, return empty path
+    if (startX === targetX && startY === targetY) {
+      return [{ x: 0, y: 0 }];
+    }
+
+    // Early return: if target is directly adjacent, return direct path
+    const dx = targetX - startX;
+    const dy = targetY - startY;
+    const isAdjacent = Math.abs(dx) <= 1 && Math.abs(dy) <= 1 && (dx !== 0 || dy !== 0);
+    if (isAdjacent) {
+      // Check if the target tile is accessible
+      const targetRelativeY = targetY;
+      const targetRelativeX = targetX;
+      if (
+        targetRelativeY >= 0 &&
+        targetRelativeY < tiles.length &&
+        targetRelativeX >= 0 &&
+        targetRelativeX < tiles[targetRelativeY]?.length &&
+        checkTileHasOpened(tiles[targetRelativeY][targetRelativeX]) &&
+        !checkIsOtherCursorOnTile(targetRelativeX, targetRelativeY)
+      ) {
+        return [
+          { x: 0, y: 0 },
+          { x: dx, y: dy },
+        ];
+      }
+    }
+
     // Function to get neighbors of a node
     const getNeighbors = (grid: (TileNode | null)[][], node: TileNode) => {
       const neighbors = [];
@@ -459,10 +540,16 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
 
     const grid = tiles.map((row, i) => row.map((tile, j) => (checkTileHasOpened(tile) ? new TileNode(j, i) : null)));
 
+    // Check if target is accessible
+    if (targetY < 0 || targetY >= grid.length || targetX < 0 || targetX >= grid[targetY]?.length || grid[targetY][targetX] === null) {
+      return [];
+    }
+
     /** initialize open and close list */
     let openNodeList = [start];
-    const closedList = [];
+    const closedList: TileNode[] = [];
     start.gScore = 0;
+    start.heuristic = Math.abs(startX - targetX) + Math.abs(startY - targetY);
     start.fTotal = start.gScore + start.heuristic;
 
     while (openNodeList.length > 0) {
@@ -584,10 +671,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
   useLayoutEffect(() => {
     if (!isInitializing && tiles.length > 0) return;
 
-    // 폰트를 비동기로 로드하되, 실패해도 계속 진행
     const loadFontOptional = async () => {
       try {
-        // 폰트가 이미 로드되었는지 확인
         if (document.fonts.check('1em LOTTERIACHAB')) return;
 
         const lotteriaChabFont = new FontFace(
