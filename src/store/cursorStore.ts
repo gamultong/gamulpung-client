@@ -16,7 +16,7 @@ interface ClientCursorState extends CursorState {
   setId: (id: string) => void;
   setColor: (newColor: CursorColor) => void;
   setPosition: (position: XYType) => void;
-  setOringinPosition: (position: XYType) => void;
+  setOriginPosition: (position: XYType) => void;
   zoom: number;
   setZoom: (zoom: number) => void;
   zoomUp: () => void;
@@ -51,7 +51,7 @@ export const useCursorStore = create<ClientCursorState>(set => ({
   setId: id => set({ id }),
   setColor: color => set({ color }),
   setZoom: zoom => set({ zoom }),
-  setOringinPosition: (position: XYType) => set({ originPosition: position }),
+  setOriginPosition: (position: XYType) => set({ originPosition: position }),
   setPosition: (position: XYType) => set({ position }),
   zoomUp: () => set(s => ({ zoom: s.zoom * 1.5 < 1.7 ? s.zoom * 1.5 : s.zoom })),
   zoomDown: () => set(s => ({ zoom: s.zoom / 1.5 > 0.15 ? s.zoom / 1.5 : s.zoom })),

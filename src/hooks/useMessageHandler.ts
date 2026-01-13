@@ -29,7 +29,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
   // Store hooks
   const { setCursors, cursors: nowCursors } = useOtherUserCursorsStore();
   const { sendMessage } = useWebSocketStore();
-  const { position: cursorPosition, setPosition: setCursorPosition, setOringinPosition, setId, id: clientCursorId, setScore } = useCursorStore();
+  const { position, setPosition, setOriginPosition, setId, id: clientCursorId, setScore } = useCursorStore();
   const { setRanking } = useRankStore();
 
   const handleWebSocketMessage = useCallback(
@@ -62,7 +62,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
             // The Explosion range is 1 tile including diagonal.
             const { position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
             const { x, y } = position;
-            const { x: cursorX, y: cursorY } = cursorPosition;
+            const { x: cursorX, y: cursorY } = position;
             if (cursorX >= x - 1 && cursorX <= x + 1 && cursorY >= y - 1 && cursorY <= y + 1) {
               // set revive time
               setLeftReviveTime(10);
@@ -100,10 +100,11 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
             if (myCursor) {
               const { position } = myCursor;
               setScore(myCursor.score);
-              if (!(position.x === cursorPosition.x && position.y === cursorPosition.y)) {
-                setCursorPosition(position);
-                setOringinPosition(position);
-              }
+              console.log('mycursor', position, performance.now());
+              // if (!(position.x === cursorPosition.x && position.y === cursorPosition.y)) {
+              setPosition(position);
+              setOriginPosition(position);
+              // }
             }
             break;
           }
@@ -136,22 +137,8 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
         console.error(e);
       }
     },
-    [
-      getCurrentTileWidthAndHeight,
-      replaceTiles,
-      setLeftReviveTime,
-      setIsInitialized,
-      cursorPosition,
-      clientCursorId,
-      nowCursors,
-      setCursors,
-      setRanking,
-      sendMessage,
-      setCursorPosition,
-      setOringinPosition,
-      setId,
-      setScore,
-    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [replaceTiles, position, clientCursorId, nowCursors],
   );
 
   // Handle WebSocket messages automatically
