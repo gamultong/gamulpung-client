@@ -339,7 +339,7 @@ export default function Play() {
       // Apply all changes to tiles
       applyTileChanges(allChanges);
       const updatedTiles = useTileStore.getState().tiles;
-      console.log(updatedTiles.map(row => row.map(cell => cell[0]).join('')).join('\n'));
+      // console.log(updatedTiles.map(row => row.map(cell => cell[0]).join('')).join('\n'));
       console.log('replace', performance.now());
       // applyTileChanges already updates tiles, so we just need to trigger a re-render
       setTiles([...updatedTiles.map(row => [...row])]);

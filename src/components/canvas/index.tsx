@@ -109,7 +109,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     canvas.style.height = rect.height + 'px';
 
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingQuality = 'low';
     if ('textRenderingOptimization' in ctx) ctx.textRenderingOptimization = 'optimizeQuality';
   };
 
