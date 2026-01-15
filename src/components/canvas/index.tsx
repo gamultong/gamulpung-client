@@ -45,8 +45,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
   const tiles = useRenderTiles();
   const tileSize = useTileSize();
   const startPoint = useRenderStartPoint();
-  const viewStartPoint = useStartPoint();
-  const viewEndPoint = useEndPoint();
+  const viewStart = useStartPoint();
+  const viewEnd = useEndPoint();
   const { padtiles } = useTileStore();
   /** constants */
   const MOVE_SPEED = 200; // ms
@@ -214,8 +214,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       let direction = '';
       if (dy === 1) direction += Direction.DOWN; // y-axis is reversed, so dy === 1 means moving down
       if (dy === -1) direction += Direction.UP; // y-axis is reversed, so dy === -1 means moving up
-      if (dx === 1) direction += Direction.RIGHT;
-      if (dx === -1) direction += Direction.LEFT;
+      if (dx === 1) direction += Direction.RIGHT; // dx === 1 means moving right
+      if (dx === -1) direction += Direction.LEFT; // dx === -1 means moving left
 
       [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
       const position: XYType = { x: innerCursorX, y: innerCursorY };
@@ -228,8 +228,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       setMovingPaths(optimizedPaths.slice(index));
 
       // Apply padding before animation starts
-      if (direction && viewStartPoint && viewEndPoint)
-        padtiles(viewStartPoint.x, viewEndPoint.y, viewEndPoint.x, viewStartPoint.y, direction as Direction);
+      if (direction && viewStart && viewEnd) padtiles(viewStart.x, viewEnd.y, viewEnd.x, viewStart.y, direction as Direction);
 
       if (useAnimation) moveAnimation(dx, dy);
       console.log('animation', performance.now());
@@ -449,9 +448,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
 
     // First, check if current position is a valid neighbor of target
     const currentIsNeighbor =
-      CURSOR_DIRECTIONS.some(([dx, dy]) => {
-        return cursorOriginX === targetX + dx && cursorOriginY === targetY + dy;
-      }) ||
+      CURSOR_DIRECTIONS.some(([dx, dy]) => cursorOriginX === targetX + dx && cursorOriginY === targetY + dy) ||
       (cursorOriginX === targetX && cursorOriginY === targetY);
 
     if (currentIsNeighbor) {
@@ -608,9 +605,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
    * */
   const findPathUsingAStar = (startX: number, startY: number, targetX: number, targetY: number) => {
     // Early return: if already at target, return empty path
-    if (startX === targetX && startY === targetY) {
-      return [{ x: 0, y: 0 }];
-    }
+    if (startX === targetX && startY === targetY) return [{ x: 0, y: 0 }];
 
     // Early return: if target is directly adjacent, return direct path
     const dx = targetX - startX;

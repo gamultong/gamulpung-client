@@ -100,7 +100,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
             if (myCursor) {
               const { position } = myCursor;
               setScore(myCursor.score);
-              console.log('mycursor', position, performance.now());
+              // console.log('mycursor', position, performance.now());
               // if (!(position.x === cursorPosition.x && position.y === cursorPosition.y)) {
               setPosition(position);
               setOriginPosition(position);
