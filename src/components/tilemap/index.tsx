@@ -360,8 +360,13 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
         if (!closed) {
           openedCount++;
           const hash = ((rowIdx * 4099) ^ (colIdx * 131)) >>> 0; // make it to unsigned integer number
-          const head = +content[0];
-          openedAccumulator = (openedAccumulator + hash + (head | 0)) >>> 0; // make it to unsigned integer number
+          try {
+            const head = +content[0];
+            openedAccumulator = (openedAccumulator + hash + (head | 0)) >>> 0; // make it to unsigned integer number
+          } catch (e) {
+            console.error('Error in opened tiles accumulator', e);
+            console.error('content', content);
+          }
         }
 
         // Outer sprite
