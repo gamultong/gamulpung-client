@@ -353,6 +353,9 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
       for (let colIdx = startCol; colIdx <= endCol; colIdx++) {
         const { xFloat, yFloat, startX, startY, endX, endY, w, h } = snapTileEdges(colIdx, rowIdx, tilePadWidth, tilePadHeight, tileSize);
         const content = tiles[rowIdx][colIdx];
+        if (!content[0]) {
+          console.error('Error in tilemap', content);
+        }
         const { outerTexture, innerTexture, closed } = getTileTexturesForContent(content, defaultTextures);
         const { key } = makeNumericKeys(rowIdx, colIdx, tileSize);
 
@@ -360,13 +363,8 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
         if (!closed) {
           openedCount++;
           const hash = ((rowIdx * 4099) ^ (colIdx * 131)) >>> 0; // make it to unsigned integer number
-          try {
-            const head = +content[0];
-            openedAccumulator = (openedAccumulator + hash + (head | 0)) >>> 0; // make it to unsigned integer number
-          } catch (e) {
-            console.error('Error in opened tiles accumulator', e);
-            console.error('content', content);
-          }
+          const head = +content[0];
+          openedAccumulator = (openedAccumulator + hash + (head | 0)) >>> 0; // make it to unsigned integer number
         }
 
         // Outer sprite
