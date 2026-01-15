@@ -51,6 +51,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
   /** constants */
   const MOVE_SPEED = 200; // ms
   const BASE_OFFSET = tileSize >> 1; // tileSize / 2
+  const LONG_PRESS_DURATION = 500; // ms
+  const LONG_PRESS_MOVE_THRESHOLD = 10; // px
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
   const otherCursorPadding = 1 / (paddingTiles - 1); // padding for other cursors
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
@@ -67,6 +69,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
 
   /** References */
   const movementInterval = useRef<NodeJS.Timeout | null>(null);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const longPressPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const didLongPressRef = useRef<boolean>(false);
   const canvasRefs = {
     interactionCanvasRef: useRef<HTMLCanvasElement>(null),
     otherCursorsRef: useRef<HTMLCanvasElement>(null),
@@ -233,8 +238,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
 
   // Only Move, Open-tiles, Set-flag
   const clickEvent = (x: number, y: number, clickType: SendMessageEvent) => {
-    const { MOVE, OPEN_TILES, SET_FLAG } = SendMessageEvent;
-    if ([MOVE, OPEN_TILES, SET_FLAG].some(event => event === clickType)) {
+    const { MOVE, OPEN_TILES, SET_FLAG, DISMANTLE_MINE } = SendMessageEvent;
+    if ([MOVE, OPEN_TILES, SET_FLAG, DISMANTLE_MINE].some(event => event === clickType)) {
       const payload: PositionType = { position: { x, y } };
       sendMessage(clickType, payload);
     }
@@ -248,6 +253,11 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
 
   /** Click Event Handler */
   const handleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    // If this click follows a long press, ignore it once
+    if (didLongPressRef.current) {
+      didLongPressRef.current = false;
+      return;
+    }
     const interactionCanvas = canvasRefs.interactionCanvasRef.current;
     if (!interactionCanvas) return;
     const { left: rectLeft, top: rectTop } = interactionCanvas.getBoundingClientRect();
@@ -304,6 +314,115 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
     if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];
     moveCursor(targetTileX, targetTileY, tileX, tileY);
+  };
+
+  /** Long-press handlers (for flagging via press-and-hold) */
+  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    // Handle right click immediately
+    if (event.button === 2) {
+      event.preventDefault();
+      const interactionCanvas = canvasRefs.interactionCanvasRef.current;
+      if (!interactionCanvas) return;
+
+      const { left: rectLeft, top: rectTop } = interactionCanvas.getBoundingClientRect();
+      const [clickX, clickY] = [event.clientX - rectLeft, event.clientY - rectTop];
+      const [tileArrayX, tileArrayY] = [(clickX / tileSize + tilePaddingWidth) >>> 0, (clickY / tileSize + tilePaddingHeight) >>> 0];
+      const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
+      const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
+      const isClosed = clickedTileContent.includes(TileContent.CLOSED);
+      const isFlagged = clickedTileContent.includes(TileContent.FLAGGED);
+      const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
+      const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
+
+      if (isInRange && (isClosed || isFlagged)) {
+        clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
+      } else if (!isInRange && (isClosed || isFlagged)) {
+        const { x: targetX, y: targetY } = findOpenedNeighborsAroundTarget(tileX, tileY);
+        if (!(targetX === Infinity || targetY === Infinity || movingPaths.length > 0)) {
+          const targetAbsoluteX = targetX + startPoint.x;
+          const targetAbsoluteY = targetY + startPoint.y;
+          if (targetAbsoluteX === cursorOriginX && targetAbsoluteY === cursorOriginY) {
+            clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
+          } else {
+            moveCursor(targetX, targetY, tileX, tileY, (cx, cy) => clickEvent(cx, cy, SendMessageEvent.SET_FLAG));
+          }
+        }
+      }
+      return;
+    }
+
+    // Handle left click for long press
+    const interactionCanvas = canvasRefs.interactionCanvasRef.current;
+    if (!interactionCanvas) return;
+
+    const { left: rectLeft, top: rectTop } = interactionCanvas.getBoundingClientRect();
+    const [clickX, clickY] = [event.clientX - rectLeft, event.clientY - rectTop];
+
+    longPressPositionRef.current = { x: clickX, y: clickY };
+
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+
+    longPressTimerRef.current = setTimeout(() => {
+      const position = longPressPositionRef.current;
+      if (!position) return;
+
+      const { x, y } = position;
+      const [tileArrayX, tileArrayY] = [(x / tileSize + tilePaddingWidth) >>> 0, (y / tileSize + tilePaddingHeight) >>> 0];
+      const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
+
+      const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
+      const isClosed = clickedTileContent.includes(TileContent.CLOSED);
+      const isFlagged = clickedTileContent.includes(TileContent.FLAGGED);
+      const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
+      const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
+
+      // In-range: perform DISMANTLE_MINE action
+      if (isInRange) {
+        if (isClosed || isFlagged) {
+          clickEvent(tileX, tileY, SendMessageEvent.DISMANTLE_MINE);
+        }
+      } else if (isClosed || isFlagged) {
+        // Out-of-range closed/flagged: move near and then dismantle mine
+        const { x: targetX, y: targetY } = findOpenedNeighborsAroundTarget(tileX, tileY);
+        if (!(targetX === Infinity || targetY === Infinity || movingPaths.length > 0)) {
+          moveCursor(targetX, targetY, tileX, tileY, (cx, cy) => clickEvent(cx, cy, SendMessageEvent.DISMANTLE_MINE));
+        }
+      }
+
+      didLongPressRef.current = true;
+      longPressTimerRef.current = null;
+      longPressPositionRef.current = null;
+    }, LONG_PRESS_DURATION);
+  };
+
+  const handlePointerUp = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressPositionRef.current = null;
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!longPressTimerRef.current || !longPressPositionRef.current) return;
+
+    const interactionCanvas = canvasRefs.interactionCanvasRef.current;
+    if (!interactionCanvas) return;
+
+    const { left: rectLeft, top: rectTop } = interactionCanvas.getBoundingClientRect();
+    const [currentX, currentY] = [event.clientX - rectLeft, event.clientY - rectTop];
+
+    const dx = currentX - longPressPositionRef.current.x;
+    const dy = currentY - longPressPositionRef.current.y;
+    const distance = Math.hypot(dx, dy);
+
+    if (distance > LONG_PRESS_MOVE_THRESHOLD) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+      longPressPositionRef.current = null;
+    }
   };
 
   /** Check if the clicked tile is already a neighbor of the cursor */
@@ -736,7 +855,11 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
             ref={canvasRefs.interactionCanvasRef}
             width={windowWidth}
             height={windowHeight}
-            onPointerDown={handleClick}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerMove={handlePointerMove}
+            onPointerCancel={handlePointerUp}
+            onClick={handleClick}
           />
         </div>
       )}
