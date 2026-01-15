@@ -353,6 +353,7 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
       for (let colIdx = startCol; colIdx <= endCol; colIdx++) {
         const { xFloat, yFloat, startX, startY, endX, endY, w, h } = snapTileEdges(colIdx, rowIdx, tilePadWidth, tilePadHeight, tileSize);
         const content = tiles[rowIdx][colIdx];
+        if (!content) continue;
         const { outerTexture, innerTexture, closed } = getTileTexturesForContent(content, defaultTextures);
         const { key } = makeNumericKeys(rowIdx, colIdx, tileSize);
 
