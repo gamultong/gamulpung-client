@@ -13,6 +13,7 @@
     "@pixi/react": "^7.1.2",
     "next": "^14.2.35",
     "pixi.js": "^7.4.2",
+    "qs": "^6.14.1",
     "react-flow-renderer": "^10.3.17",
     "sass": "^1.80.7",
     "showdown": "^2.1.0",
@@ -27,7 +28,11 @@
     "eslint-config-next": "^14.2.35",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.1",
+    "glob": "^10.5.0",
     "prettier": "^3.3.3",
     "typescript": "^5"
+  },
+  "overrides": {
+    "glob": "^10.5.0"
   }
 }
