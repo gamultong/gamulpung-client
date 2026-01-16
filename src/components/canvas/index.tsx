@@ -57,6 +57,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
   const otherCursorPadding = 1 / (paddingTiles - 1); // padding for other cursors
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
   const [otherCursorPaddingWidth, otherCursorPaddingHeight] = [tilePaddingWidth * otherCursorPadding, tilePaddingHeight * otherCursorPadding];
+  const [lastMovingPosition, setLastMovingPosition] = useState<XYType>({ x: Infinity, y: Infinity });
   const { boomPaths, cursorPaths, flagPaths, stunPaths } = RenderPaths;
 
   /** stores */
@@ -82,7 +83,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
   /** States */
   const [isInitializing, setIsInitializing] = useState<boolean>(true);
   const [movingPaths, setMovingPaths] = useState<XYType[]>([]);
-  const [leftMovingPaths, setLeftMovingPaths] = useState<XYType>({ x: 0, y: 0 });
+  const [leftMovingPaths, setLeftMovingPaths] = useState<XYType>({ x: Infinity, y: Infinity });
   const [forwardPath, setForwardPath] = useState<XYType>();
   const [cachedVectorAssets, setCachedVectorAssets] = useState<VectorImagesType>();
 
@@ -164,6 +165,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       if (secondLastAbsoluteX === relativeTileX && secondLastAbsoluteY === relativetileY) {
         optimizedPaths.pop();
       }
+
+      const lastPath = optimizedPaths[optimizedPaths.length - 1];
+      if (lastPath)
+        setLastMovingPosition({
+          x: cursorPosition.x + lastPath.x,
+          y: cursorPosition.y + lastPath.y,
+        });
     }
 
     let [innerCursorX, innerCursorY] = [cursorPosition.x, cursorPosition.y];
@@ -191,6 +199,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
         // 최종 위치로 확실히 업데이트
         setCursorPosition({ x: relativeTileX + startPoint.x, y: relativetileY + startPoint.y });
         setMovingPaths([]);
+        setLastMovingPosition({ x: Infinity, y: Infinity });
         cancelCurrentMovement();
 
         // Execute callback after movement completes
@@ -328,6 +337,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       const [tileArrayX, tileArrayY] = [(clickX / tileSize + tilePaddingWidth) >>> 0, (clickY / tileSize + tilePaddingHeight) >>> 0];
       const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
       const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
+      // Setting content of clicked tile to update click position for rendering
+      setClickPosition(tileX, tileY, clickedTileContent);
       const isClosed = clickedTileContent.includes(TileContent.CLOSED);
       const isFlagged = clickedTileContent.includes(TileContent.FLAGGED);
       const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
@@ -729,8 +740,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     };
     // Setting compensation value for cursor positions
     const compensation = {
-      x: clickX - cursorOriginX - leftMovingPaths.x - tilePaddingWidth + relativeX + 0.5,
-      y: clickY - cursorOriginY - leftMovingPaths.y - tilePaddingHeight + relativeY + 0.5,
+      x: lastMovingPosition.x - cursorOriginX - leftMovingPaths.x - tilePaddingWidth + relativeX + 0.5,
+      y: lastMovingPosition.y - cursorOriginY - leftMovingPaths.y - tilePaddingHeight + relativeY + 0.5,
     };
 
     // If both distanceX and distanceY are 0, the cursor will not rotate.
@@ -756,6 +767,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     interactionCtx.miterLimit = 2;
     interactionCtx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
 
+    // after index 0, draw path
     for (let i = 1; i < scaledPoints.length - 1; i++) {
       const [prev, curr, next] = [...scaledPoints.slice(i - 1, i + 2)];
       const [prevVectorX, prevVectorY] = [curr.x - prev.x, curr.y - prev.y];
