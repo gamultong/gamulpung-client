@@ -13,7 +13,7 @@ export default function ScoreBoardComponent() {
   return (
     <div className={S.scoreboard}>
       <div className={S.toggle} onPointerDown={toggleTop}>
-        <span>RANKING</span>
+        <span>RANK</span>
         {topToggle ? <DownArrowSVG /> : <UpArrowSVG />}
       </div>
       {topToggle && (
