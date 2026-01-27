@@ -1,3 +1,4 @@
+import { useCursorStore } from '@/store/cursorStore';
 import S from './style.module.scss';
 import { useState } from 'react';
 import ReactFlow, { Background, useNodesState, useEdgesState, MarkerType } from 'react-flow-renderer';
@@ -76,11 +77,18 @@ const INITIAL_EDGES = SKILL_DATA.flatMap(skill =>
 );
 
 export default function SkillTree() {
+  // stores
+  const { score } = useCursorStore();
+
   // states
   const [isClosed, setIsClosed] = useState(false);
-  const [nodes, , onNodesChange] = useNodesState(INITIAL_NODES);
+  const [nodes, setNodes, onNodesChange] = useNodesState(INITIAL_NODES);
   const [edges, , onEdgesChange] = useEdgesState(INITIAL_EDGES);
   const [selectedSkill, setSelectedSkill] = useState<(typeof SKILL_DATA)[number] | null>(null);
+  const [purchasedSkills, setPurchasedSkills] = useState<number[]>([]);
+
+  // temp states
+  const [purchaseableSkills, setPurchaseableSkills] = useState<(typeof SKILL_DATA)[number][]>([]);
 
   // functions
   const toggleClosed = () => setIsClosed(!isClosed);
@@ -88,6 +96,26 @@ export default function SkillTree() {
   const onNodeClick = (_: React.MouseEvent, node: { id: string }) => {
     const skill = SKILL_DATA.find(s => String(s.id) === node.id);
     setSelectedSkill(skill ?? null);
+  };
+
+  const purchaseSkill = () => {
+    if (!selectedSkill) return;
+    console.log(selectedSkill, purchasedSkills, score);
+    if (purchasedSkills.includes(selectedSkill.id)) return;
+    if (score < selectedSkill.cost) return;
+
+    setPurchasedSkills(prev => [...prev, selectedSkill.id]);
+    setNodes(prev =>
+      prev.map(node =>
+        node.id === String(selectedSkill.id)
+          ? {
+              ...node,
+              className: 'skill-purchased',
+            }
+          : node,
+      ),
+    );
+    setPurchaseableSkills(purchaseableSkills.filter(s => s.id !== selectedSkill.id));
   };
 
   return (
@@ -103,7 +131,7 @@ export default function SkillTree() {
                   <p className={S.skillCost}>{selectedSkill.cost.toLocaleString()} G</p>
                   <p className={S.skillDesc}>{selectedSkill.description}</p>
                 </div>
-                <button>BUY</button>
+                <button onClick={purchaseSkill}>BUY</button>
               </>
             ) : (
               <span className={S.skillPlaceholder}>SKILL INFO</span>
