@@ -165,17 +165,11 @@
 
 :global(.react-flow__edge-path) {
   stroke-width: 3px !important;
-  stroke: rgba(129, 230, 217, 0.8) !important;
 }
 
 :global(.react-flow__edge) {
   :global(.react-flow__edge-path) {
     stroke-width: 3px !important;
-    stroke: rgba(129, 230, 217, 0.8) !important;
-  }
-
-  :global(.react-flow__arrowhead) {
-    fill: rgba(129, 230, 217, 0.9) !important;
   }
 }
 
