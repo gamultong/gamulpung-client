@@ -3,6 +3,7 @@
  * https://github.com/gamultong/gamulpung-server-new/tree/develop/docs/API_spec/WebSocket
  */
 
+import { ItemsStateType } from '@/store/cursorStore';
 import { PositionType, XYType } from './position';
 import { WindowSizeType } from './window';
 
@@ -71,7 +72,7 @@ export type CursorIdType = { id: string };
 export type GetChatPayloadType = SendChatPayloadType & CursorIdType;
 
 // iso format string
-export type CursorStateType = CursorIdType & PositionType & { active_at: string; score: number };
+export type CursorStateType = CursorIdType & PositionType & { active_at: string; score: number; items: ItemsStateType };
 export type GetCursorStatePayloadType = { cursors: CursorStateType[] };
 export type GetExplosionPayloadType = PositionType;
 

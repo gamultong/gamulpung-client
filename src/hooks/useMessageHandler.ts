@@ -29,7 +29,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
   // Store hooks
   const { setCursors, cursors: nowCursors } = useOtherUserCursorsStore();
   const { sendMessage } = useWebSocketStore();
-  const { position, setPosition, setOriginPosition, setId, id: clientCursorId, setScore } = useCursorStore();
+  const { position, setPosition, setOriginPosition, setId, id: clientCursorId, setScore, setItems } = useCursorStore();
   const { setRanking } = useRankStore();
 
   const handleWebSocketMessage = useCallback(
@@ -87,6 +87,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
               pointer: { x: Infinity, y: Infinity },
               score: cursor.score,
               revive_at: new Date(cursor.active_at).getTime(),
+              items: cursor.items,
             }));
             // find client cursor
             const getCursors = newCursors.filter(cursor => cursor.id !== clientCursorId);
@@ -100,6 +101,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
             if (myCursor) {
               const { position } = myCursor;
               setScore(myCursor.score);
+              setItems(myCursor.items);
               // console.log('mycursor', position, performance.now());
               // if (!(position.x === cursorPosition.x && position.y === cursorPosition.y)) {
               setPosition(position);

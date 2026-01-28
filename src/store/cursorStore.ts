@@ -2,12 +2,17 @@ import { XYType } from '@/types';
 import { CursorColor } from '@/types/canvas';
 import { create } from 'zustand';
 
+export interface ItemsStateType {
+  bomb: number;
+}
+
 interface CursorState {
   id: string;
   position: XYType;
   color: CursorColor;
   revive_at?: number;
   score: number;
+  items: ItemsStateType;
 }
 
 interface ClientCursorState extends CursorState {
@@ -26,6 +31,7 @@ interface ClientCursorState extends CursorState {
   moveLeft: () => void;
   moveRight: () => void;
   setScore: (score: number) => void;
+  setItems: (items: ItemsStateType) => void;
 }
 
 export interface OtherCursorState extends CursorState {
@@ -48,6 +54,7 @@ export const useCursorStore = create<ClientCursorState>(set => ({
   originPosition: { x: 0, y: 0 },
   zoom: 1,
   score: 0,
+  items: { bomb: 0 },
   setId: id => set({ id }),
   setColor: color => set({ color }),
   setZoom: zoom => set({ zoom }),
@@ -60,6 +67,7 @@ export const useCursorStore = create<ClientCursorState>(set => ({
   moveLeft: () => set(s => ({ position: { x: s.position.x - 1, y: s.position.y } })),
   moveRight: () => set(s => ({ position: { x: s.position.x + 1, y: s.position.y } })),
   setScore: score => set({ score }),
+  setItems: items => set({ items }),
 }));
 
 export const useOtherUserCursorsStore = create<OtherUserCursorListState>(set => ({
