@@ -16,17 +16,27 @@ type CanvasDashboardProps = {
 };
 
 export default function CanvasDashboard({ renderRange, maxTileCount }: CanvasDashboardProps) {
-  // Get tileSize from zustand store
-  const tileSize = useTileSize();
+  // constants
   const zoomScale = 1.5;
-  const { zoom, zoomDown, zoomUp, originPosition: cursorOriginPosition, score } = useCursorStore();
-  const { windowWidth: w, windowHeight: h } = useScreenSize();
+
+  // stores
+  const tileSize = useTileSize();
   const { x: clickX, y: clickY } = useClickStore();
   const { useAnimation, setAnimation } = useAnimationStore();
+  const { windowWidth, windowHeight } = useScreenSize();
+  const { zoom, zoomDown, zoomUp, originPosition: cursorOriginPosition, score } = useCursorStore();
 
-  const checkMaxTileCount = () => (w * renderRange) / (tileSize / zoomScale) + (h * renderRange) / (tileSize / zoomScale) > maxTileCount;
+  const rowRange = (windowWidth * renderRange) / (tileSize / zoomScale);
+  const colRange = (windowHeight * renderRange) / (tileSize / zoomScale);
+
+  // states
   const [bottomToggle, setBottomToggle] = useState(true);
+  const [isBombMode, setIsBombMode] = useState(false);
+
+  // functions
+  const checkMaxTileCount = () => rowRange * colRange > maxTileCount;
   const toggleBottom = () => setBottomToggle(!bottomToggle);
+  const toggleBombMode = () => setIsBombMode(!isBombMode);
   const lessZoom = () => !checkMaxTileCount() && zoomDown();
 
   return (
@@ -47,6 +57,9 @@ export default function CanvasDashboard({ renderRange, maxTileCount }: CanvasDas
               <p>
                 <PointerSVG />
                 &nbsp;({clickX === Infinity ? '' : clickX}, {clickY === Infinity ? '' : clickY})
+              </p>
+              <p className={`${S.bomb} ${isBombMode ? S.bombMode : ''}`} onClick={toggleBombMode}>
+                💣 X 0
               </p>
               <p className={S.animation} onClick={() => setAnimation(!useAnimation)}>
                 <input type="checkbox" checked={useAnimation} readOnly />

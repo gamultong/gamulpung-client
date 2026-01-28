@@ -20,6 +20,7 @@ import { VECTORIZED_TILE_LUT } from '@/utils/tiles';
 import useMessageHandler from '@/hooks/useMessageHandler';
 import { useCursorStore } from '@/store/cursorStore';
 import { FILL_CHAR, useTileStore, useTiles } from '@/store/tileStore';
+import SkillTree from '@/components/skilltree';
 
 export default function Play() {
   /** constants */
@@ -479,6 +480,7 @@ export default function Play() {
       {leftReviveTime > 0 && <Inactive time={leftReviveTime} />}
       <TutorialStep />
       <ScoreBoardComponent />
+      <SkillTree />
       <CanvasDashboard renderRange={RENDER_RANGE} maxTileCount={MAX_TILE_COUNT} />
       <CanvasRenderComponent
         leftReviveTime={leftReviveTime}

@@ -11,6 +11,12 @@
       "options": {
         "parser": "json"
       }
+    },
+    {
+      "files": ["*.ts", "*.tsx"],
+      "options": {
+        "parser": "babel-ts"
+      }
     }
   ],
   "parser": "babel-ts",
