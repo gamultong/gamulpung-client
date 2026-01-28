@@ -1,4 +1,4 @@
-import { useCursorStore } from '@/store/cursorStore';
+// import { useCursorStore } from '@/store/cursorStore';
 import S from './style.module.scss';
 import { useState } from 'react';
 import ReactFlow, { Background, useNodesState, useEdgesState, MarkerType } from 'react-flow-renderer';
@@ -71,19 +71,19 @@ const INITIAL_EDGES = SKILL_DATA.flatMap(skill =>
     source: String(skill.id),
     target: String(nextId),
     animated: true,
-    style: { strokeWidth: 4, stroke: '#ffffff' },
+    style: { strokeWidth: 4, stroke: '#ff4d4f' }, // 기본은 빨간색
     markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20 },
   })),
 );
 
 export default function SkillTree() {
   // stores
-  const { score } = useCursorStore();
+  // const { score } = useCursorStore();
 
   // states
   const [isClosed, setIsClosed] = useState(false);
   const [nodes, setNodes, onNodesChange] = useNodesState(INITIAL_NODES);
-  const [edges, , onEdgesChange] = useEdgesState(INITIAL_EDGES);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(INITIAL_EDGES);
   const [selectedSkill, setSelectedSkill] = useState<(typeof SKILL_DATA)[number] | null>(null);
   const [purchasedSkills, setPurchasedSkills] = useState<number[]>([]);
 
@@ -100,21 +100,32 @@ export default function SkillTree() {
 
   const purchaseSkill = () => {
     if (!selectedSkill) return;
-    console.log(selectedSkill, purchasedSkills, score);
     if (purchasedSkills.includes(selectedSkill.id)) return;
-    if (score < selectedSkill.cost) return;
 
-    setPurchasedSkills(prev => [...prev, selectedSkill.id]);
-    setNodes(prev =>
-      prev.map(node =>
-        node.id === String(selectedSkill.id)
-          ? {
-              ...node,
-              className: 'skill-purchased',
-            }
-          : node,
-      ),
-    );
+    // check prerequisite skills
+    const prerequisiteSkills = SKILL_DATA.filter(skill => skill.nexts.includes(selectedSkill.id));
+    const hasAllPrerequisites = prerequisiteSkills.every(skill => purchasedSkills.includes(skill.id));
+    // if not all prerequisite skills are purchased, cannot purchase
+    if (!hasAllPrerequisites && prerequisiteSkills.length > 0) return;
+
+    // check remaining score
+    // if (score < selectedSkill.cost) return;
+
+    setPurchasedSkills(prev => {
+      const next = [...prev, selectedSkill.id];
+      const newEdges = edges.map(edge => {
+        const stroke = next.includes(+edge.target) ? '#ffd700' : '#ff4d4f';
+        return { ...edge, style: { ...edge.style, stroke } };
+      });
+
+      setEdges(newEdges);
+
+      return next;
+    });
+
+    const newNodes = nodes.map(node => (node.id === `${selectedSkill.id}` ? { ...node, className: 'skill-purchased' } : node));
+
+    setNodes(newNodes);
     setPurchaseableSkills(purchaseableSkills.filter(s => s.id !== selectedSkill.id));
   };
 
