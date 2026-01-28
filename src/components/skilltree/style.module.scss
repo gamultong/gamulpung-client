@@ -100,7 +100,7 @@
   }
 }
 
-:global(.react-flow__node-default) {
+.skillTree :global(.react-flow__node-default) {
   border-radius: 16px !important;
   width: 140px !important;
   height: 60px !important;
@@ -134,8 +134,8 @@
   }
 }
 
-:global(.react-flow__node-default:hover),
-:global(.react-flow__node-default.selected) {
+.skillTree :global(.react-flow__node-default:hover),
+.skillTree :global(.react-flow__node-default.selected) {
   transform: translateY(-3px) scale(1.03);
   border-color: #ffe066;
   box-shadow:
@@ -144,7 +144,7 @@
     0 0 26px rgba(255, 224, 102, 0.7) !important;
 }
 
-:global(.react-flow__node-default.skill-purchased) {
+.skillTree :global(.react-flow__node-default.skill-purchased) {
   background: linear-gradient(135deg, #ffd700, #ffb700) !important;
   color: #1a1a1a !important;
   border-color: #ffe066 !important;
@@ -153,8 +153,8 @@
     0 0 18px rgba(255, 183, 0, 0.6) !important;
 }
 
-:global(.react-flow__node-default.skill-purchased:hover),
-:global(.react-flow__node-default.skill-purchased.selected) {
+.skillTree :global(.react-flow__node-default.skill-purchased:hover),
+.skillTree :global(.react-flow__node-default.skill-purchased.selected) {
   transform: translateY(-3px) scale(1.03);
   background: linear-gradient(135deg, #ffe066, #ffc107) !important;
   border-color: #ffffff !important;
@@ -163,11 +163,11 @@
     0 0 22px rgba(255, 215, 0, 0.9) !important;
 }
 
-:global(.react-flow__edge-path) {
+.skillTree :global(.react-flow__edge-path) {
   stroke-width: 3px !important;
 }
 
-:global(.react-flow__edge) {
+.skillTree :global(.react-flow__edge) {
   :global(.react-flow__edge-path) {
     stroke-width: 3px !important;
   }
