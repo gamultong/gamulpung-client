@@ -26,7 +26,7 @@ export default function Play() {
   /** constants */
   const RENDER_RANGE = 1.5;
   const ORIGIN_TILE_SIZE = 80;
-  const MAX_TILE_COUNT = 530;
+  const MAX_TILE_COUNT = 20000;
   const WS_URL = `${process.env.NEXT_PUBLIC_WS_HOST}/session`;
 
   /** stores */
