@@ -25,6 +25,7 @@ export default function CanvasDashboard({ renderRange, maxTileCount }: CanvasDas
   const { useAnimation, setAnimation } = useAnimationStore();
   const { windowWidth, windowHeight } = useScreenSize();
   const { zoom, zoomDown, zoomUp, originPosition: cursorOriginPosition, score, items } = useCursorStore();
+  const bombCount = items?.bomb ?? 0;
 
   const rowRange = (windowWidth * renderRange) / (tileSize / zoomScale);
   const colRange = (windowHeight * renderRange) / (tileSize / zoomScale);
@@ -59,7 +60,7 @@ export default function CanvasDashboard({ renderRange, maxTileCount }: CanvasDas
                 &nbsp;({clickX === Infinity ? '' : clickX}, {clickY === Infinity ? '' : clickY})
               </p>
               <p className={`${S.bomb} ${isBombMode ? S.bombMode : ''}`} onClick={toggleBombMode}>
-                💣 X {items.bomb}
+                💣 X {bombCount}
               </p>
               <p className={S.animation} onClick={() => setAnimation(!useAnimation)}>
                 <input type="checkbox" checked={useAnimation} readOnly />
