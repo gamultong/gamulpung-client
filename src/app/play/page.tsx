@@ -134,8 +134,6 @@ export default function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, startPoint]);
 
-  // applyTileChanges is now from zustand store
-
   /** Common tile processing logic */
   const processTileData = useCallback(
     (
@@ -463,9 +461,7 @@ export default function Play() {
   }, [windowWidth, windowHeight, zoom, isInitialized]);
 
   useEffect(() => {
-    if (leftReviveTime > 0) {
-      reviveTimerRef.current = setTimeout(() => setLeftReviveTime(e => (e > 0 ? e - 1 : e)), 1000);
-    }
+    if (leftReviveTime > 0) reviveTimerRef.current = setTimeout(() => setLeftReviveTime(e => (e > 0 ? e - 1 : e)), 1000);
     return () => {
       if (reviveTimerRef.current) {
         clearTimeout(reviveTimerRef.current);

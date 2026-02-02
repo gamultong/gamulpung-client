@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import S from './style.module.scss';
 import React, { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
 import RenderPaths from '@/assets/renderPaths.json';
@@ -13,6 +13,7 @@ import Tilemap from '@/components/tilemap';
 import { XYType, VectorImagesType, TileContent, SendMessageEvent, PositionType, Direction } from '@/types';
 import { CURSOR_COLORS, CURSOR_DIRECTIONS, OTHER_CURSOR_COLORS } from '@/constants';
 import { makePath2d, makePath2dFromArray } from '@/utils';
+import useSkillTree from '@/hooks/useSkillTree';
 
 class TileNode {
   x: number;
@@ -48,8 +49,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
   const viewStart = useStartPoint();
   const viewEnd = useEndPoint();
   const { padtiles } = useTileStore();
+  const { MOVE_SPEED } = useSkillTree();
+
   /** constants */
-  const MOVE_SPEED = 200; // ms
   const BASE_OFFSET = tileSize >> 1; // tileSize / 2
   const LONG_PRESS_DURATION = 500; // ms
   const LONG_PRESS_MOVE_THRESHOLD = 10; // px
