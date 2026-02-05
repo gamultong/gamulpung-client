@@ -65,7 +65,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
   /** stores */
   const { windowHeight, windowWidth } = useScreenSize();
   const { setPosition: setClickPosition, x: clickX, y: clickY, setMovecost } = useClickStore();
-  const { position: cursorPosition, zoom, color, setPosition: setCursorPosition, setOriginPosition } = useCursorStore();
+  const { position: cursorPosition, zoom, color, setPosition: setCursorPosition, setOriginPosition, isBombMode } = useCursorStore();
   const { cursors } = useOtherUserCursorsStore();
   const { sendMessage } = useWebSocketStore();
   const { useAnimation } = useAnimationStore();
@@ -248,8 +248,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
 
   // Only Move, Open-tiles, Set-flag
   const clickEvent = (x: number, y: number, clickType: SendMessageEvent) => {
-    const { MOVE, OPEN_TILES, SET_FLAG, DISMANTLE_MINE } = SendMessageEvent;
-    if ([MOVE, OPEN_TILES, SET_FLAG, DISMANTLE_MINE].some(event => event === clickType)) {
+    const { MOVE, OPEN_TILES, SET_FLAG, DISMANTLE_MINE, INSTALL_BOMB } = SendMessageEvent;
+    if ([MOVE, OPEN_TILES, SET_FLAG, DISMANTLE_MINE, INSTALL_BOMB].some(event => event === clickType)) {
       const payload: PositionType = { position: { x, y } };
       sendMessage(clickType, payload);
     }
@@ -288,13 +288,20 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
 
     // Handle in-range actions immediately (only for closed/flagged tiles)
     if (isInRange) {
-      if ((isClosed || isFlagged) && clickType === 'special') {
-        clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
-      } else if (isClosed && clickType === 'general') {
-        clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
+      if (isBombMode) {
+        if ((isClosed || isFlagged) && clickType === 'special') {
+          clickEvent(tileX, tileY, SendMessageEvent.INSTALL_BOMB);
+          return;
+        }
+      } else {
+        if ((isClosed || isFlagged) && clickType === 'special') {
+          clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
+        } else if (isClosed && clickType === 'general') {
+          clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
+        }
+        // Open tiles should continue to default movement logic
+        if (isClosed || isFlagged) return;
       }
-      // Open tiles should continue to default movement logic
-      if (isClosed || isFlagged) return;
     }
 
     // Handle out-of-range clicks: move to nearest opened tile, then perform action
@@ -302,17 +309,18 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       const { x: targetX, y: targetY } = findOpenedNeighborsAroundTarget(tileX, tileY);
       if (targetX === Infinity || targetY === Infinity || movingPaths.length > 0) return;
 
+      // Bomb mode: right-click → INSTALL_BOMB; otherwise use CLICK_TYPE_TO_EVENT
+      const actionEvent = isBombMode && clickType === 'special' ? SendMessageEvent.INSTALL_BOMB : CLICK_TYPE_TO_EVENT[clickType];
+
       // Check if we're already at the target position
       const targetAbsoluteX = targetX + startPoint.x;
       const targetAbsoluteY = targetY + startPoint.y;
       if (targetAbsoluteX === cursorOriginX && targetAbsoluteY === cursorOriginY) {
         // Already at target, just perform action
-        const actionEvent = CLICK_TYPE_TO_EVENT[clickType];
         if (actionEvent) clickEvent(tileX, tileY, actionEvent);
         return;
       }
 
-      const actionEvent = CLICK_TYPE_TO_EVENT[clickType];
       if (!actionEvent) return;
 
       moveCursor(targetX, targetY, tileX, tileY, (x, y) => clickEvent(x, y, actionEvent));
@@ -346,17 +354,18 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
       const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
 
+      const rightClickEvent = isBombMode ? SendMessageEvent.INSTALL_BOMB : SendMessageEvent.SET_FLAG;
       if (isInRange && (isClosed || isFlagged)) {
-        clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
+        clickEvent(tileX, tileY, rightClickEvent);
       } else if (!isInRange && (isClosed || isFlagged)) {
         const { x: targetX, y: targetY } = findOpenedNeighborsAroundTarget(tileX, tileY);
         if (!(targetX === Infinity || targetY === Infinity || movingPaths.length > 0)) {
           const targetAbsoluteX = targetX + startPoint.x;
           const targetAbsoluteY = targetY + startPoint.y;
           if (targetAbsoluteX === cursorOriginX && targetAbsoluteY === cursorOriginY) {
-            clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
+            clickEvent(tileX, tileY, rightClickEvent);
           } else {
-            moveCursor(targetX, targetY, tileX, tileY, (cx, cy) => clickEvent(cx, cy, SendMessageEvent.SET_FLAG));
+            moveCursor(targetX, targetY, tileX, tileY, (cx, cy) => clickEvent(cx, cy, rightClickEvent));
           }
         }
       }

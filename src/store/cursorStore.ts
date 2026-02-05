@@ -22,6 +22,7 @@ interface ClientCursorState extends CursorState {
   setColor: (newColor: CursorColor) => void;
   setPosition: (position: XYType) => void;
   setOriginPosition: (position: XYType) => void;
+  isBombMode: boolean;
   zoom: number;
   setZoom: (zoom: number) => void;
   zoomUp: () => void;
@@ -32,6 +33,7 @@ interface ClientCursorState extends CursorState {
   moveRight: () => void;
   setScore: (score: number) => void;
   setItems: (items: ItemsStateType) => void;
+  setIsBombMode: (isBombMode: boolean) => void;
 }
 
 export interface OtherCursorState extends CursorState {
@@ -54,10 +56,12 @@ export const useCursorStore = create<ClientCursorState>(set => ({
   originPosition: { x: 0, y: 0 },
   zoom: 1,
   score: 0,
+  isBombMode: false,
   items: { bomb: 0 },
   setId: id => set({ id }),
   setColor: color => set({ color }),
   setZoom: zoom => set({ zoom }),
+  setIsBombMode: (isBombMode: boolean) => set({ isBombMode }),
   setOriginPosition: (position: XYType) => set({ originPosition: position }),
   setPosition: (position: XYType) => set({ position }),
   zoomUp: () => set(s => ({ zoom: s.zoom * 1.5 < 1.7 ? s.zoom * 1.5 : s.zoom })),
