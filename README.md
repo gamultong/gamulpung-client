@@ -56,7 +56,7 @@ npm >= 10.9
 In .env file, There are two environment values.
 ```
 NEXT_PUBLIC_WS_HOST = 
-NEXT_PUBLIC_HOST = "http://localhost:3001/gamulpung-client"
+NEXT_PUBLIC_HOST = "http://localhost:2001/gamulpung-client"
 ```
 
 Mail me to get websocket host url:
