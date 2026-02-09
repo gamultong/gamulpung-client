@@ -5,8 +5,8 @@ import { Texture, SCALE_MODES, MIPMAP_MODES, WRAP_MODES, Container as PixiContai
 import RenderPaths from '@/assets/renderPaths.json';
 import { useCursorStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
-import { TileContent } from '@/types';
 import { fillCtxAndPath as fillPathInCtx, makePath2d, hexToRgb, lerp, canvasToTexture } from '@/utils';
+import { Tile, isTileClosedOrFlag, isTileBomb, isTileFlag, getFlagColor, getTileChecker } from '@/utils/tileGrid';
 import { CURSOR_COLORS } from '@/constants';
 import { useRenderTiles, useTileSize } from '@/store/tileStore';
 
@@ -201,11 +201,9 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
     return { tileKeyNum, key };
   };
 
-  const isClosedOrFlag = (t: string) => [TileContent.CLOSED, TileContent.FLAGGED].some(f => f === t);
-
-  const getTileTexturesForContent = (content: string, defaults: { outerTexture?: Texture; innerTexture?: Texture }) => {
-    if (!content || !isClosedOrFlag(content[0])) return { ...defaults, closed: false };
-    const isEven = +content.slice(-1) % 2;
+  const getTileTexturesForContent = (content: number, defaults: { outerTexture?: Texture; innerTexture?: Texture }) => {
+    if (!isTileClosedOrFlag(content)) return { ...defaults, closed: false };
+    const isEven = getTileChecker(content);
     const textureCache = cachedTexturesRef.current;
     const [outerEven, innerEven] = [outer[isEven], inner[isEven]];
     const outerTexture = textureCache.get(`${outerEven[0]}${outerEven[1]}${tileSize}`) || defaults.outerTexture;
@@ -303,9 +301,9 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
   const { outerSprites, innerSprites, boomSprites, flagSprites, textElements, closedEntries, bgKey } = useMemo(() => {
     const emptySprites = { outerSprites: [], innerSprites: [], boomSprites: [], flagSprites: [], textElements: [], closedEntries: [], bgKey: '' };
     // Compute visible bounds once (avoid per-tile bounds check)
-    const totalRows = tiles.length;
+    const totalRows = tiles.height;
     if (totalRows === 0) return emptySprites;
-    const totalCols = tiles[0].length;
+    const totalCols = tiles.width;
     if (totalCols === 0) return emptySprites;
     const { startCol, endCol, startRow, endRow } = computeVisibleBounds(
       totalRows,
@@ -352,8 +350,8 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
     for (let rowIdx = startRow; rowIdx <= endRow; rowIdx++) {
       for (let colIdx = startCol; colIdx <= endCol; colIdx++) {
         const { xFloat, yFloat, startX, startY, endX, endY, w, h } = snapTileEdges(colIdx, rowIdx, tilePadWidth, tilePadHeight, tileSize);
-        const content = tiles[rowIdx][colIdx];
-        if (!content) continue;
+        const content = tiles.get(rowIdx, colIdx);
+        if (content === Tile.FILL) continue;
         const { outerTexture, innerTexture, closed } = getTileTexturesForContent(content, defaultTextures);
         const { key } = makeNumericKeys(rowIdx, colIdx, tileSize);
 
@@ -361,8 +359,7 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
         if (!closed) {
           openedCount++;
           const hash = ((rowIdx * 4099) ^ (colIdx * 131)) >>> 0; // make it to unsigned integer number
-          const head = +content[0];
-          openedAccumulator = (openedAccumulator + hash + (head | 0)) >>> 0; // make it to unsigned integer number
+          openedAccumulator = (openedAccumulator + hash + content) >>> 0; // numeric tile value directly
         }
 
         // Outer sprite
@@ -399,7 +396,7 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
         }
 
         // Boom sprite
-        if (content === TileContent.BOOM && texturesReady) {
+        if (isTileBomb(content) && texturesReady) {
           const boomKey = `boom${tileSize}`;
           const texture = textureCache.get('boom');
           const baseBoom = boomCache.get(boomKey) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={texture} />;
@@ -411,8 +408,8 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
         }
 
         // Flag sprite
-        if (content[0] === TileContent.FLAGGED && texturesReady) {
-          const flagIndex = content[1];
+        if (isTileFlag(content) && texturesReady) {
+          const flagIndex = getFlagColor(content);
           const flagKey = `flag${flagIndex}${tileSize}`;
           const texture = textureCache.get(`flag${flagIndex}`);
           const baseFlag = flagCache.get(flagKey) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={texture} anchor={0.5} />;
@@ -423,7 +420,7 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
           flagSprites[flagIdx++] = cloneElement(baseFlag, { key, x: startX + tileSize / 2, y: startY + tileSize / 2, scale });
         }
 
-        const texture = numbersReady ? numberTexturesRef.current.get(+content) : undefined;
+        const texture = numbersReady && content >= 1 && content <= 7 ? numberTexturesRef.current.get(content) : undefined;
         if (!texture) continue;
         // Number sprite elements
         const keyNum = `num${content}${tileSize}`;

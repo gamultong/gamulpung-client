@@ -1,45 +1,44 @@
 import { create } from 'zustand';
 import { Direction, XYType } from '@/types';
-
-export const FILL_CHAR = '??';
+import { TileGrid, Tile } from '@/utils/tileGrid';
 
 interface TileStore {
-  // 실제 타일 데이터 (canonical data)
-  tiles: string[][];
+  // Canonical tile data (flat Uint8Array via TileGrid)
+  tiles: TileGrid;
 
-  // 렌더링용 스냅샷
-  renderTiles: string[][];
+  // Rendering snapshot
+  renderTiles: TileGrid;
 
-  // 시작/끝 포인트
+  // View bounds
   startPoint: XYType;
   endPoint: XYType;
   renderStartPoint: XYType;
 
-  // 타일 크기
+  // Tile pixel size
   tileSize: number;
 
-  // 업데이트 함수들
-  setTiles: (tiles: string[][]) => void;
-  setRenderTiles: (tiles: string[][]) => void;
+  // Setters
+  setTiles: (tiles: TileGrid) => void;
+  setRenderTiles: (tiles: TileGrid) => void;
   setStartPoint: (point: XYType) => void;
   setEndPoint: (point: XYType) => void;
   setRenderStartPoint: (point: XYType) => void;
   setTileSize: (size: number) => void;
 
-  // 타일 조작 함수들
+  // Tile manipulation
   padtiles: (from_x: number, from_y: number, to_x: number, to_y: number, type: Direction) => void;
-  applyTileChanges: (changes: Array<{ row: number; col: number; value: string }>) => void;
+  applyTileChanges: (changes: Array<{ row: number; col: number; value: number }>) => void;
 
-  // 초기화
+  // Reset
   reset: () => void;
 
-  // 헬퍼 함수
-  getTile: (row: number, col: number) => string;
+  // Helper
+  getTile: (row: number, col: number) => number;
 }
 
 const initialState = {
-  tiles: [] as string[][],
-  renderTiles: [] as string[][],
+  tiles: TileGrid.empty(),
+  renderTiles: TileGrid.empty(),
   startPoint: { x: 0, y: 0 },
   endPoint: { x: 0, y: 0 },
   renderStartPoint: { x: 0, y: 0 },
@@ -58,36 +57,61 @@ export const useTileStore = create<TileStore>((set, get) => ({
 
   padtiles: (from_x, from_y, to_x, to_y, type) => {
     const { tiles } = get();
-    const [rowLen, colLen] = [Math.abs(to_x - from_x) + 1, Math.abs(to_y - from_y) + 1];
-    const [rowLenObj, colLenObj] = [{ length: rowLen }, { length: colLen }];
+    const width = Math.abs(to_x - from_x) + 1;
+    const height = Math.abs(to_y - from_y) + 1;
     const { UP, ALL, DOWN, LEFT, RIGHT, DOWN_LEFT, DOWN_RIGHT, UP_LEFT, UP_RIGHT } = Direction;
-    const prevTiles = tiles;
-    let map = [...prevTiles];
-    const fillRow = Array(rowLen).fill(FILL_CHAR);
 
-    if (type === ALL) map = Array.from(colLenObj, () => Array.from(rowLenObj, () => FILL_CHAR));
-    // except type is ALL, pad 1 block to side
-    if (type === UP || type === UP_RIGHT || type === UP_LEFT) map = [fillRow, ...map.slice(0, map.length - 1)];
-    if (type === DOWN || type === DOWN_RIGHT || type === DOWN_LEFT) map = [...map.slice(1, map.length), fillRow];
-    if (type === LEFT || type === DOWN_LEFT || type === UP_LEFT)
-      for (let i = 0; i < map.length && map[i]; i++) map[i] = [FILL_CHAR, ...map[i].slice(0, map[i].length - 1)];
-    if (type === RIGHT || type === DOWN_RIGHT || type === UP_RIGHT)
-      for (let i = 0; i < map.length && map[i]; i++) map[i] = [...map[i].slice(1, map[i].length), FILL_CHAR];
+    if (type === ALL) {
+      set({ tiles: new TileGrid(width, height) });
+      return;
+    }
+
+    const newGrid = tiles.clone();
+    const { data } = newGrid;
+    const w = newGrid.width;
+    const h = newGrid.height;
+
+    // Vertical shifts
+    if (type === UP || type === UP_RIGHT || type === UP_LEFT) {
+      // Shift rows down by 1, fill top row with FILL
+      data.copyWithin(w, 0, (h - 1) * w);
+      data.fill(Tile.FILL, 0, w);
+    }
+    if (type === DOWN || type === DOWN_RIGHT || type === DOWN_LEFT) {
+      // Shift rows up by 1, fill bottom row with FILL
+      data.copyWithin(0, w, h * w);
+      data.fill(Tile.FILL, (h - 1) * w, h * w);
+    }
+
+    // Horizontal shifts
+    if (type === LEFT || type === DOWN_LEFT || type === UP_LEFT) {
+      // Shift columns right by 1, fill leftmost column with FILL
+      for (let row = h - 1; row >= 0; row--) {
+        const offset = row * w;
+        data.copyWithin(offset + 1, offset, offset + w - 1);
+        data[offset] = Tile.FILL;
+      }
+    }
+    if (type === RIGHT || type === DOWN_RIGHT || type === UP_RIGHT) {
+      // Shift columns left by 1, fill rightmost column with FILL
+      for (let row = 0; row < h; row++) {
+        const offset = row * w;
+        data.copyWithin(offset, offset + 1, offset + w);
+        data[offset + w - 1] = Tile.FILL;
+      }
+    }
 
     console.log('pad after', type, performance.now());
-    set({ tiles: map });
+    set({ tiles: newGrid });
   },
 
   applyTileChanges: changes => {
     if (changes.length < 1) return;
     const { tiles } = get();
-    const newTiles = tiles.map(row => [...row]); // Deep copy
-
-    changes.forEach(({ row, col, value }) => {
-      if (!newTiles[row]) return;
-      newTiles[row][col] = value;
-    });
-
+    const newTiles = tiles.clone(); // Uint8Array.slice() - native memcpy
+    for (const { row, col, value } of changes) {
+      newTiles.set(row, col, value);
+    }
     set({ tiles: newTiles });
   },
 
@@ -95,11 +119,11 @@ export const useTileStore = create<TileStore>((set, get) => ({
 
   getTile: (row, col) => {
     const { tiles } = get();
-    return tiles[row]?.[col] || FILL_CHAR;
+    return tiles.get(row, col);
   },
 }));
 
-// 성능 최적화를 위한 selector hooks
+// Performance selector hooks
 export const useTiles = () => useTileStore(state => state.tiles);
 export const useRenderTiles = () => useTileStore(state => state.renderTiles);
 export const useStartPoint = () => useTileStore(state => state.startPoint);

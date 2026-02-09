@@ -10,7 +10,8 @@ import useWebSocketStore from '@/store/websocketStore';
 import { useRenderTiles, useRenderStartPoint, useTileSize, useStartPoint, useEndPoint, useTileStore } from '@/store/tileStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
-import { XYType, VectorImagesType, TileContent, SendMessageEvent, PositionType, Direction } from '@/types';
+import { XYType, VectorImagesType, SendMessageEvent, PositionType, Direction } from '@/types';
+import { isTileOpened, isTileClosed, isTileFlag } from '@/utils/tileGrid';
 import { CURSOR_COLORS, CURSOR_DIRECTIONS, OTHER_CURSOR_COLORS } from '@/constants';
 import { makePath2d, makePath2dFromArray } from '@/utils';
 import useSkillTree from '@/hooks/useSkillTree';
@@ -131,11 +132,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     };
   }, []);
 
-  /** Check if the tile has been opened */
-  const checkTileHasOpened = (tile: string) => {
-    const type = tile[0];
-    return type !== TileContent.CLOSED && type !== TileContent.FLAGGED;
-  };
+  /** Check if the tile has been opened (not closed, not flagged) */
+  const checkTileHasOpened = (tile: number) => isTileOpened(tile);
 
   /**
    * General Click Event Handler
@@ -277,11 +275,11 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     const [tileArrayX, tileArrayY] = [(clickX / tileSize + tilePaddingWidth) >>> 0, (clickY / tileSize + tilePaddingHeight) >>> 0];
     const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
     // Setting content of clicked tile
-    const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
-    setClickPosition(tileX, tileY, clickedTileContent);
+    const clickedTile = tiles.get(tileArrayY, tileArrayX);
+    setClickPosition(tileX, tileY, clickedTile);
 
-    const isClosed = clickedTileContent.includes(TileContent.CLOSED);
-    const isFlagged = clickedTileContent.includes(TileContent.FLAGGED);
+    const isClosed = isTileClosed(clickedTile);
+    const isFlagged = isTileFlag(clickedTile);
     const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
     const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
     const clickType = event.buttons !== 2 ? 'general' : 'special'; // 1 move, open-tiles, 2 set-flag
@@ -343,11 +341,11 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       const [clickX, clickY] = [event.clientX - rectLeft, event.clientY - rectTop];
       const [tileArrayX, tileArrayY] = [(clickX / tileSize + tilePaddingWidth) >>> 0, (clickY / tileSize + tilePaddingHeight) >>> 0];
       const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
-      const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
+      const clickedTile = tiles.get(tileArrayY, tileArrayX);
       // Setting content of clicked tile to update click position for rendering
-      setClickPosition(tileX, tileY, clickedTileContent);
-      const isClosed = clickedTileContent.includes(TileContent.CLOSED);
-      const isFlagged = clickedTileContent.includes(TileContent.FLAGGED);
+      setClickPosition(tileX, tileY, clickedTile);
+      const isClosed = isTileClosed(clickedTile);
+      const isFlagged = isTileFlag(clickedTile);
       const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
       const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
 
@@ -385,9 +383,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       const [tileArrayX, tileArrayY] = [(x / tileSize + tilePaddingWidth) >>> 0, (y / tileSize + tilePaddingHeight) >>> 0];
       const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
 
-      const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
-      const isClosed = clickedTileContent.includes(TileContent.CLOSED);
-      const isFlagged = clickedTileContent.includes(TileContent.FLAGGED);
+      const clickedTile = tiles.get(tileArrayY, tileArrayX);
+      const isClosed = isTileClosed(clickedTile);
+      const isFlagged = isTileFlag(clickedTile);
       const isActionable = isClosed || isFlagged;
       const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
       const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
@@ -444,8 +442,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     let result = { x: Infinity, y: Infinity };
     [[0, 0], ...CURSOR_DIRECTIONS].some(([dx, dy]) => {
       const [x, y] = [currentX + dx, currentY + dy];
-      if (!tiles[y] || !tiles[y][x]) return false;
-      if (!checkTileHasOpened(tiles[y][x])) return false;
+      if (y < 0 || y >= tiles.height || x < 0 || x >= tiles.width) return false;
+      if (!checkTileHasOpened(tiles.get(y, x))) return false;
       result = { x, y };
       return true;
     });
@@ -467,10 +465,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       // Check if current position is opened and accessible
       if (
         currentRelativeY >= 0 &&
-        currentRelativeY < tiles.length &&
+        currentRelativeY < tiles.height &&
         currentRelativeX >= 0 &&
-        currentRelativeX < tiles[currentRelativeY]?.length &&
-        checkTileHasOpened(tiles[currentRelativeY][currentRelativeX])
+        currentRelativeX < tiles.width &&
+        checkTileHasOpened(tiles.get(currentRelativeY, currentRelativeX))
       ) {
         return { x: currentRelativeX, y: currentRelativeY };
       }
@@ -486,11 +484,11 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       const relativeX = absX - startPoint.x;
       const relativeY = absY - startPoint.y;
 
-      if (relativeY < 0 || relativeY >= tiles.length || relativeX < 0 || relativeX >= tiles[relativeY]?.length) {
+      if (relativeY < 0 || relativeY >= tiles.height || relativeX < 0 || relativeX >= tiles.width) {
         return;
       }
 
-      const tileContent = tiles[relativeY][relativeX];
+      const tileContent = tiles.get(relativeY, relativeX);
       if (!checkTileHasOpened(tileContent)) return;
 
       // Calculate distance from current position
@@ -629,10 +627,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       const targetRelativeX = targetX;
       if (
         targetRelativeY >= 0 &&
-        targetRelativeY < tiles.length &&
+        targetRelativeY < tiles.height &&
         targetRelativeX >= 0 &&
-        targetRelativeX < tiles[targetRelativeY]?.length &&
-        checkTileHasOpened(tiles[targetRelativeY][targetRelativeX]) &&
+        targetRelativeX < tiles.width &&
+        checkTileHasOpened(tiles.get(targetRelativeY, targetRelativeX)) &&
         !checkIsOtherCursorOnTile(targetRelativeX, targetRelativeY)
       ) {
         return [
@@ -664,7 +662,14 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     /** initialize tiles */
     const [start, target] = [new TileNode(startX, startY), new TileNode(targetX, targetY)];
 
-    const grid = tiles.map((row, i) => row.map((tile, j) => (checkTileHasOpened(tile) ? new TileNode(j, i) : null)));
+    const grid: (TileNode | null)[][] = [];
+    for (let i = 0; i < tiles.height; i++) {
+      const row: (TileNode | null)[] = [];
+      for (let j = 0; j < tiles.width; j++) {
+        row.push(checkTileHasOpened(tiles.get(i, j)) ? new TileNode(j, i) : null);
+      }
+      grid.push(row);
+    }
 
     // Check if target is accessible
     if (targetY < 0 || targetY >= grid.length || targetX < 0 || targetX >= grid[targetY]?.length || grid[targetY][targetX] === null) {
@@ -796,7 +801,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
 
   /** Load Assets and Render (optimized) */
   useLayoutEffect(() => {
-    if (!isInitializing && tiles.length > 0) return;
+    if (!isInitializing && !tiles.isEmpty) return;
 
     const loadFontOptional = async () => {
       try {
@@ -847,7 +852,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       {isInitializing && (
         <div className={S.loading}>
           <h1>Assets Loading...</h1>
-          <div className={`${tiles.length < 1 ? S.loadingBar : S.loadComplete}`} />
+          <div className={`${tiles.isEmpty ? S.loadingBar : S.loadComplete}`} />
         </div>
       )}
       {!isInitializing && (

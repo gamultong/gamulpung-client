@@ -15,11 +15,13 @@ This project is an online multiplayer version of Minesweeper, where the map expa
 - **Frontend**: Next.js, Zustand, Scss, Pixi/react
 - **Backend**: FastAPI
 - **WebSocket**: For real-time communication
+- **Tile engine**: Rust (WebAssembly) for fast tile parsing and diff; falls back to JS if WASM is not ready.
 
 ### Project Structure
-- **/src**: Contains the source code for the frontend and backend.
-- **/public**: Contains static files and assets.
-- **/public/documents**: Contains Documents for Contribute.
+- **/src**: Frontend source (app, components, store, utils). Built WASM bindings live in `src/wasm-pkg/`.
+- **/wasm**: Rust source for the WebAssembly tile engine (hex/binary parsing + diff). Build output is in `src/wasm-pkg/`; `wasm/target/` is gitignored.
+- **/public**: Static files and assets.
+- **/public/documents**: Documents for contributing.
 
 ## Play
 Let's play the game [here](https://gamultong.github.io/gamulpung-client/).
@@ -76,3 +78,30 @@ npm run dev
 ```bash
 npm run lint
 ```
+
+5. Building with the WASM tile engine  
+   The repo includes pre-built WASM in `src/wasm-pkg/`, so you can run and build the app without Rust. If you change code in `/wasm` (Rust), install Rust and wasm-pack, then build:
+
+   **Install Rust** (one-time):
+   ```bash
+   # Windows (PowerShell)
+   winget install Rustlang.Rustup
+   # Or: https://rustup.rs/ — download and run the installer for your OS.
+   ```
+   ```bash
+   # macOS / Linux
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   ```
+   Restart the terminal (or run `source $HOME/.cargo/env` on macOS/Linux) so `cargo` is on your PATH.
+
+   **Install wasm-pack** (one-time):
+   ```bash
+   cargo install wasm-pack
+   ```
+
+   **Build the WASM package** (when you change `/wasm`):
+   ```bash
+   cd wasm && wasm-pack build --target web --release --out-dir ../src/wasm-pkg
+   ```
+
+   CI (GitHub Actions) runs the Rust + wasm-pack setup and this build before `npm run build` on every push/PR, so the deployed site always uses an up-to-date WASM build.

@@ -2,5 +2,6 @@
   "extends": [
     "next/core-web-vitals",
     "next/typescript"
-  ]
+  ],
+  "ignorePatterns": ["src/wasm-pkg/**"]
 }

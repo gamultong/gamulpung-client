@@ -19,12 +19,13 @@ import useWebSocketStore from '@/store/websocketStore';
 interface UseMessageHandlerOptions {
   getCurrentTileWidthAndHeight: () => { width: number; height: number };
   replaceTiles: (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => Promise<void>;
+  replaceBinaryTiles?: (binaryData: Uint8Array) => Promise<void>;
   setLeftReviveTime: (time: number) => void;
   setIsInitialized: (initialized: boolean) => void;
 }
 
 export default function useMessageHandler(options: UseMessageHandlerOptions) {
-  const { getCurrentTileWidthAndHeight, replaceTiles, setLeftReviveTime, setIsInitialized } = options;
+  const { getCurrentTileWidthAndHeight, replaceTiles, replaceBinaryTiles, setLeftReviveTime, setIsInitialized } = options;
 
   // Store hooks
   const { setCursors, cursors: nowCursors } = useOtherUserCursorsStore();
@@ -55,7 +56,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
               if (resWidth === width && resHeight === height) isAll = 'All';
               promises.push(replaceTiles(top_left.x, bottom_right.y, bottom_right.x, top_left.y, data, isAll));
             }
-            Promise.all(promises);
+            await Promise.all(promises);
             break;
           }
           case EXPLOSION: {
@@ -143,11 +144,33 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
     [replaceTiles, position, clientCursorId, nowCursors],
   );
 
-  // Handle WebSocket messages automatically
+  /** Handle binary WebSocket frames (future: server sends 1-byte-per-tile data) */
+  const handleBinaryMessage = useCallback(
+    async (buffer: ArrayBuffer) => {
+      if (!replaceBinaryTiles) return;
+      try {
+        const data = new Uint8Array(buffer);
+        await replaceBinaryTiles(data);
+      } catch (e) {
+        console.error('Binary message error:', e);
+      }
+    },
+    [replaceBinaryTiles],
+  );
+
+  // Handle text WebSocket messages
   const { message } = useWebSocketStore();
   useLayoutEffect(() => {
     if (!message) return;
     handleWebSocketMessage(message);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [message]);
+
+  // Handle binary WebSocket messages
+  const { binaryMessage } = useWebSocketStore();
+  useLayoutEffect(() => {
+    if (!binaryMessage) return;
+    handleBinaryMessage(binaryMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [binaryMessage]);
 }

@@ -17,9 +17,11 @@ import ScoreBoardComponent from '@/components/scoreboard';
 import { SendMessageEvent, SendSetWindowPayloadType, XYType, Direction } from '@/types';
 // WebGPU imports removed - using simple CPU processing only
 import { VECTORIZED_TILE_LUT } from '@/utils/tiles';
+import { TileGrid, Tile, isTileClosedOrFlag, makeClosedTile, makeFlagTile } from '@/utils/tileGrid';
+import { initWasm, isWasmReady, processHexTilesWasm } from '@/utils/wasmTileEngine';
 import useMessageHandler from '@/hooks/useMessageHandler';
 import { useCursorStore } from '@/store/cursorStore';
-import { FILL_CHAR, useTileStore, useTiles } from '@/store/tileStore';
+import { useTileStore, useTiles } from '@/store/tileStore';
 import SkillTree from '@/components/skilltree';
 
 export default function Play() {
@@ -42,7 +44,6 @@ export default function Play() {
     startPoint,
     endPoint,
     renderStartPoint,
-    setTiles,
     setRenderTiles,
     setStartPoint,
     setEndPoint,
@@ -92,6 +93,11 @@ export default function Play() {
     }
   };
 
+  // Pre-initialize WASM tile engine (non-blocking)
+  useEffect(() => {
+    initWasm().catch(err => console.warn('WASM tile engine init failed, will use JS fallback:', err));
+  }, []);
+
   /** Initialize Browser Events and Disconnect websocket when this Component is unmounted */
   useLayoutEffect(() => {
     document.documentElement.style.overflow = 'hidden';
@@ -134,7 +140,7 @@ export default function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, startPoint]);
 
-  /** Common tile processing logic */
+  /** Common tile processing logic (numeric Uint8Array encoding) */
   const processTileData = useCallback(
     (
       end_x: number,
@@ -157,9 +163,9 @@ export default function Play() {
       const xOffset = isAll ? 0 : start_x - currentStartPoint.x - 1;
 
       const actualEndIndex = endIndex === -1 ? columnlength * tilesPerRow : endIndex;
-      const changes: Array<{ row: number; col: number; value: string }> = [];
+      const changes: Array<{ row: number; col: number; value: number }> = [];
 
-      // Get current tiles from store
+      // Get current tiles from store (TileGrid)
       const tiles = useTileStore.getState().tiles;
 
       for (let tileIndex = startIndex; tileIndex < actualEndIndex; tileIndex++) {
@@ -170,16 +176,13 @@ export default function Play() {
         const reversedI = columnlength - 1 - rowIndex;
         const row = reversedI + yOffset;
 
-        if (row < 0 || row >= tiles.length) continue;
-
-        const existingRow = tiles[row] || [];
-        const rowLen = existingRow.length;
-        if (rowLen === 0) continue;
+        if (row < 0 || row >= tiles.height) continue;
+        if (tiles.width === 0) continue;
 
         const yAbs = end_y - reversedI;
 
         const tStart = Math.max(0, -xOffset);
-        const tEnd = Math.min(tilesPerRow, rowLen - xOffset);
+        const tEnd = Math.min(tilesPerRow, tiles.width - xOffset);
         if (colIndex < tStart || colIndex >= tEnd) continue;
 
         const byteOffset = rowIndex * rowlengthBytes + (colIndex << 1);
@@ -196,20 +199,17 @@ export default function Play() {
         // Use absolute coordinates for checker calculation to match computedRenderTiles
         const checker = (col + yAbs + currentStartPoint.x) & 1;
 
-        // Vectorized string conversion (O(1) LookUp)
-        let value: string = FILL_CHAR; // default value for Exception handling
-        if (tileType < 8) value = tileType === 0 ? 'O' : tileType.toString();
-        // Bomb
-        else if (tileType === 8) value = 'B';
-        // CLosed
-        else if (tileType === 24) value = `C${checker}`;
-        // Flag tiles
+        // Direct numeric tile encoding (no string allocation)
+        let value: number = Tile.FILL;
+        if (tileType < 8) value = tileType; // 0-7 maps directly to OPEN_0..OPEN_7
+        else if (tileType === 8) value = Tile.BOMB;
+        else if (tileType === 24) value = makeClosedTile(checker);
         else if (tileType >= 16 && tileType < 24) {
-          const flagColor = Math.floor((tileType - 16) / 2);
-          value = `F${flagColor}${checker}`;
+          const flagColor = (tileType - 16) >> 1;
+          value = makeFlagTile(flagColor, checker);
         }
 
-        if (existingRow[col] !== value) changes.push({ row, col, value });
+        if (tiles.get(row, col) !== value) changes.push({ row, col, value });
       }
 
       return changes;
@@ -217,32 +217,8 @@ export default function Play() {
     [],
   );
 
-  /** Create worker promises for tile processing */
-  const createWorkerPromises = useCallback(
-    (
-      workerCount: number,
-      tilesPerWorker: number,
-      totalTiles: number,
-      end_x: number,
-      end_y: number,
-      start_x: number,
-      start_y: number,
-      unsortedTiles: string,
-      type: 'All' | 'PART',
-    ) => {
-      const lenObject = { length: workerCount };
-      const currentStartPoint = startPoint;
-
-      return Array.from(lenObject, (_, workerIndex) => {
-        const workerStart = workerIndex * tilesPerWorker;
-        const workerEnd = Math.min(workerStart + tilesPerWorker, totalTiles);
-        return processTileData(end_x, end_y, start_x, start_y, unsortedTiles, type, currentStartPoint, workerStart, workerEnd);
-      });
-    },
-    [startPoint, processTileData],
-  );
-
-  /** Apply incoming hex tile data to the internal tile grid */
+  /** Apply incoming hex tile data to the internal tile grid.
+   *  Uses WASM engine when available, falls back to JS processing. */
   const replaceTiles = useCallback(
     async (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => {
       if (unsortedTiles.length === 0) return;
@@ -250,99 +226,38 @@ export default function Play() {
 
       // For full window updates, pre-shift the grid with dummy tiles
       if (type === 'All') padtiles(start_x, start_y, end_x, end_y, Direction.ALL);
-      // Basic grid stats based on server-provided world coordinates
-      const tilesPerRow = Math.abs(end_x - start_x + 1);
-      const columnlength = Math.abs(start_y - end_y + 1);
-      const totalTiles = columnlength * tilesPerRow;
-      const cpuCores = navigator.hardwareConcurrency || 4;
-
-      // Number of workers: at most one per CPU core, roughly one worker per 32 tiles
-      const workerCount = Math.min(cpuCores, Math.ceil(totalTiles / 32));
-      const tilesPerWorker = Math.ceil(totalTiles / workerCount);
 
       // Internal processing uses an inner window trimmed by 1 tile on each X side
       const innerStartX = start_x + 1;
       const innerEndX = end_x - 1;
+      const isAll = type === 'All';
 
-      // Check if SharedArrayBuffer is supported (high-performance mode)
-      const supportsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && typeof Atomics !== 'undefined';
+      let allChanges: Array<{ row: number; col: number; value: number }>;
 
-      let allChanges: Array<{ row: number; col: number; value: string }> = [];
-
-      if (supportsSharedArrayBuffer) {
-        // Parallel processing using SharedArrayBuffer + Atomics
-        const sharedBuffer = new SharedArrayBuffer(totalTiles * 4); // 4 bytes per tile (row, col, value)
-        const sharedArray = new Int32Array(sharedBuffer);
-        const changeCountBuffer = new SharedArrayBuffer(4);
-        const changeCountArray = new Int32Array(changeCountBuffer);
-
-        // Initialize the counter safely using Atomics
-        Atomics.store(changeCountArray, 0, 0);
-
-        // Process tiles in parallel and accumulate into shared array
-        const workerPromises = createWorkerPromises(
-          workerCount,
-          tilesPerWorker,
-          totalTiles,
+      // ─── WASM fast path ───
+      if (isWasmReady()) {
+        const tiles = useTileStore.getState().tiles;
+        allChanges = await processHexTilesWasm(
+          unsortedTiles,
+          tiles,
           innerEndX,
           end_y,
           innerStartX,
           start_y,
-          unsortedTiles,
-          type,
+          startPoint.x,
+          startPoint.y,
+          isAll,
         );
-        const workerResults = await Promise.all(workerPromises);
-
-        workerResults.forEach(changes => {
-          changes.forEach(({ row, col, value }) => {
-            const changeIndex = Atomics.add(changeCountArray, 0, 1);
-            if (changeIndex >= totalTiles) return;
-            const sharedArrayIndex = changeIndex * 3;
-            sharedArray[sharedArrayIndex] = row;
-            sharedArray[sharedArrayIndex + 1] = col;
-            sharedArray[sharedArrayIndex + 2] = value.charCodeAt(0); // Simple string encoding
-          });
-        });
-
-        // Read back accumulated changes from the shared array
-        const finalChangeCount = Atomics.load(changeCountArray, 0);
-        for (let i = 0; i < finalChangeCount; i++) {
-          const row = sharedArray[i * 3];
-          const col = sharedArray[i * 3 + 1];
-          const value = String.fromCharCode(sharedArray[i * 3 + 2]);
-          allChanges.push({ row, col, value });
-        }
       } else {
-        // Fallback: standard Promise.all parallelism without SharedArrayBuffer
-        try {
-          const workerPromises = createWorkerPromises(
-            workerCount,
-            tilesPerWorker,
-            totalTiles,
-            innerEndX,
-            end_y,
-            innerStartX,
-            start_y,
-            unsortedTiles,
-            type,
-          );
-          const workerResults = await Promise.all(workerPromises);
-          allChanges = workerResults.flat();
-        } catch (error) {
-          // Final fallback: synchronous processing on main thread
-          console.error('Ultra-Parallel Worker tile processing error:', error);
-          allChanges = processTileData(innerEndX, end_y, innerStartX, start_y, unsortedTiles, type, startPoint);
-        }
+        // ─── JS fallback ───
+        allChanges = processTileData(innerEndX, end_y, innerStartX, start_y, unsortedTiles, type, startPoint);
       }
 
-      // Apply all changes to tiles
+      // Apply all changes to tiles (single clone via Uint8Array.slice)
       applyTileChanges(allChanges);
-      const updatedTiles = useTileStore.getState().tiles;
       console.log('replace', performance.now());
-      // applyTileChanges already updates tiles, so we just need to trigger a re-render
-      setTiles([...updatedTiles.map(row => [...row])]);
     },
-    [padtiles, createWorkerPromises, processTileData, startPoint, applyTileChanges, setTiles],
+    [padtiles, processTileData, startPoint, applyTileChanges],
   );
 
   const getCurrentTileWidthAndHeight = useCallback(() => {
@@ -361,61 +276,67 @@ export default function Play() {
     setIsInitialized,
   });
 
-  /** STABLE & FAST: Reliable tile computation without GPU bugs */
+  /** STABLE & FAST: Reliable tile computation using TileGrid (Uint8Array) */
   const computedRenderTiles = useMemo(() => {
-    const cachingLength = cachingTiles.length;
-    if (cachingLength === 0) return [];
+    if (cachingTiles.isEmpty) return TileGrid.empty();
 
     const offsetX = cursorOriginPosition.x - cursorPosition.x;
     const offsetY = cursorOriginPosition.y - cursorPosition.y;
     // INSTANT: Perfect alignment - no processing needed
     if (offsetX === 0 && offsetY === 0) return cachingTiles; // O(1) return!
 
-    // STABLE CPU processing - no disappearing tiles
+    // STABLE CPU processing using flat Uint8Array - no disappearing tiles
     return processWithStableCPU();
 
-    function processWithStableCPU(): string[][] {
-      // Ultra-stable rendering - guaranteed no missing tiles
-      return cachingTiles.map((cachingRow, row) => {
-        const sourceRowIndex = row + offsetY;
+    function processWithStableCPU(): TileGrid {
+      const result = new TileGrid(cachingTiles.width, cachingTiles.height);
+      const srcData = cachingTiles.data;
+      const dstData = result.data;
+      const w = cachingTiles.width;
+      const h = cachingTiles.height;
+
+      for (let row = 0; row < h; row++) {
+        const srcRowIndex = row + offsetY;
+        const dstRowOffset = row * w;
 
         // Bounds check for source row
-        if (sourceRowIndex < 0 || sourceRowIndex >= cachingLength) return new Array(cachingRow.length).fill(FILL_CHAR);
+        if (srcRowIndex < 0 || srcRowIndex >= h) {
+          dstData.fill(Tile.FILL, dstRowOffset, dstRowOffset + w);
+          continue;
+        }
 
-        const sourceRow = cachingTiles[sourceRowIndex];
-        if (!sourceRow) return new Array(cachingRow.length).fill(FILL_CHAR);
+        const srcRowOffset = srcRowIndex * w;
 
-        // Process each column safely
-        return cachingRow.map((_, col) => {
-          const sourceColIndex = col + offsetX;
+        for (let col = 0; col < w; col++) {
+          const srcColIndex = col + offsetX;
 
           // Bounds check for source column
-          if (sourceColIndex < 0 || sourceColIndex >= sourceRow.length) return FILL_CHAR;
-
-          const sourceTile = sourceRow[sourceColIndex];
-          if (!sourceTile || sourceTile === FILL_CHAR) return FILL_CHAR;
-
-          const tileType = sourceTile[0];
-
-          // Fast path for most tiles - no transformation needed
-          if (!['C', 'F'].includes(tileType)) return sourceTile;
-
-          // Use absolute coordinates for checkerboard calculation (matches processTileData)
-          const absX = renderStartPoint.x + col;
-          const absY = renderStartPoint.y + row;
-          const checkerBit = (absX + absY) & 1;
-
-          // Safe tile type handling
-          if (tileType === 'C') return `C${checkerBit}`;
-          if (tileType === 'F') {
-            const flagColor = sourceTile[1] || '0';
-            return `F${flagColor}${checkerBit}`;
+          if (srcColIndex < 0 || srcColIndex >= w) {
+            dstData[dstRowOffset + col] = Tile.FILL;
+            continue;
           }
 
-          // Fallback for unexpected tile types
-          return sourceTile;
-        });
-      });
+          const srcTile = srcData[srcRowOffset + srcColIndex];
+
+          if (srcTile === Tile.FILL) {
+            dstData[dstRowOffset + col] = Tile.FILL;
+            continue;
+          }
+
+          // For closed/flag tiles, recompute checkerboard with new absolute coordinates
+          if (isTileClosedOrFlag(srcTile)) {
+            const absX = renderStartPoint.x + col;
+            const absY = renderStartPoint.y + row;
+            const checkerBit = (absX + absY) & 1;
+            dstData[dstRowOffset + col] = (srcTile & 0xfe) | checkerBit;
+          } else {
+            // Fast path for opened/bomb tiles - no transformation needed
+            dstData[dstRowOffset + col] = srcTile;
+          }
+        }
+      }
+
+      return result;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cachingTiles, cursorOriginPosition, renderStartPoint]);

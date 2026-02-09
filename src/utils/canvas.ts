@@ -57,7 +57,7 @@ export const makeNumericKeys = (ri: number, ci: number, size: number) => {
   return { tileKeyNum, typeKeyBase };
 };
 
-export const isClosedOrFlag = (c: string | number) => c === ('C' as unknown as number) || c === ('F' as unknown as number) || c === 'C' || c === 'F';
+export { isTileClosedOrFlag as isClosedOrFlag } from './tileGrid';
 
 export const snapTileEdges = (ci: number, ri: number, padW: number, padH: number, size: number) => {
   const xFloat = (ci - padW) * size;
