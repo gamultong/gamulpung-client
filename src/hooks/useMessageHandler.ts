@@ -60,12 +60,12 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
             break;
           }
           case EXPLOSION: {
-            // The Explosion range is 1 tile including diagonal.
-            const { position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
-            const { x, y } = position;
+            // The Explosion event is applied on all the cursor in the view.
+            const { position: explode_position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
+            const { x, y } = explode_position;
             const { x: cursorX, y: cursorY } = position;
             if (cursorX >= x - 1 && cursorX <= x + 1 && cursorY >= y - 1 && cursorY <= y + 1) {
-              // set revive time
+              console.log('explosion', performance.now());
               setLeftReviveTime(10);
             }
             break;
