@@ -18,7 +18,7 @@ import { SendMessageEvent, SendSetWindowPayloadType, XYType, Direction } from '@
 // WebGPU imports removed - using simple CPU processing only
 import { VECTORIZED_TILE_LUT } from '@/utils/tiles';
 import { TileGrid, Tile, isTileClosedOrFlag, makeClosedTile, makeFlagTile } from '@/utils/tileGrid';
-import { initWasm, isWasmReady, processHexTilesWasm } from '@/utils/wasmTileEngine';
+import { initWasm, getWasmSync, hexEncoder } from '@/utils/wasmTileEngine';
 import useMessageHandler from '@/hooks/useMessageHandler';
 import { useCursorStore } from '@/store/cursorStore';
 import { useTileStore, useTiles } from '@/store/tileStore';
@@ -44,6 +44,7 @@ export default function Play() {
     startPoint,
     endPoint,
     renderStartPoint,
+    setTiles,
     setRenderTiles,
     setStartPoint,
     setEndPoint,
@@ -51,6 +52,7 @@ export default function Play() {
     setTileSize,
     padtiles,
     applyTileChanges,
+    applyPackedChanges,
     reset: resetTiles,
   } = useTileStore();
 
@@ -201,7 +203,8 @@ export default function Play() {
 
         // Direct numeric tile encoding (no string allocation)
         let value: number = Tile.FILL;
-        if (tileType < 8) value = tileType; // 0-7 maps directly to OPEN_0..OPEN_7
+        if (tileType < 8)
+          value = tileType; // 0-7 maps directly to OPEN_0..OPEN_7
         else if (tileType === 8) value = Tile.BOMB;
         else if (tileType === 24) value = makeClosedTile(checker);
         else if (tileType >= 16 && tileType < 24) {
@@ -232,32 +235,38 @@ export default function Play() {
       const innerEndX = end_x - 1;
       const isAll = type === 'All';
 
-      let allChanges: Array<{ row: number; col: number; value: number }>;
-
-      // ─── WASM fast path ───
-      if (isWasmReady()) {
+      // ─── WASM synchronous fast path (no async/await overhead) ───
+      const wasm = getWasmSync();
+      if (wasm) {
         const tiles = useTileStore.getState().tiles;
-        allChanges = await processHexTilesWasm(
-          unsortedTiles,
-          tiles,
-          innerEndX,
-          end_y,
-          innerStartX,
-          start_y,
-          startPoint.x,
-          startPoint.y,
-          isAll,
-        );
-      } else {
-        // ─── JS fallback ───
-        allChanges = processTileData(innerEndX, end_y, innerStartX, start_y, unsortedTiles, type, startPoint);
-      }
+        const hexBytes = hexEncoder.encode(unsortedTiles);
 
-      // Apply all changes to tiles (single clone via Uint8Array.slice)
-      applyTileChanges(allChanges);
+        // Inplace: clone grid, let WASM write directly, avoid packed vector + unpack
+        if (wasm.process_hex_tiles_inplace) {
+          const newTiles = tiles.clone();
+          const changeCount = wasm.process_hex_tiles_inplace(
+            hexBytes, newTiles.data, newTiles.width, newTiles.height,
+            innerEndX, end_y, innerStartX, start_y,
+            startPoint.x, startPoint.y, isAll,
+          );
+          if (changeCount > 0) setTiles(newTiles);
+        } else {
+          // Fallback to packed approach (old WASM without inplace)
+          const packed = wasm.process_hex_tiles(
+            hexBytes, tiles.data, tiles.width, tiles.height,
+            innerEndX, end_y, innerStartX, start_y,
+            startPoint.x, startPoint.y, isAll,
+          );
+          applyPackedChanges(packed);
+        }
+      } else {
+        // ─── JS fallback (only runs before WASM init completes) ───
+        const allChanges = processTileData(innerEndX, end_y, innerStartX, start_y, unsortedTiles, type, startPoint);
+        applyTileChanges(allChanges);
+      }
       console.log('replace', performance.now());
     },
-    [padtiles, processTileData, startPoint, applyTileChanges],
+    [padtiles, processTileData, startPoint, applyTileChanges, applyPackedChanges, setTiles],
   );
 
   const getCurrentTileWidthAndHeight = useCallback(() => {
@@ -289,49 +298,42 @@ export default function Play() {
     return processWithStableCPU();
 
     function processWithStableCPU(): TileGrid {
-      const result = new TileGrid(cachingTiles.width, cachingTiles.height);
       const srcData = cachingTiles.data;
-      const dstData = result.data;
       const w = cachingTiles.width;
       const h = cachingTiles.height;
+      const result = new TileGrid(w, h);
+      const dstData = result.data;
 
-      for (let row = 0; row < h; row++) {
-        const srcRowIndex = row + offsetY;
-        const dstRowOffset = row * w;
+      // Fill entire grid with FILL, then overwrite valid region via bulk copy
+      dstData.fill(Tile.FILL);
 
-        // Bounds check for source row
-        if (srcRowIndex < 0 || srcRowIndex >= h) {
-          dstData.fill(Tile.FILL, dstRowOffset, dstRowOffset + w);
-          continue;
-        }
+      // Calculate valid source/dest regions
+      const srcRowStart = Math.max(0, offsetY);
+      const srcRowEnd = Math.min(h, h + offsetY);
+      const srcColStart = Math.max(0, offsetX);
+      const srcColEnd = Math.min(w, w + offsetX);
+      const dstRowStart = Math.max(0, -offsetY);
+      const dstColStart = Math.max(0, -offsetX);
+      const copyWidth = srcColEnd - srcColStart;
 
-        const srcRowOffset = srcRowIndex * w;
+      if (copyWidth <= 0 || srcRowEnd <= srcRowStart) return result;
 
-        for (let col = 0; col < w; col++) {
-          const srcColIndex = col + offsetX;
+      // Bulk copy rows + checkerboard pass for closed/flag tiles only
+      const rowCount = srcRowEnd - srcRowStart;
+      for (let i = 0; i < rowCount; i++) {
+        const srcOff = (srcRowStart + i) * w + srcColStart;
+        const dstOff = (dstRowStart + i) * w + dstColStart;
 
-          // Bounds check for source column
-          if (srcColIndex < 0 || srcColIndex >= w) {
-            dstData[dstRowOffset + col] = Tile.FILL;
-            continue;
-          }
+        // Row-level native memcpy
+        dstData.set(srcData.subarray(srcOff, srcOff + copyWidth), dstOff);
 
-          const srcTile = srcData[srcRowOffset + srcColIndex];
-
-          if (srcTile === Tile.FILL) {
-            dstData[dstRowOffset + col] = Tile.FILL;
-            continue;
-          }
-
-          // For closed/flag tiles, recompute checkerboard with new absolute coordinates
-          if (isTileClosedOrFlag(srcTile)) {
-            const absX = renderStartPoint.x + col;
-            const absY = renderStartPoint.y + row;
-            const checkerBit = (absX + absY) & 1;
-            dstData[dstRowOffset + col] = (srcTile & 0xfe) | checkerBit;
-          } else {
-            // Fast path for opened/bomb tiles - no transformation needed
-            dstData[dstRowOffset + col] = srcTile;
+        // Recompute checkerboard only for closed/flag tiles (0x10-0x27)
+        const absY = renderStartPoint.y + dstRowStart + i;
+        for (let j = 0; j < copyWidth; j++) {
+          const tile = dstData[dstOff + j];
+          if (tile >= 0x10 && tile <= 0x27) {
+            const absX = renderStartPoint.x + dstColStart + j;
+            dstData[dstOff + j] = (tile & 0xfe) | ((absX + absY) & 1);
           }
         }
       }

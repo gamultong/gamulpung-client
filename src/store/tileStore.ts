@@ -28,6 +28,7 @@ interface TileStore {
   // Tile manipulation
   padtiles: (from_x: number, from_y: number, to_x: number, to_y: number, type: Direction) => void;
   applyTileChanges: (changes: Array<{ row: number; col: number; value: number }>) => void;
+  applyPackedChanges: (packed: Uint32Array) => void;
 
   // Reset
   reset: () => void;
@@ -111,6 +112,19 @@ export const useTileStore = create<TileStore>((set, get) => ({
     const newTiles = tiles.clone(); // Uint8Array.slice() - native memcpy
     for (const { row, col, value } of changes) {
       newTiles.set(row, col, value);
+    }
+    set({ tiles: newTiles });
+  },
+
+  applyPackedChanges: packed => {
+    if (packed.length === 0) return;
+    const { tiles } = get();
+    const newTiles = tiles.clone();
+    const data = newTiles.data;
+    const w = newTiles.width;
+    for (let i = 0; i < packed.length; i++) {
+      const p = packed[i];
+      data[((p >> 16) & 0xffff) * w + ((p >> 8) & 0xff)] = p & 0xff;
     }
     set({ tiles: newTiles });
   },

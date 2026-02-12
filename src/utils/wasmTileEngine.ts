@@ -32,7 +32,13 @@ async function getWasm(): Promise<WasmModule> {
 
 /** Check if WASM is ready (already initialized). */
 export function isWasmReady(): boolean {
+  console.log('isWasmReady', wasmModule !== null, performance.now());
   return wasmModule !== null;
+}
+
+/** Get WASM module synchronously. Returns null if not yet initialized. */
+export function getWasmSync(): WasmModule | null {
+  return wasmModule;
 }
 
 /** Ensure WASM is initialized (call early, e.g. on mount). */
@@ -41,7 +47,8 @@ export async function initWasm(): Promise<void> {
 }
 
 // ─── Shared TextEncoder for hex string → Uint8Array conversion ───
-const encoder = new TextEncoder();
+export const hexEncoder = new TextEncoder();
+const encoder = hexEncoder;
 
 /**
  * Unpack packed Uint32Array changes into { row, col, value }[] array.

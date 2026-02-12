@@ -1,6 +1,6 @@
 'use client';
-import { Container, Sprite, Stage } from '@pixi/react';
-import { cloneElement, useLayoutEffect, useMemo, useRef, useEffect, useState } from 'react';
+import { Container, Stage } from '@pixi/react';
+import { useLayoutEffect, useRef, useEffect, useState } from 'react';
 import { Texture, SCALE_MODES, MIPMAP_MODES, WRAP_MODES, Container as PixiContainer, Sprite as PixiSprite } from 'pixi.js';
 import RenderPaths from '@/assets/renderPaths.json';
 import { useCursorStore } from '@/store/cursorStore';
@@ -14,6 +14,26 @@ interface TilemapProps {
   tilePadWidth: number;
   tilePadHeight: number;
   className?: string;
+}
+
+// ─── Sprite pool helper ───
+// Creates / grows a pool of PixiSprites inside a container, returns the pool array.
+function ensurePool(pool: PixiSprite[], container: PixiContainer, needed: number): PixiSprite[] {
+  while (pool.length < needed) {
+    const s = new PixiSprite();
+    s.roundPixels = true;
+    s.eventMode = 'none' as unknown as never;
+    s.cullable = true;
+    s.visible = false;
+    container.addChild(s);
+    pool.push(s);
+  }
+  return pool;
+}
+
+// Hide all sprites in a pool starting from index `from`
+function hidePoolFrom(pool: PixiSprite[], from: number) {
+  for (let i = from; i < pool.length; i++) pool[i].visible = false;
 }
 
 export default function Tilemap({ tilePadWidth, tilePadHeight, className }: TilemapProps) {
@@ -31,18 +51,21 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
   const numberTexturesRef = useRef(new Map<number, Texture>());
   const [texturesReady, setTexturesReady] = useState(false);
   const [numbersReady, setNumbersReady] = useState(false);
-  const makeSpriteMap = () => new Map<string, JSX.Element>();
-  // CLOSED/FLAGGED tiles pooling layer (imperative Pixi for max perf)
+
+  // ─── Imperative Pixi sprite pools ───
+  // Each layer has its own container ref + sprite pool
+  const bgLayerRef = useRef<PixiContainer | null>(null);
   const closedLayerRef = useRef<PixiContainer | null>(null);
+  const boomLayerRef = useRef<PixiContainer | null>(null);
+  const flagLayerRef = useRef<PixiContainer | null>(null);
+
+  // Pools: outer+inner for bg opened tiles, closed tiles, boom, flag, number
+  const outerPoolRef = useRef<PixiSprite[]>([]);
+  const innerPoolRef = useRef<PixiSprite[]>([]);
   const closedPoolRef = useRef<{ outer: PixiSprite; inner: PixiSprite }[]>([]);
-  // Generate textures for tiles, boom, and flags
-  const cachedSpritesRef = useRef({
-    outerCachedSprite: makeSpriteMap(),
-    innerCachedSprite: makeSpriteMap(),
-    boomCachedSprite: makeSpriteMap(),
-    flagCachedSprite: makeSpriteMap(),
-    numberCachedSprite: makeSpriteMap(),
-  });
+  const boomPoolRef = useRef<PixiSprite[]>([]);
+  const flagPoolRef = useRef<PixiSprite[]>([]);
+  const numberPoolRef = useRef<PixiSprite[]>([]);
 
   const getCtx = (canvas: HTMLCanvasElement): CanvasRenderingContext2D =>
     canvas.getContext('2d', { willReadFrequently: false, desynchronized: true })!;
@@ -186,263 +209,219 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileSize]);
 
-  const computeVisibleBounds = (totalRows: number, totalCols: number, padW: number, padH: number, viewW: number, viewH: number, size: number) => {
-    const startCol = Math.max(0, Math.ceil(padW - 1));
-    const endCol = Math.min(totalCols - 1, (padW + (viewW + size) / (size || 1)) >>> 0);
-    const startRow = Math.max(0, Math.ceil(padH - 1));
-    const endRow = Math.min(totalRows - 1, (padH + (viewH + size) / (size || 1)) >>> 0);
-    return { startCol, endCol, startRow, endRow };
-  };
-
-  // make numeric keys for number textures based on row and column and tile size
-  const makeNumericKeys = (ri: number, ci: number, size: number) => {
-    const tileKeyNum = ((ri * 131071 + ci) * 131 + (size | 0)) >>> 0;
-    const key = (tileKeyNum * 10) >>> 0;
-    return { tileKeyNum, key };
-  };
-
-  const getTileTexturesForContent = (content: number, defaults: { outerTexture?: Texture; innerTexture?: Texture }) => {
-    if (!isTileClosedOrFlag(content)) return { ...defaults, closed: false };
-    const isEven = getTileChecker(content);
-    const textureCache = cachedTexturesRef.current;
-    const [outerEven, innerEven] = [outer[isEven], inner[isEven]];
-    const outerTexture = textureCache.get(`${outerEven[0]}${outerEven[1]}${tileSize}`) || defaults.outerTexture;
-    const innerTexture = textureCache.get(`${innerEven[0]}${innerEven[1]}${tileSize}`) || defaults.innerTexture;
-    return { outerTexture, innerTexture, closed: true } as const;
-  };
-
-  const snapTileEdges = (ci: number, ri: number, padW: number, padH: number, size: number) => {
-    const xFloat = (ci - padW) * size;
-    const yFloat = (ri - padH) * size;
-    const xNextFloat = xFloat + size;
-    const yNextFloat = yFloat + size;
-    const startX = Math.round(xFloat);
-    const startY = Math.round(yFloat);
-    const endX = Math.round(xNextFloat);
-    const endY = Math.round(yNextFloat);
-    const w = endX - startX;
-    const h = endY - startY;
-    return { xFloat, yFloat, startX, startY, endX, endY, w, h };
-  };
-
   // Cleanup Pixi.js resources on unmount
   useEffect(() => {
     const textures = cachedTexturesRef.current;
     const closedPool = closedPoolRef.current;
-    const sprites = cachedSpritesRef.current;
 
     return () => {
-      // Destroy all textures
       textures.forEach(texture => texture.destroy());
       textures.clear();
-
-      // Destroy all sprites in the closed pool
       closedPool.forEach(({ outer, inner }) => {
         outer.destroy();
         inner.destroy();
       });
       closedPoolRef.current = [];
-
-      // Remove all sprites from the cache
-      Object.values(sprites).forEach(map => map.clear());
+      outerPoolRef.current = [];
+      innerPoolRef.current = [];
+      boomPoolRef.current = [];
+      flagPoolRef.current = [];
+      numberPoolRef.current = [];
     };
   }, []);
 
-  // Ensure CLOSED/FLAGGED pool exists and then apply entries in a single pass
+  // ─── IMPERATIVE TILE RENDERING ───
+  // Single useLayoutEffect that updates ALL sprite pools directly.
+  // No useMemo, no JSX array creation, no React diffing.
   useLayoutEffect(() => {
-    const layer = closedLayerRef.current;
-    if (!layer) return;
+    const bgLayer = bgLayerRef.current;
+    const closedLayer = closedLayerRef.current;
+    const boomLayer = boomLayerRef.current;
+    const flagLayer = flagLayerRef.current;
+    if (!bgLayer || !closedLayer || !boomLayer || !flagLayer) return;
+    if (!texturesReady || !numbersReady) return;
 
-    const approxVisible = Math.ceil((windowWidth / (tileSize || 1) + 2) * (windowHeight / (tileSize || 1) + 2));
-    while (closedPoolRef.current.length < approxVisible) {
-      const outer = new PixiSprite();
-      outer.roundPixels = true;
-      outer.eventMode = 'none' as unknown as never;
-      outer.cullable = true;
-      const inner = new PixiSprite();
-      inner.roundPixels = true;
-      inner.eventMode = 'none' as unknown as never;
-      inner.cullable = true;
-      layer.addChild(outer);
-      layer.addChild(inner);
-      closedPoolRef.current.push({ outer, inner });
-    }
-    for (let i = approxVisible; i < closedPoolRef.current.length; i++) {
-      const { outer, inner } = closedPoolRef.current[i];
-      outer.visible = inner.visible = false;
-    }
-
-    const { current } = closedPoolRef;
-    let usedIdx = 0;
-    while (usedIdx < closedEntries.length && usedIdx < current.length) {
-      const { outerTexture, innerTexture, startX, startY, endX, endY } = closedEntries[usedIdx];
-      const closed = current[usedIdx++];
-      closed.outer.texture = outerTexture;
-      closed.outer.x = startX;
-      closed.outer.y = startY;
-      closed.outer.width = closed.outer.height = tileSize;
-      const pad = 5 * zoom;
-      const startXFloat = Math.round(startX + pad);
-      const startYFloat = Math.round(startY + pad);
-      const endXFloat = Math.round(endX - pad);
-      const endYFloat = Math.round(endY - pad);
-      closed.inner.x = startXFloat;
-      closed.inner.y = startYFloat;
-      closed.inner.texture = innerTexture;
-      closed.inner.width = Math.max(0, endXFloat - startXFloat);
-      closed.inner.height = Math.max(0, endYFloat - startYFloat);
-      closed.outer.visible = closed.inner.visible = true;
-    }
-    while (usedIdx < current.length) current[usedIdx].outer.visible = current[usedIdx++].inner.visible = false;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles]);
-
-  // Memoize sprites creation using cached base sprites from useRef
-  const { outerSprites, innerSprites, boomSprites, flagSprites, textElements, closedEntries, bgKey } = useMemo(() => {
-    const emptySprites = { outerSprites: [], innerSprites: [], boomSprites: [], flagSprites: [], textElements: [], closedEntries: [], bgKey: '' };
-    // Compute visible bounds once (avoid per-tile bounds check)
     const totalRows = tiles.height;
-    if (totalRows === 0) return emptySprites;
     const totalCols = tiles.width;
-    if (totalCols === 0) return emptySprites;
-    const { startCol, endCol, startRow, endRow } = computeVisibleBounds(
-      totalRows,
-      totalCols,
-      tilePadWidth,
-      tilePadHeight,
-      windowWidth,
-      windowHeight,
-      tileSize,
-    );
+    if (totalRows === 0 || totalCols === 0) return;
 
-    if (startCol > endCol || startRow > endRow || !Number.isFinite(startCol + endCol + startRow + endRow)) return emptySprites;
+    // Compute visible bounds
+    const startCol = Math.max(0, Math.ceil(tilePadWidth - 1));
+    const endCol = Math.min(totalCols - 1, (tilePadWidth + (windowWidth + tileSize) / (tileSize || 1)) >>> 0);
+    const startRow = Math.max(0, Math.ceil(tilePadHeight - 1));
+    const endRow = Math.min(totalRows - 1, (tilePadHeight + (windowHeight + tileSize) / (tileSize || 1)) >>> 0);
+    if (startCol > endCol || startRow > endRow || !Number.isFinite(startCol + endCol + startRow + endRow)) return;
 
-    // Preallocate arrays (upper bound)
+    const textureCache = cachedTexturesRef.current;
+    const defaultOuterTexture = textureCache.get(`${outer[2][0]}${outer[2][1]}${tileSize}`);
+    const defaultInnerTexture = textureCache.get(`${inner[2][0]}${inner[2][1]}${tileSize}`);
+    if (!defaultOuterTexture || !defaultInnerTexture) return;
+
     const rowsCount = Math.max(0, (endRow - startRow + 1) | 0);
     const colsCount = Math.max(0, (endCol - startCol + 1) | 0);
-    let maxVisibleTiles = rowsCount * colsCount;
-    if (!Number.isFinite(maxVisibleTiles) || maxVisibleTiles < 0) maxVisibleTiles = 0;
-    const outerSprites: JSX.Element[] = new Array(maxVisibleTiles);
-    const innerSprites: JSX.Element[] = new Array(maxVisibleTiles);
-    const boomSprites: JSX.Element[] = new Array(maxVisibleTiles);
-    const flagSprites: JSX.Element[] = new Array(maxVisibleTiles);
-    const textElements: JSX.Element[] = new Array(maxVisibleTiles);
-    const closedEntries: { startX: number; startY: number; endX: number; endY: number; outerTexture: Texture; innerTexture: Texture }[] = [];
-    let [outerIdx, innerIdx, boomIdx, flagIdx, textIdx] = [0, 0, 0, 0, 0];
-    let [openedCount, openedAccumulator] = [0, 0];
+    const maxVisible = rowsCount * colsCount;
+    const padPx = 5 * zoom;
 
-    const {
-      outerCachedSprite: outerCache,
-      innerCachedSprite: innerCache,
-      boomCachedSprite: boomCache,
-      flagCachedSprite: flagCache,
-      numberCachedSprite: numberCache,
-    } = cachedSpritesRef.current;
+    // Ensure pools are big enough
+    ensurePool(outerPoolRef.current, bgLayer, maxVisible);
+    ensurePool(innerPoolRef.current, bgLayer, maxVisible);
+    ensurePool(boomPoolRef.current, boomLayer, maxVisible);
+    ensurePool(flagPoolRef.current, flagLayer, maxVisible);
+    ensurePool(numberPoolRef.current, bgLayer, maxVisible);
 
-    // Select textures based on tile content with bounds-safe defaults
-    const textureCache = cachedTexturesRef.current;
-    const defaultTextures = {
-      outerTexture: textureCache.get(`${outer[2][0]}${outer[2][1]}${tileSize}`),
-      innerTexture: textureCache.get(`${inner[2][0]}${inner[2][1]}${tileSize}`),
-    } as const;
-    if (!defaultTextures.outerTexture || !defaultTextures.innerTexture) return emptySprites;
+    // Ensure closed pool
+    while (closedPoolRef.current.length < maxVisible) {
+      const outerS = new PixiSprite();
+      outerS.roundPixels = true;
+      outerS.eventMode = 'none' as unknown as never;
+      outerS.cullable = true;
+      const innerS = new PixiSprite();
+      innerS.roundPixels = true;
+      innerS.eventMode = 'none' as unknown as never;
+      innerS.cullable = true;
+      closedLayer.addChild(outerS);
+      closedLayer.addChild(innerS);
+      closedPoolRef.current.push({ outer: outerS, inner: innerS });
+    }
+
+    let outerIdx = 0;
+    let innerIdx = 0;
+    let closedIdx = 0;
+    let boomIdx = 0;
+    let flagIdx = 0;
+    let numIdx = 0;
 
     for (let rowIdx = startRow; rowIdx <= endRow; rowIdx++) {
       for (let colIdx = startCol; colIdx <= endCol; colIdx++) {
-        const { xFloat, yFloat, startX, startY, endX, endY, w, h } = snapTileEdges(colIdx, rowIdx, tilePadWidth, tilePadHeight, tileSize);
         const content = tiles.get(rowIdx, colIdx);
         if (content === Tile.FILL) continue;
-        const { outerTexture, innerTexture, closed } = getTileTexturesForContent(content, defaultTextures);
-        const { key } = makeNumericKeys(rowIdx, colIdx, tileSize);
 
-        // opened tiles accumulator for bgKey
-        if (!closed) {
-          openedCount++;
-          const hash = ((rowIdx * 4099) ^ (colIdx * 131)) >>> 0; // make it to unsigned integer number
-          openedAccumulator = (openedAccumulator + hash + content) >>> 0; // numeric tile value directly
+        // Snap tile edges
+        const xFloat = (colIdx - tilePadWidth) * tileSize;
+        const yFloat = (rowIdx - tilePadHeight) * tileSize;
+        const startX = Math.round(xFloat);
+        const startY = Math.round(yFloat);
+        const endX = Math.round(xFloat + tileSize);
+        const endY = Math.round(yFloat + tileSize);
+        const w = endX - startX;
+        const h = endY - startY;
+
+        // Determine textures
+        const isClosed = isTileClosedOrFlag(content);
+        let outerTexture: Texture;
+        let innerTexture: Texture;
+        if (isClosed) {
+          const isEven = getTileChecker(content);
+          const [oe, ie] = [outer[isEven], inner[isEven]];
+          outerTexture = textureCache.get(`${oe[0]}${oe[1]}${tileSize}`) || defaultOuterTexture;
+          innerTexture = textureCache.get(`${ie[0]}${ie[1]}${tileSize}`) || defaultInnerTexture;
+        } else {
+          outerTexture = defaultOuterTexture;
+          innerTexture = defaultInnerTexture;
         }
 
-        // Outer sprite
-        if (outerTexture) {
-          const outerKey = `${outerTexture.baseTexture.uid}${tileSize}`;
-          const baseOuter = outerCache.get(outerKey) ?? <Sprite cullable={false} roundPixels={true} eventMode="none" texture={outerTexture} />;
-          outerCache.set(outerKey, baseOuter);
-          if (!closed) {
-            const { width, height } = outerTexture;
-            const scale = { x: w / width, y: h / height };
-            outerSprites[outerIdx++] = cloneElement(baseOuter, { key, x: startX, y: startY, scale });
+        if (isClosed) {
+          // ── Closed/Flagged tile: use closed pool ──
+          const entry = closedPoolRef.current[closedIdx++];
+          if (!entry) continue;
+          entry.outer.texture = outerTexture;
+          entry.outer.x = startX;
+          entry.outer.y = startY;
+          entry.outer.width = entry.outer.height = tileSize;
+          entry.outer.visible = true;
+
+          const sx = Math.round(startX + padPx);
+          const sy = Math.round(startY + padPx);
+          const ex = Math.round(endX - padPx);
+          const ey = Math.round(endY - padPx);
+          entry.inner.texture = innerTexture;
+          entry.inner.x = sx;
+          entry.inner.y = sy;
+          entry.inner.width = Math.max(0, ex - sx);
+          entry.inner.height = Math.max(0, ey - sy);
+          entry.inner.visible = true;
+
+          // Flag overlay
+          if (isTileFlag(content)) {
+            const flagIndex = getFlagColor(content);
+            const fTex = textureCache.get(`flag${flagIndex}`);
+            if (fTex) {
+              const fs = flagPoolRef.current[flagIdx++];
+              fs.texture = fTex;
+              fs.anchor.set(0.5);
+              fs.x = startX + tileSize / 2;
+              fs.y = startY + tileSize / 2;
+              fs.width = w;
+              fs.height = h;
+              fs.visible = true;
+            }
+          }
+        } else {
+          // ── Opened tile: use outer + inner pools ──
+          const os = outerPoolRef.current[outerIdx++];
+          os.texture = outerTexture;
+          os.x = startX;
+          os.y = startY;
+          os.width = w;
+          os.height = h;
+          os.visible = true;
+
+          const sx = Math.round(xFloat + padPx);
+          const sy = Math.round(yFloat + padPx);
+          const ex = Math.round(startX + w - padPx);
+          const ey = Math.round(startY + h - padPx);
+          const is = innerPoolRef.current[innerIdx++];
+          is.texture = innerTexture;
+          is.x = sx;
+          is.y = sy;
+          is.width = Math.max(0, ex - sx);
+          is.height = Math.max(0, ey - sy);
+          is.visible = true;
+
+          // Boom sprite
+          if (isTileBomb(content)) {
+            const bTex = textureCache.get('boom');
+            if (bTex) {
+              const bs = boomPoolRef.current[boomIdx++];
+              bs.texture = bTex;
+              bs.x = startX;
+              bs.y = startY;
+              bs.width = w;
+              bs.height = h;
+              bs.visible = true;
+            }
+          }
+
+          // Number sprite (1-7)
+          if (content >= 1 && content <= 7) {
+            const nTex = numberTexturesRef.current.get(content);
+            if (nTex) {
+              const ns = numberPoolRef.current[numIdx++];
+              ns.texture = nTex;
+              ns.anchor.set(0.5);
+              ns.x = startX + tileSize / 2;
+              ns.y = startY + tileSize / 2;
+              ns.width = w;
+              ns.height = h;
+              ns.visible = true;
+            }
           }
         }
-
-        // Inner sprite
-        if (innerTexture) {
-          const innerKey = `${innerTexture.baseTexture.uid}${tileSize}`;
-          // Inner padding: 5px on each side scaled by zoom, then snapped per-edge
-          const pad = 5 * zoom;
-          const startXFloat = Math.round(xFloat + pad);
-          const startYFloat = Math.round(yFloat + pad);
-          const endXFloat = Math.round(startX + w - pad);
-          const endYFloat = Math.round(startY + h - pad);
-          const iw = Math.max(0, endXFloat - startXFloat);
-          const ih = Math.max(0, endYFloat - startYFloat);
-          const baseInner = innerCache.get(innerKey) ?? <Sprite cullable={false} roundPixels={true} eventMode="none" texture={innerTexture} />;
-          innerCache.set(innerKey, baseInner);
-          if (closed) closedEntries.push({ startX, startY, endX, endY, outerTexture: outerTexture!, innerTexture: innerTexture! });
-          else {
-            const { width, height } = innerTexture;
-            const scale = { x: iw / width, y: ih / height };
-            innerSprites[innerIdx++] = cloneElement(baseInner, { key, x: startXFloat, y: startYFloat, scale }); // snapped inner
-          }
-        }
-
-        // Boom sprite
-        if (isTileBomb(content) && texturesReady) {
-          const boomKey = `boom${tileSize}`;
-          const texture = textureCache.get('boom');
-          const baseBoom = boomCache.get(boomKey) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={texture} />;
-          boomCache.set(boomKey, baseBoom);
-          if (!texture) continue;
-          const { width, height } = texture;
-          const scale = { x: w / width, y: h / height };
-          boomSprites[boomIdx++] = cloneElement(baseBoom, { key, x: startX, y: startY, scale });
-        }
-
-        // Flag sprite
-        if (isTileFlag(content) && texturesReady) {
-          const flagIndex = getFlagColor(content);
-          const flagKey = `flag${flagIndex}${tileSize}`;
-          const texture = textureCache.get(`flag${flagIndex}`);
-          const baseFlag = flagCache.get(flagKey) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={texture} anchor={0.5} />;
-          flagCache.set(flagKey, baseFlag);
-          if (!texture) continue;
-          const { width, height } = texture;
-          const scale = { x: w / width, y: h / height };
-          flagSprites[flagIdx++] = cloneElement(baseFlag, { key, x: startX + tileSize / 2, y: startY + tileSize / 2, scale });
-        }
-
-        const texture = numbersReady && content >= 1 && content <= 7 ? numberTexturesRef.current.get(content) : undefined;
-        if (!texture) continue;
-        // Number sprite elements
-        const keyNum = `num${content}${tileSize}`;
-        const baseNum = numberCache.get(keyNum) ?? <Sprite cullable={true} roundPixels={true} eventMode="none" texture={texture} anchor={0.5} />;
-        numberCache.set(keyNum, baseNum);
-        const { width, height } = texture;
-        const scale = { x: w / width, y: h / height };
-        textElements[textIdx++] = cloneElement(baseNum, { key: key + 4, x: startX + tileSize / 2, y: startY + tileSize / 2, scale });
       }
     }
-    const bgKey = `${tileSize}${openedCount}${openedAccumulator}`;
-    return {
-      outerSprites: outerSprites.slice(0, outerIdx),
-      innerSprites: innerSprites.slice(0, innerIdx),
-      boomSprites: boomSprites.slice(0, boomIdx),
-      flagSprites: flagSprites.slice(0, flagIdx),
-      textElements: textElements.slice(0, textIdx),
-      closedEntries,
-      bgKey,
-    };
+
+    // Hide unused sprites in all pools
+    hidePoolFrom(outerPoolRef.current, outerIdx);
+    hidePoolFrom(innerPoolRef.current, innerIdx);
+    hidePoolFrom(boomPoolRef.current, boomIdx);
+    hidePoolFrom(flagPoolRef.current, flagIdx);
+    hidePoolFrom(numberPoolRef.current, numIdx);
+    for (let i = closedIdx; i < closedPoolRef.current.length; i++) {
+      closedPoolRef.current[i].outer.visible = false;
+      closedPoolRef.current[i].inner.visible = false;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles]);
+  }, [tiles, texturesReady, numbersReady]);
 
   if (!texturesReady || !numbersReady) return null;
   return (
@@ -462,16 +441,10 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
       }}
     >
       <Container name={'container'} sortableChildren={false} eventMode="none" cacheAsBitmap={false} cullable={true}>
-        {texturesReady && (
-          <Container name={'background'} eventMode="none" cacheAsBitmap={true} key={`bg${bgKey}`}>
-            {outerSprites}
-            {innerSprites}
-            {textElements}
-          </Container>
-        )}
+        <Container name={'background'} ref={bgLayerRef} eventMode="none" sortableChildren={false} />
         <Container name={'closed-layer'} ref={closedLayerRef} eventMode="none" sortableChildren={false} />
-        {boomSprites}
-        {flagSprites}
+        <Container name={'boom-layer'} ref={boomLayerRef} eventMode="none" sortableChildren={false} />
+        <Container name={'flag-layer'} ref={flagLayerRef} eventMode="none" sortableChildren={false} />
       </Container>
     </Stage>
   );
