@@ -17,7 +17,7 @@ import ScoreBoardComponent from '@/components/scoreboard';
 import { SendMessageEvent, SendSetWindowPayloadType, XYType, Direction } from '@/types';
 // WebGPU imports removed - using simple CPU processing only
 import { VECTORIZED_TILE_LUT } from '@/utils/tiles';
-import { TileGrid, Tile, isTileClosedOrFlag, makeClosedTile, makeFlagTile } from '@/utils/tileGrid';
+import { TileGrid, Tile, makeClosedTile, makeFlagTile } from '@/utils/tileGrid';
 import { initWasm, getWasmSync, hexEncoder } from '@/utils/wasmTileEngine';
 import useMessageHandler from '@/hooks/useMessageHandler';
 import { useCursorStore } from '@/store/cursorStore';
@@ -245,17 +245,33 @@ export default function Play() {
         if (wasm.process_hex_tiles_inplace) {
           const newTiles = tiles.clone();
           const changeCount = wasm.process_hex_tiles_inplace(
-            hexBytes, newTiles.data, newTiles.width, newTiles.height,
-            innerEndX, end_y, innerStartX, start_y,
-            startPoint.x, startPoint.y, isAll,
+            hexBytes,
+            newTiles.data,
+            newTiles.width,
+            newTiles.height,
+            innerEndX,
+            end_y,
+            innerStartX,
+            start_y,
+            startPoint.x,
+            startPoint.y,
+            isAll,
           );
           if (changeCount > 0) setTiles(newTiles);
         } else {
           // Fallback to packed approach (old WASM without inplace)
           const packed = wasm.process_hex_tiles(
-            hexBytes, tiles.data, tiles.width, tiles.height,
-            innerEndX, end_y, innerStartX, start_y,
-            startPoint.x, startPoint.y, isAll,
+            hexBytes,
+            tiles.data,
+            tiles.width,
+            tiles.height,
+            innerEndX,
+            end_y,
+            innerStartX,
+            start_y,
+            startPoint.x,
+            startPoint.y,
+            isAll,
           );
           applyPackedChanges(packed);
         }
