@@ -24,7 +24,7 @@ export default function CanvasDashboard({ renderRange, maxTileCount }: CanvasDas
   const { x: clickX, y: clickY } = useClickStore();
   const { useAnimation, setAnimation } = useAnimationStore();
   const { windowWidth, windowHeight } = useScreenSize();
-  const { zoom, zoomDown, zoomUp, originPosition: cursorOriginPosition, score, items } = useCursorStore();
+  const { zoom, zoomDown, zoomUp, originPosition: cursorOriginPosition, score, items, setIsBombMode, isBombMode } = useCursorStore();
   const bombCount = items?.bomb ?? 0;
 
   const rowRange = (windowWidth * renderRange) / (tileSize / zoomScale);
@@ -32,7 +32,6 @@ export default function CanvasDashboard({ renderRange, maxTileCount }: CanvasDas
 
   // states
   const [bottomToggle, setBottomToggle] = useState(true);
-  const [isBombMode, setIsBombMode] = useState(false);
 
   // functions
   const checkMaxTileCount = () => rowRange * colRange > maxTileCount;
@@ -59,9 +58,10 @@ export default function CanvasDashboard({ renderRange, maxTileCount }: CanvasDas
                 <PointerSVG />
                 &nbsp;({clickX === Infinity ? '' : clickX}, {clickY === Infinity ? '' : clickY})
               </p>
-              <p className={`${S.bomb} ${isBombMode ? S.bombMode : ''}`} onClick={toggleBombMode}>
-                💣 X {bombCount}
-              </p>
+              <button type="button" className={`${S.bomb} ${isBombMode ? S.bombMode : ''}`} onClick={toggleBombMode}>
+                <span>💣</span>
+                <span>X {bombCount}</span>
+              </button>
               <p className={S.animation} onClick={() => setAnimation(!useAnimation)}>
                 <input type="checkbox" checked={useAnimation} readOnly />
                 Animation

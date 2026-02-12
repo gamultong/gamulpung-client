@@ -15,6 +15,7 @@ export const SendMessageEvent = {
   SET_WINDOW: 'SET-WINDOW',
   CREATE_CURSOR: 'CREATE-CURSOR',
   DISMANTLE_MINE: 'DISMANTLE-MINE',
+  INSTALL_BOMB: 'INSTALL-BOMB',
 } as const;
 export type SendMessageEvent = (typeof SendMessageEvent)[keyof typeof SendMessageEvent];
 
@@ -36,6 +37,7 @@ export type SendSetFlagPayloadType = PositionType;
 export type SendSetWindowPayloadType = WindowSizeType;
 export type SendCreateCursorPayloadType = WindowSizeType;
 export type SendDismantleMinePayloadType = PositionType;
+export type SendInstallBombPayloadType = PositionType;
 
 export type SendMessagePayloadType =
   | SendChatPayloadType
@@ -44,7 +46,8 @@ export type SendMessagePayloadType =
   | SendSetFlagPayloadType
   | SendSetWindowPayloadType
   | SendCreateCursorPayloadType
-  | SendDismantleMinePayloadType;
+  | SendDismantleMinePayloadType
+  | SendInstallBombPayloadType;
 
 export type SendMessageType = {
   header: { event: SendMessageEvent };

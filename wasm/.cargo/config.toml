@@ -1,0 +1,3 @@
+# Enable SIMD128 for wasm32 to speed up tile diff
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

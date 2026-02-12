@@ -46,15 +46,43 @@
       }
     }
     .bomb {
-      display: flex;
+      width: 115%;
+      display: inline-flex;
       align-items: center;
+      padding: 4px 20px;
+      justify-content: space-between;
       margin-left: -10px;
+      border-radius: 12px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      background-color: rgba(0, 0, 0, 25%);
+      color: inherit;
+      font-family: 'GeekbleMalang2WOFF2';
+      font-size: 20px;
       cursor: pointer;
+      transition:
+        background-color 0.15s,
+        border-color 0.15s,
+        transform 0.1s;
+
+      &:hover {
+        background-color: rgba(0, 0, 0, 40%);
+        border-color: rgba(255, 255, 255, 0.35);
+      }
+      &:active {
+        background-color: rgba(0, 0, 0, 50%);
+        transform: scale(0.98);
+      }
+      &:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+      }
       &.bombMode {
-        border: 5px solid red;
-        margin-top: -5px;
-        margin-bottom: -5px;
-        border-radius: 10px;
+        border-color: #e53935;
+        background-color: rgba(229, 57, 53, 0.25);
+        box-shadow: 0 0 0 2px rgba(229, 57, 53, 0.3);
+        &:hover {
+          background-color: rgba(229, 57, 53, 0.35);
+        }
       }
     }
     .toggle {

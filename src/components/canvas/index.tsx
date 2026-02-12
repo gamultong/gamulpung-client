@@ -10,7 +10,8 @@ import useWebSocketStore from '@/store/websocketStore';
 import { useRenderTiles, useRenderStartPoint, useTileSize, useStartPoint, useEndPoint, useTileStore } from '@/store/tileStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
-import { XYType, VectorImagesType, TileContent, SendMessageEvent, PositionType, Direction } from '@/types';
+import { XYType, VectorImagesType, SendMessageEvent, PositionType, Direction } from '@/types';
+import { isTileOpened, isTileClosed, isTileFlag } from '@/utils/tileGrid';
 import { CURSOR_COLORS, CURSOR_DIRECTIONS, OTHER_CURSOR_COLORS } from '@/constants';
 import { makePath2d, makePath2dFromArray } from '@/utils';
 import useSkillTree from '@/hooks/useSkillTree';
@@ -65,7 +66,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
   /** stores */
   const { windowHeight, windowWidth } = useScreenSize();
   const { setPosition: setClickPosition, x: clickX, y: clickY, setMovecost } = useClickStore();
-  const { position: cursorPosition, zoom, color, setPosition: setCursorPosition, setOriginPosition } = useCursorStore();
+  const { position: cursorPosition, zoom, color, setPosition: setCursorPosition, setOriginPosition, isBombMode } = useCursorStore();
   const { cursors } = useOtherUserCursorsStore();
   const { sendMessage } = useWebSocketStore();
   const { useAnimation } = useAnimationStore();
@@ -131,11 +132,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     };
   }, []);
 
-  /** Check if the tile has been opened */
-  const checkTileHasOpened = (tile: string) => {
-    const type = tile[0];
-    return type !== TileContent.CLOSED && type !== TileContent.FLAGGED;
-  };
+  /** Check if the tile has been opened (not closed, not flagged) */
+  const checkTileHasOpened = (tile: number) => isTileOpened(tile);
 
   /**
    * General Click Event Handler
@@ -241,6 +239,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       // Apply padding before animation starts
       if (direction && viewStart && viewEnd) padtiles(viewStart.x, viewEnd.y, viewEnd.x, viewStart.y, direction as Direction);
 
+      // Animation Effect
       if (useAnimation) moveAnimation(dx, dy);
       console.log('animation', performance.now());
     }, MOVE_SPEED);
@@ -248,11 +247,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
 
   // Only Move, Open-tiles, Set-flag
   const clickEvent = (x: number, y: number, clickType: SendMessageEvent) => {
-    const { MOVE, OPEN_TILES, SET_FLAG, DISMANTLE_MINE } = SendMessageEvent;
-    if ([MOVE, OPEN_TILES, SET_FLAG, DISMANTLE_MINE].some(event => event === clickType)) {
-      const payload: PositionType = { position: { x, y } };
-      sendMessage(clickType, payload);
-    }
+    const { MOVE, OPEN_TILES, SET_FLAG, DISMANTLE_MINE, INSTALL_BOMB } = SendMessageEvent;
+    if (![MOVE, OPEN_TILES, SET_FLAG, DISMANTLE_MINE, INSTALL_BOMB].some(event => event === clickType)) return;
+    const payload: PositionType = { position: { x, y } };
+    sendMessage(clickType, payload);
   };
 
   // Map click type to corresponding action event
@@ -277,42 +275,47 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     const [tileArrayX, tileArrayY] = [(clickX / tileSize + tilePaddingWidth) >>> 0, (clickY / tileSize + tilePaddingHeight) >>> 0];
     const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
     // Setting content of clicked tile
-    const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
-    setClickPosition(tileX, tileY, clickedTileContent);
+    const clickedTile = tiles.get(tileArrayY, tileArrayX);
+    setClickPosition(tileX, tileY, clickedTile);
 
-    const isClosed = clickedTileContent.includes(TileContent.CLOSED);
-    const isFlagged = clickedTileContent.includes(TileContent.FLAGGED);
+    const isClosed = isTileClosed(clickedTile);
+    const isFlagged = isTileFlag(clickedTile);
     const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
     const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
     const clickType = event.buttons !== 2 ? 'general' : 'special'; // 1 move, open-tiles, 2 set-flag
+    const isActionable = isClosed || isFlagged;
 
     // Handle in-range actions immediately (only for closed/flagged tiles)
     if (isInRange) {
-      if ((isClosed || isFlagged) && clickType === 'special') {
-        clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
-      } else if (isClosed && clickType === 'general') {
-        clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
+      if (isBombMode && isActionable && clickType === 'special') {
+        clickEvent(tileX, tileY, SendMessageEvent.INSTALL_BOMB);
+        return;
       }
+      // If it's not bomb mode and it's actionable, set flag
+      if (isActionable && clickType === 'special') clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
+      else if (isClosed && clickType === 'general') clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
+
       // Open tiles should continue to default movement logic
-      if (isClosed || isFlagged) return;
+      if (isActionable) return;
     }
 
     // Handle out-of-range clicks: move to nearest opened tile, then perform action
-    if (!isInRange && (isClosed || isFlagged)) {
+    if (!isInRange && isActionable) {
       const { x: targetX, y: targetY } = findOpenedNeighborsAroundTarget(tileX, tileY);
       if (targetX === Infinity || targetY === Infinity || movingPaths.length > 0) return;
+
+      // Bomb mode: right-click → INSTALL_BOMB; otherwise use CLICK_TYPE_TO_EVENT
+      const actionEvent = isBombMode && clickType === 'special' ? SendMessageEvent.INSTALL_BOMB : CLICK_TYPE_TO_EVENT[clickType];
 
       // Check if we're already at the target position
       const targetAbsoluteX = targetX + startPoint.x;
       const targetAbsoluteY = targetY + startPoint.y;
       if (targetAbsoluteX === cursorOriginX && targetAbsoluteY === cursorOriginY) {
         // Already at target, just perform action
-        const actionEvent = CLICK_TYPE_TO_EVENT[clickType];
         if (actionEvent) clickEvent(tileX, tileY, actionEvent);
         return;
       }
 
-      const actionEvent = CLICK_TYPE_TO_EVENT[clickType];
       if (!actionEvent) return;
 
       moveCursor(targetX, targetY, tileX, tileY, (x, y) => clickEvent(x, y, actionEvent));
@@ -338,26 +341,24 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       const [clickX, clickY] = [event.clientX - rectLeft, event.clientY - rectTop];
       const [tileArrayX, tileArrayY] = [(clickX / tileSize + tilePaddingWidth) >>> 0, (clickY / tileSize + tilePaddingHeight) >>> 0];
       const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
-      const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
+      const clickedTile = tiles.get(tileArrayY, tileArrayX);
       // Setting content of clicked tile to update click position for rendering
-      setClickPosition(tileX, tileY, clickedTileContent);
-      const isClosed = clickedTileContent.includes(TileContent.CLOSED);
-      const isFlagged = clickedTileContent.includes(TileContent.FLAGGED);
+      setClickPosition(tileX, tileY, clickedTile);
+      const isClosed = isTileClosed(clickedTile);
+      const isFlagged = isTileFlag(clickedTile);
       const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
       const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
 
+      const rightClickEvent = isBombMode ? SendMessageEvent.INSTALL_BOMB : SendMessageEvent.SET_FLAG;
       if (isInRange && (isClosed || isFlagged)) {
-        clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
+        clickEvent(tileX, tileY, rightClickEvent);
       } else if (!isInRange && (isClosed || isFlagged)) {
         const { x: targetX, y: targetY } = findOpenedNeighborsAroundTarget(tileX, tileY);
         if (!(targetX === Infinity || targetY === Infinity || movingPaths.length > 0)) {
           const targetAbsoluteX = targetX + startPoint.x;
           const targetAbsoluteY = targetY + startPoint.y;
-          if (targetAbsoluteX === cursorOriginX && targetAbsoluteY === cursorOriginY) {
-            clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
-          } else {
-            moveCursor(targetX, targetY, tileX, tileY, (cx, cy) => clickEvent(cx, cy, SendMessageEvent.SET_FLAG));
-          }
+          if (targetAbsoluteX === cursorOriginX && targetAbsoluteY === cursorOriginY) clickEvent(tileX, tileY, rightClickEvent);
+          moveCursor(targetX, targetY, tileX, tileY, (cx, cy) => clickEvent(cx, cy, rightClickEvent));
         }
       }
       return;
@@ -372,9 +373,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
 
     longPressPositionRef.current = { x: clickX, y: clickY };
 
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-    }
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
 
     longPressTimerRef.current = setTimeout(() => {
       const position = longPressPositionRef.current;
@@ -384,18 +383,16 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       const [tileArrayX, tileArrayY] = [(x / tileSize + tilePaddingWidth) >>> 0, (y / tileSize + tilePaddingHeight) >>> 0];
       const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
 
-      const clickedTileContent = tiles[tileArrayY]?.[tileArrayX] ?? 'Out of bounds';
-      const isClosed = clickedTileContent.includes(TileContent.CLOSED);
-      const isFlagged = clickedTileContent.includes(TileContent.FLAGGED);
+      const clickedTile = tiles.get(tileArrayY, tileArrayX);
+      const isClosed = isTileClosed(clickedTile);
+      const isFlagged = isTileFlag(clickedTile);
+      const isActionable = isClosed || isFlagged;
       const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
       const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
 
       // In-range: perform DISMANTLE_MINE action
-      if (isInRange) {
-        if (isClosed || isFlagged) {
-          clickEvent(tileX, tileY, SendMessageEvent.DISMANTLE_MINE);
-        }
-      } else if (isClosed || isFlagged) {
+      if (isInRange && isActionable) clickEvent(tileX, tileY, SendMessageEvent.DISMANTLE_MINE);
+      else if (isActionable) {
         // Out-of-range closed/flagged: move near and then dismantle mine
         const { x: targetX, y: targetY } = findOpenedNeighborsAroundTarget(tileX, tileY);
         if (!(targetX === Infinity || targetY === Infinity || movingPaths.length > 0)) {
@@ -445,8 +442,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     let result = { x: Infinity, y: Infinity };
     [[0, 0], ...CURSOR_DIRECTIONS].some(([dx, dy]) => {
       const [x, y] = [currentX + dx, currentY + dy];
-      if (!tiles[y] || !tiles[y][x]) return false;
-      if (!checkTileHasOpened(tiles[y][x])) return false;
+      if (y < 0 || y >= tiles.height || x < 0 || x >= tiles.width) return false;
+      if (!checkTileHasOpened(tiles.get(y, x))) return false;
       result = { x, y };
       return true;
     });
@@ -468,10 +465,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       // Check if current position is opened and accessible
       if (
         currentRelativeY >= 0 &&
-        currentRelativeY < tiles.length &&
+        currentRelativeY < tiles.height &&
         currentRelativeX >= 0 &&
-        currentRelativeX < tiles[currentRelativeY]?.length &&
-        checkTileHasOpened(tiles[currentRelativeY][currentRelativeX])
+        currentRelativeX < tiles.width &&
+        checkTileHasOpened(tiles.get(currentRelativeY, currentRelativeX))
       ) {
         return { x: currentRelativeX, y: currentRelativeY };
       }
@@ -487,11 +484,11 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       const relativeX = absX - startPoint.x;
       const relativeY = absY - startPoint.y;
 
-      if (relativeY < 0 || relativeY >= tiles.length || relativeX < 0 || relativeX >= tiles[relativeY]?.length) {
+      if (relativeY < 0 || relativeY >= tiles.height || relativeX < 0 || relativeX >= tiles.width) {
         return;
       }
 
-      const tileContent = tiles[relativeY][relativeX];
+      const tileContent = tiles.get(relativeY, relativeX);
       if (!checkTileHasOpened(tileContent)) return;
 
       // Calculate distance from current position
@@ -630,10 +627,10 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       const targetRelativeX = targetX;
       if (
         targetRelativeY >= 0 &&
-        targetRelativeY < tiles.length &&
+        targetRelativeY < tiles.height &&
         targetRelativeX >= 0 &&
-        targetRelativeX < tiles[targetRelativeY]?.length &&
-        checkTileHasOpened(tiles[targetRelativeY][targetRelativeX]) &&
+        targetRelativeX < tiles.width &&
+        checkTileHasOpened(tiles.get(targetRelativeY, targetRelativeX)) &&
         !checkIsOtherCursorOnTile(targetRelativeX, targetRelativeY)
       ) {
         return [
@@ -665,7 +662,14 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     /** initialize tiles */
     const [start, target] = [new TileNode(startX, startY), new TileNode(targetX, targetY)];
 
-    const grid = tiles.map((row, i) => row.map((tile, j) => (checkTileHasOpened(tile) ? new TileNode(j, i) : null)));
+    const grid: (TileNode | null)[][] = [];
+    for (let i = 0; i < tiles.height; i++) {
+      const row: (TileNode | null)[] = [];
+      for (let j = 0; j < tiles.width; j++) {
+        row.push(checkTileHasOpened(tiles.get(i, j)) ? new TileNode(j, i) : null);
+      }
+      grid.push(row);
+    }
 
     // Check if target is accessible
     if (targetY < 0 || targetY >= grid.length || targetX < 0 || targetX >= grid[targetY]?.length || grid[targetY][targetX] === null) {
@@ -797,7 +801,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
 
   /** Load Assets and Render (optimized) */
   useLayoutEffect(() => {
-    if (!isInitializing && tiles.length > 0) return;
+    if (!isInitializing && !tiles.isEmpty) return;
 
     const loadFontOptional = async () => {
       try {
@@ -848,7 +852,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       {isInitializing && (
         <div className={S.loading}>
           <h1>Assets Loading...</h1>
-          <div className={`${tiles.length < 1 ? S.loadingBar : S.loadComplete}`} />
+          <div className={`${tiles.isEmpty ? S.loadingBar : S.loadComplete}`} />
         </div>
       )}
       {!isInitializing && (

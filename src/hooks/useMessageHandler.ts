@@ -19,22 +19,26 @@ import useWebSocketStore from '@/store/websocketStore';
 interface UseMessageHandlerOptions {
   getCurrentTileWidthAndHeight: () => { width: number; height: number };
   replaceTiles: (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => Promise<void>;
+  replaceBinaryTiles?: (binaryData: Uint8Array) => Promise<void>;
   setLeftReviveTime: (time: number) => void;
   setIsInitialized: (initialized: boolean) => void;
 }
 
 export default function useMessageHandler(options: UseMessageHandlerOptions) {
-  const { getCurrentTileWidthAndHeight, replaceTiles, setLeftReviveTime, setIsInitialized } = options;
+  const { getCurrentTileWidthAndHeight, replaceTiles, replaceBinaryTiles, setLeftReviveTime, setIsInitialized } = options;
 
-  // Store hooks
-  const { setCursors, cursors: nowCursors } = useOtherUserCursorsStore();
+  // Store hooks - only stable setters, no reactive state in callback deps
   const { sendMessage } = useWebSocketStore();
-  const { position, setPosition, setOriginPosition, setId, id: clientCursorId, setScore, setItems } = useCursorStore();
   const { setRanking } = useRankStore();
 
   const handleWebSocketMessage = useCallback(
     async (wsMessage: string) => {
       const { MY_CURSOR, CHAT, CURSORS_STATE, EXPLOSION, QUIT_CURSOR, SCOREBOARD_STATE, TILES_STATE } = GetMessageEvent;
+
+      // Read current state inside callback to avoid stale closures
+      const { position, id: clientCursorId, setPosition, setOriginPosition, setId, setScore, setItems } = useCursorStore.getState();
+      const { cursors: nowCursors, setCursors } = useOtherUserCursorsStore.getState();
+
       try {
         const { header, payload } = JSON.parse(wsMessage) as GetMessageType;
         const { event } = header;
@@ -55,16 +59,16 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
               if (resWidth === width && resHeight === height) isAll = 'All';
               promises.push(replaceTiles(top_left.x, bottom_right.y, bottom_right.x, top_left.y, data, isAll));
             }
-            Promise.all(promises);
+            await Promise.all(promises);
             break;
           }
           case EXPLOSION: {
-            // The Explosion range is 1 tile including diagonal.
-            const { position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
-            const { x, y } = position;
+            // The Explosion event is applied on all the cursor in the view.
+            const { position: explode_position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
+            const { x, y } = explode_position;
             const { x: cursorX, y: cursorY } = position;
             if (cursorX >= x - 1 && cursorX <= x + 1 && cursorY >= y - 1 && cursorY <= y + 1) {
-              // set revive time
+              console.log('explosion', performance.now());
               setLeftReviveTime(10);
             }
             break;
@@ -78,36 +82,47 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
           }
           case CURSORS_STATE: {
             const { cursors } = payload as GetCursorStatePayloadType;
-            const newCursors: OtherCursorState[] = cursors.map(cursor => ({
-              color: 'red',
-              id: cursor.id,
-              position: cursor.position,
-              message: '',
-              messageTime: 0,
-              pointer: { x: Infinity, y: Infinity },
-              score: cursor.score,
-              revive_at: new Date(cursor.active_at).getTime(),
-              items: cursor.items,
-            }));
-            // find client cursor
-            const getCursors = newCursors.filter(cursor => cursor.id !== clientCursorId);
-            const addCursors = getCursors.filter(cursor => !nowCursors.some(c => c.id === cursor.id));
-            const updatedCursors = nowCursors.map(cursor => {
-              const getCursor = getCursors.find(c => c.id === cursor.id);
-              return getCursor ? getCursor : cursor;
-            });
-            setCursors([...addCursors, ...updatedCursors]);
-            const myCursor = newCursors.find(cursor => cursor.id === clientCursorId)!;
-            if (myCursor) {
-              const { position } = myCursor;
-              setScore(myCursor.score);
-              setItems(myCursor.items);
-              // console.log('mycursor', position, performance.now());
-              // if (!(position.x === cursorPosition.x && position.y === cursorPosition.y)) {
-              setPosition(position);
-              setOriginPosition(position);
-              // }
+
+            // Build Map from server data for O(1) lookups
+            const serverMap = new Map<string, OtherCursorState>();
+            for (const cursor of cursors) {
+              if (cursor.id === clientCursorId) {
+                // Handle own cursor
+                setScore(cursor.score);
+                setItems(cursor.items);
+                setPosition(cursor.position);
+                setOriginPosition(cursor.position);
+                continue;
+              }
+              serverMap.set(cursor.id, {
+                color: 'red',
+                id: cursor.id,
+                position: cursor.position,
+                message: '',
+                messageTime: 0,
+                pointer: { x: Infinity, y: Infinity },
+                score: cursor.score,
+                revive_at: new Date(cursor.active_at).getTime(),
+                items: cursor.items,
+              });
             }
+
+            // Merge: update existing + add new cursors in O(n + m)
+            const result: OtherCursorState[] = [];
+            const seen = new Set<string>();
+            for (const existing of nowCursors) {
+              const updated = serverMap.get(existing.id);
+              if (updated) {
+                result.push(updated);
+                seen.add(existing.id);
+              } else {
+                result.push(existing);
+              }
+            }
+            for (const [id, cursor] of serverMap) {
+              if (!seen.has(id)) result.push(cursor);
+            }
+            setCursors(result);
             break;
           }
           /** Fetches own information only once when connected. */
@@ -124,11 +139,11 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
           }
           case CHAT: {
             const { id, message } = payload as GetChatPayloadType;
-            const newCursors = nowCursors.map(cursor => {
+            const updatedCursors = nowCursors.map(cursor => {
               if (cursor.id !== id) return cursor;
               return { ...cursor, message, messageTime: Date.now() + 1000 * 8 };
             });
-            setCursors(newCursors);
+            setCursors(updatedCursors);
             break;
           }
           default: {
@@ -139,15 +154,36 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
         console.error(e);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [replaceTiles, position, clientCursorId, nowCursors],
+    [replaceTiles, setLeftReviveTime, setIsInitialized, getCurrentTileWidthAndHeight, sendMessage, setRanking],
   );
 
-  // Handle WebSocket messages automatically
+  /** Handle binary WebSocket frames (future: server sends 1-byte-per-tile data) */
+  const handleBinaryMessage = useCallback(
+    async (buffer: ArrayBuffer) => {
+      if (!replaceBinaryTiles) return;
+      try {
+        const data = new Uint8Array(buffer);
+        await replaceBinaryTiles(data);
+      } catch (e) {
+        console.error('Binary message error:', e);
+      }
+    },
+    [replaceBinaryTiles],
+  );
+
+  // Handle text WebSocket messages
   const { message } = useWebSocketStore();
   useLayoutEffect(() => {
     if (!message) return;
     handleWebSocketMessage(message);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [message]);
+
+  // Handle binary WebSocket messages
+  const { binaryMessage } = useWebSocketStore();
+  useLayoutEffect(() => {
+    if (!binaryMessage) return;
+    handleBinaryMessage(binaryMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [binaryMessage]);
 }
