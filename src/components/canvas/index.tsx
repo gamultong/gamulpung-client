@@ -1,7 +1,6 @@
 'use client';
 import S from './style.module.scss';
-import React, { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
-import RenderPaths from '@/assets/renderPaths.json';
+import React, { useRef, useEffect } from 'react';
 
 import useScreenSize from '@/hooks/useScreenSize';
 import { useClickStore, useAnimationStore } from '@/store/interactionStore';
@@ -10,40 +9,31 @@ import useWebSocketStore from '@/store/websocketStore';
 import { useRenderTiles, useRenderStartPoint, useTileSize, useStartPoint, useEndPoint, useTileStore } from '@/store/tileStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
-import { XYType, VectorImagesType, SendMessageEvent, PositionType, Direction } from '@/types';
-import { isTileOpened, isTileClosed, isTileFlag } from '@/utils/tileGrid';
-import { CURSOR_COLORS, CURSOR_DIRECTIONS, OTHER_CURSOR_COLORS } from '@/constants';
-import { makePath2d, makePath2dFromArray } from '@/utils';
+import { ActiveExplosion } from '@/types';
 import useSkillTree from '@/hooks/useSkillTree';
+import useMovement from '@/hooks/useMovement';
+import useCursorRenderer from '@/hooks/useCursorRenderer';
+import useInputHandlers from '@/hooks/useInputHandlers';
+import useShockwaveAnimation from '@/hooks/useShockwaveAnimation';
 
-class TileNode {
-  x: number;
-  y: number;
-  gScore: number;
-  heuristic: number;
-  fTotal: number;
-  parent: TileNode | null;
-
-  constructor(x: number, y: number) {
-    this.x = x;
-    this.y = y;
-    this.gScore = Infinity; // Cost from start node
-    this.heuristic = 0; // Heuristic (estimated cost to goal)
-    this.fTotal = Infinity; // Total cost f = g + h
-    this.parent = null; // For path reconstruction
-  }
-}
-
-/** 타입 정의 */
 interface CanvasRenderComponentProps {
   cursorOriginX: number;
   cursorOriginY: number;
   paddingTiles: number;
   leftReviveTime: number;
+  activeExplosions: ActiveExplosion[];
+  removeExplosion: (id: number) => void;
 }
 
-const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTiles, cursorOriginX, cursorOriginY, leftReviveTime }) => {
-  // Get tiles and related data from zustand store
+const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
+  paddingTiles,
+  cursorOriginX,
+  cursorOriginY,
+  leftReviveTime,
+  activeExplosions,
+  removeExplosion,
+}) => {
+  // Store subscriptions
   const tiles = useRenderTiles();
   const tileSize = useTileSize();
   const startPoint = useRenderStartPoint();
@@ -51,19 +41,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
   const viewEnd = useEndPoint();
   const { padtiles } = useTileStore();
   const { MOVE_SPEED } = useSkillTree();
-
-  /** constants */
-  const BASE_OFFSET = tileSize >> 1; // tileSize / 2
-  const LONG_PRESS_DURATION = 500; // ms
-  const LONG_PRESS_MOVE_THRESHOLD = 10; // px
-  const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
-  const otherCursorPadding = 1 / (paddingTiles - 1); // padding for other cursors
-  const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
-  const [otherCursorPaddingWidth, otherCursorPaddingHeight] = [tilePaddingWidth * otherCursorPadding, tilePaddingHeight * otherCursorPadding];
-  const [lastMovingPosition, setLastMovingPosition] = useState<XYType>({ x: Infinity, y: Infinity });
-  const { boomPaths, cursorPaths, flagPaths, stunPaths } = RenderPaths;
-
-  /** stores */
   const { windowHeight, windowWidth } = useScreenSize();
   const { setPosition: setClickPosition, x: clickX, y: clickY, setMovecost } = useClickStore();
   const { position: cursorPosition, zoom, color, setPosition: setCursorPosition, setOriginPosition, isBombMode } = useCursorStore();
@@ -71,11 +48,12 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
   const { sendMessage } = useWebSocketStore();
   const { useAnimation } = useAnimationStore();
 
-  /** References */
-  const movementInterval = useRef<NodeJS.Timeout | null>(null);
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const longPressPositionRef = useRef<{ x: number; y: number } | null>(null);
-  const didLongPressRef = useRef<boolean>(false);
+  // Computed constants
+  const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
+  const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
+
+  // Canvas refs
+  const shockwaveCanvasRef = useRef<HTMLCanvasElement>(null);
   const canvasRefs = {
     interactionCanvasRef: useRef<HTMLCanvasElement>(null),
     otherCursorsRef: useRef<HTMLCanvasElement>(null),
@@ -83,46 +61,99 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     myCursorRef: useRef<HTMLCanvasElement>(null),
   };
 
-  /** States */
-  const [isInitializing, setIsInitializing] = useState<boolean>(true);
-  const [movingPaths, setMovingPaths] = useState<XYType[]>([]);
-  const [leftMovingPaths, setLeftMovingPaths] = useState<XYType>({ x: Infinity, y: Infinity });
-  const [forwardPath, setForwardPath] = useState<XYType>();
-  const [cachedVectorAssets, setCachedVectorAssets] = useState<VectorImagesType>();
+  // Movement hook
+  const {
+    movingPaths,
+    forwardPath,
+    lastMovingPosition,
+    leftMovingPaths,
+    moveCursor,
+    cancelCurrentMovement,
+    clickEvent,
+    isAlreadyCursorNeighbor,
+    findOpenedNeighbors,
+    findOpenedNeighborsAroundTarget,
+  } = useMovement({
+    tiles,
+    tileSize,
+    startPoint,
+    viewStart,
+    viewEnd,
+    cursorOriginX,
+    cursorOriginY,
+    cursorPosition,
+    relativeX,
+    relativeY,
+    padtiles,
+    sendMessage,
+    setCursorPosition,
+    setOriginPosition,
+    setMovecost,
+    MOVE_SPEED,
+    useAnimation,
+    canvasRefs,
+    shockwaveCanvasRef,
+    cursors,
+  });
 
-  /** Cancel interval function for animation. */
-  const cancelCurrentMovement = () => {
-    if (!movementInterval.current) return;
-    clearInterval(movementInterval.current);
-    movementInterval.current = null;
-  };
+  // Cursor renderer hook
+  const { isInitializing, cleanupCanvasResources } = useCursorRenderer({
+    canvasRefs,
+    tiles,
+    tileSize,
+    zoom,
+    windowWidth,
+    windowHeight,
+    cursors,
+    color,
+    cursorOriginX,
+    cursorOriginY,
+    relativeX,
+    relativeY,
+    paddingTiles,
+    clickX,
+    clickY,
+    tilePaddingWidth,
+    tilePaddingHeight,
+    startPoint,
+    movingPaths,
+    forwardPath,
+    lastMovingPosition,
+    leftMovingPaths,
+  });
 
-  /** Cleanup canvas contexts and resources */
-  const cleanupCanvasResources = () => {
-    Object.values(canvasRefs).forEach(ref => {
-      if (ref.current) {
-        const ctx = ref.current.getContext('2d');
-        ctx?.clearRect(0, 0, ref.current.width, ref.current.height);
-      }
-    });
+  // Input handlers hook
+  const { handleClick, handlePointerDown, handlePointerUp, handlePointerMove } = useInputHandlers({
+    canvasRefs,
+    tiles,
+    tileSize,
+    tilePaddingWidth,
+    tilePaddingHeight,
+    startPoint,
+    cursorOriginX,
+    cursorOriginY,
+    isBombMode,
+    movingPaths,
+    moveCursor,
+    clickEvent,
+    setClickPosition,
+    isAlreadyCursorNeighbor,
+    findOpenedNeighbors,
+    findOpenedNeighborsAroundTarget,
+  });
 
-    setCachedVectorAssets(undefined);
-  };
+  // Shockwave animation hook
+  useShockwaveAnimation({
+    canvasRef: shockwaveCanvasRef,
+    activeExplosions,
+    removeExplosion,
+    tileSize,
+    startPoint,
+    tilePaddingWidth,
+    tilePaddingHeight,
+  });
 
-  /** 🚀 HIGH QUALITY: Setup high-resolution canvas */
-  const setupHighResCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-    canvas.style.width = rect.width + 'px';
-    canvas.style.height = rect.height + 'px';
-
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'low';
-    if ('textRenderingOptimization' in ctx) ctx.textRenderingOptimization = 'optimizeQuality';
-  };
-
-  /** Prevent default right click event */
+  // Prevent default right click event
   useEffect(() => {
     const preventContextMenu = (event: MouseEvent) => event.preventDefault();
     window.addEventListener('contextmenu', preventContextMenu);
@@ -131,712 +162,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
       cancelCurrentMovement();
     };
   }, []);
-
-  /** Check if the tile has been opened (not closed, not flagged) */
-  const checkTileHasOpened = (tile: number) => isTileOpened(tile);
-
-  /**
-   * General Click Event Handler
-   * @param relativeTileX x position of clicked tile
-   * @param relativetileY y position of clicked tile
-   * @returns void
-   * */
-  const moveCursor = (
-    relativeTileX: number,
-    relativetileY: number,
-    clickedX: number,
-    clickedY: number,
-    onComplete?: (x: number, y: number) => void,
-  ) => {
-    if (movementInterval.current) return;
-    let index = 0;
-    const foundPaths = findPathUsingAStar(relativeX, relativeY, relativeTileX, relativetileY);
-    let currentPath = foundPaths[index];
-    if (currentPath?.x === undefined || currentPath?.y === undefined) return;
-
-    // Optimize path: remove unnecessary last step if already at target
-    const optimizedPaths = [...foundPaths];
-    if (optimizedPaths.length > 2) {
-      const secondLastPath = optimizedPaths[optimizedPaths.length - 2];
-      const secondLastAbsoluteX = relativeX + secondLastPath.x;
-      const secondLastAbsoluteY = relativeY + secondLastPath.y;
-
-      // If second last step is already at target, remove last step (unnecessary movement)
-      if (secondLastAbsoluteX === relativeTileX && secondLastAbsoluteY === relativetileY) {
-        optimizedPaths.pop();
-      }
-
-      const lastPath = optimizedPaths[optimizedPaths.length - 1];
-      if (lastPath)
-        setLastMovingPosition({
-          x: cursorPosition.x + lastPath.x,
-          y: cursorPosition.y + lastPath.y,
-        });
-    }
-
-    let [innerCursorX, innerCursorY] = [cursorPosition.x, cursorPosition.y];
-    setMovecost(optimizedPaths.length - 1);
-
-    const moveAnimation = (dx: number, dy: number) => {
-      const { interactionCanvasRef: I_canvas, otherCursorsRef: C_canvas, otherPointerRef: P_canvas } = canvasRefs;
-      const tilemap = document.getElementById('Tilemap');
-      const currentRefs = [I_canvas.current, C_canvas.current, P_canvas.current, tilemap];
-      const start = performance.now();
-      const animate = (now: number) => {
-        const elapsed = now - start;
-        const progress = Math.min(elapsed / MOVE_SPEED, 1);
-        const translate = tileSize * (1 - progress);
-        const [translateX, translateY] = [translate * dx, translate * dy];
-        currentRefs.forEach(c => (c!.style.transform = `translate(${translateX}px, ${translateY}px)`));
-        if (progress < 1) requestAnimationFrame(animate);
-        else currentRefs.forEach(c => (c!.style.transform = 'translate(0, 0)'));
-      };
-      requestAnimationFrame(animate);
-    };
-
-    movementInterval.current = setInterval(() => {
-      if (++index >= optimizedPaths.length) {
-        // 최종 위치로 확실히 업데이트
-        setCursorPosition({ x: relativeTileX + startPoint.x, y: relativetileY + startPoint.y });
-        setMovingPaths([]);
-        setLastMovingPosition({ x: Infinity, y: Infinity });
-        cancelCurrentMovement();
-
-        // Execute callback after movement completes
-        onComplete?.(clickedX, clickedY);
-        return;
-      }
-      const path = optimizedPaths[index];
-      if (!path) return;
-      const [dx, dy] = [Math.sign(path.x - currentPath.x), Math.sign(path.y - currentPath.y)];
-      setForwardPath({ x: dx, y: dy });
-
-      // if the other cursor is on the tile, find another path
-      // if (checkIsOtherCursorOnTile(dx + innerCursorX, dy + innerCursorY)) {
-      //   cancelCurrentMovement();
-      //   setZoom(zoom - 0.0001);
-      //   moveCursor(relativeTileX, relativetileY, clickedX, clickedY, type);
-      //   return;
-      // }
-
-      // Determine direction for padding before animation
-      let direction = '';
-      if (dy === 1) direction += Direction.DOWN; // y-axis is reversed, so dy === 1 means moving down
-      if (dy === -1) direction += Direction.UP; // y-axis is reversed, so dy === -1 means moving up
-      if (dx === 1) direction += Direction.RIGHT; // dx === 1 means moving right
-      if (dx === -1) direction += Direction.LEFT; // dx === -1 means moving left
-
-      [innerCursorX, innerCursorY] = [dx + innerCursorX, dy + innerCursorY];
-      const position: XYType = { x: innerCursorX, y: innerCursorY };
-      sendMessage(SendMessageEvent.MOVE, { position });
-
-      setOriginPosition(position);
-      setCursorPosition(position);
-
-      currentPath = path;
-      setMovingPaths(optimizedPaths.slice(index));
-
-      // Apply padding before animation starts
-      if (direction && viewStart && viewEnd) padtiles(viewStart.x, viewEnd.y, viewEnd.x, viewStart.y, direction as Direction);
-
-      // Animation Effect
-      if (useAnimation) moveAnimation(dx, dy);
-      console.log('animation', performance.now());
-    }, MOVE_SPEED);
-  };
-
-  // Only Move, Open-tiles, Set-flag
-  const clickEvent = (x: number, y: number, clickType: SendMessageEvent) => {
-    const { MOVE, OPEN_TILES, SET_FLAG, DISMANTLE_MINE, INSTALL_BOMB } = SendMessageEvent;
-    if (![MOVE, OPEN_TILES, SET_FLAG, DISMANTLE_MINE, INSTALL_BOMB].some(event => event === clickType)) return;
-    const payload: PositionType = { position: { x, y } };
-    sendMessage(clickType, payload);
-  };
-
-  // Map click type to corresponding action event
-  const CLICK_TYPE_TO_EVENT: Record<string, SendMessageEvent> = {
-    special: SendMessageEvent.SET_FLAG,
-    general: SendMessageEvent.OPEN_TILES,
-  };
-
-  /** Click Event Handler */
-  const handleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    // If this click follows a long press, ignore it once
-    if (didLongPressRef.current) {
-      didLongPressRef.current = false;
-      return;
-    }
-    const interactionCanvas = canvasRefs.interactionCanvasRef.current;
-    if (!interactionCanvas) return;
-    const { left: rectLeft, top: rectTop } = interactionCanvas.getBoundingClientRect();
-    const [clickX, clickY] = [event.clientX - rectLeft, event.clientY - rectTop];
-
-    // Transform canvas coordinate to relative and absolute coordinate
-    const [tileArrayX, tileArrayY] = [(clickX / tileSize + tilePaddingWidth) >>> 0, (clickY / tileSize + tilePaddingHeight) >>> 0];
-    const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
-    // Setting content of clicked tile
-    const clickedTile = tiles.get(tileArrayY, tileArrayX);
-    setClickPosition(tileX, tileY, clickedTile);
-
-    const isClosed = isTileClosed(clickedTile);
-    const isFlagged = isTileFlag(clickedTile);
-    const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
-    const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
-    const clickType = event.buttons !== 2 ? 'general' : 'special'; // 1 move, open-tiles, 2 set-flag
-    const isActionable = isClosed || isFlagged;
-
-    // Handle in-range actions immediately (only for closed/flagged tiles)
-    if (isInRange) {
-      if (isBombMode && isActionable && clickType === 'special') {
-        clickEvent(tileX, tileY, SendMessageEvent.INSTALL_BOMB);
-        return;
-      }
-      // If it's not bomb mode and it's actionable, set flag
-      if (isActionable && clickType === 'special') clickEvent(tileX, tileY, SendMessageEvent.SET_FLAG);
-      else if (isClosed && clickType === 'general') clickEvent(tileX, tileY, SendMessageEvent.OPEN_TILES);
-
-      // Open tiles should continue to default movement logic
-      if (isActionable) return;
-    }
-
-    // Handle out-of-range clicks: move to nearest opened tile, then perform action
-    if (!isInRange && isActionable) {
-      const { x: targetX, y: targetY } = findOpenedNeighborsAroundTarget(tileX, tileY);
-      if (targetX === Infinity || targetY === Infinity || movingPaths.length > 0) return;
-
-      // Bomb mode: right-click → INSTALL_BOMB; otherwise use CLICK_TYPE_TO_EVENT
-      const actionEvent = isBombMode && clickType === 'special' ? SendMessageEvent.INSTALL_BOMB : CLICK_TYPE_TO_EVENT[clickType];
-
-      // Check if we're already at the target position
-      const targetAbsoluteX = targetX + startPoint.x;
-      const targetAbsoluteY = targetY + startPoint.y;
-      if (targetAbsoluteX === cursorOriginX && targetAbsoluteY === cursorOriginY) {
-        // Already at target, just perform action
-        if (actionEvent) clickEvent(tileX, tileY, actionEvent);
-        return;
-      }
-
-      if (!actionEvent) return;
-
-      moveCursor(targetX, targetY, tileX, tileY, (x, y) => clickEvent(x, y, actionEvent));
-      return;
-    }
-
-    // Default movement for opened tiles (general click only)
-    if (clickType === 'special' && movingPaths.length > 0) return;
-    let { x: targetTileX, y: targetTileY } = findOpenedNeighbors(tileArrayX, tileArrayY);
-    if (isAlreadyCursorNeighbor(tileX, tileY)) [targetTileX, targetTileY] = [tileArrayX, tileArrayY];
-    moveCursor(targetTileX, targetTileY, tileX, tileY);
-  };
-
-  /** Long-press handlers (for flagging via press-and-hold) */
-  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    // Handle right click immediately
-    if (event.button === 2) {
-      event.preventDefault();
-      const interactionCanvas = canvasRefs.interactionCanvasRef.current;
-      if (!interactionCanvas) return;
-
-      const { left: rectLeft, top: rectTop } = interactionCanvas.getBoundingClientRect();
-      const [clickX, clickY] = [event.clientX - rectLeft, event.clientY - rectTop];
-      const [tileArrayX, tileArrayY] = [(clickX / tileSize + tilePaddingWidth) >>> 0, (clickY / tileSize + tilePaddingHeight) >>> 0];
-      const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
-      const clickedTile = tiles.get(tileArrayY, tileArrayX);
-      // Setting content of clicked tile to update click position for rendering
-      setClickPosition(tileX, tileY, clickedTile);
-      const isClosed = isTileClosed(clickedTile);
-      const isFlagged = isTileFlag(clickedTile);
-      const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
-      const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
-
-      const rightClickEvent = isBombMode ? SendMessageEvent.INSTALL_BOMB : SendMessageEvent.SET_FLAG;
-      if (isInRange && (isClosed || isFlagged)) {
-        clickEvent(tileX, tileY, rightClickEvent);
-      } else if (!isInRange && (isClosed || isFlagged)) {
-        const { x: targetX, y: targetY } = findOpenedNeighborsAroundTarget(tileX, tileY);
-        if (!(targetX === Infinity || targetY === Infinity || movingPaths.length > 0)) {
-          const targetAbsoluteX = targetX + startPoint.x;
-          const targetAbsoluteY = targetY + startPoint.y;
-          if (targetAbsoluteX === cursorOriginX && targetAbsoluteY === cursorOriginY) clickEvent(tileX, tileY, rightClickEvent);
-          moveCursor(targetX, targetY, tileX, tileY, (cx, cy) => clickEvent(cx, cy, rightClickEvent));
-        }
-      }
-      return;
-    }
-
-    // Handle left click for long press
-    const interactionCanvas = canvasRefs.interactionCanvasRef.current;
-    if (!interactionCanvas) return;
-
-    const { left: rectLeft, top: rectTop } = interactionCanvas.getBoundingClientRect();
-    const [clickX, clickY] = [event.clientX - rectLeft, event.clientY - rectTop];
-
-    longPressPositionRef.current = { x: clickX, y: clickY };
-
-    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-
-    longPressTimerRef.current = setTimeout(() => {
-      const position = longPressPositionRef.current;
-      if (!position) return;
-
-      const { x, y } = position;
-      const [tileArrayX, tileArrayY] = [(x / tileSize + tilePaddingWidth) >>> 0, (y / tileSize + tilePaddingHeight) >>> 0];
-      const [tileX, tileY] = [Math.round(tileArrayX + startPoint.x), Math.round(tileArrayY + startPoint.y)];
-
-      const clickedTile = tiles.get(tileArrayY, tileArrayX);
-      const isClosed = isTileClosed(clickedTile);
-      const isFlagged = isTileFlag(clickedTile);
-      const isActionable = isClosed || isFlagged;
-      const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
-      const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
-
-      // In-range: perform DISMANTLE_MINE action
-      if (isInRange && isActionable) clickEvent(tileX, tileY, SendMessageEvent.DISMANTLE_MINE);
-      else if (isActionable) {
-        // Out-of-range closed/flagged: move near and then dismantle mine
-        const { x: targetX, y: targetY } = findOpenedNeighborsAroundTarget(tileX, tileY);
-        if (!(targetX === Infinity || targetY === Infinity || movingPaths.length > 0)) {
-          moveCursor(targetX, targetY, tileX, tileY, (cx, cy) => clickEvent(cx, cy, SendMessageEvent.DISMANTLE_MINE));
-        }
-      }
-
-      didLongPressRef.current = true;
-      longPressTimerRef.current = null;
-      longPressPositionRef.current = null;
-    }, LONG_PRESS_DURATION);
-  };
-
-  const handlePointerUp = () => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    longPressPositionRef.current = null;
-  };
-
-  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!longPressTimerRef.current || !longPressPositionRef.current) return;
-
-    const interactionCanvas = canvasRefs.interactionCanvasRef.current;
-    if (!interactionCanvas) return;
-
-    const { left: rectLeft, top: rectTop } = interactionCanvas.getBoundingClientRect();
-    const [currentX, currentY] = [event.clientX - rectLeft, event.clientY - rectTop];
-
-    const dx = currentX - longPressPositionRef.current.x;
-    const dy = currentY - longPressPositionRef.current.y;
-    const distance = Math.hypot(dx, dy);
-
-    if (distance > LONG_PRESS_MOVE_THRESHOLD) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-      longPressPositionRef.current = null;
-    }
-  };
-
-  /** Check if the clicked tile is already a neighbor of the cursor */
-  const isAlreadyCursorNeighbor = (x: number, y: number) =>
-    CURSOR_DIRECTIONS.some(([dx, dy]) => cursorOriginX + dx === x && cursorOriginY + dy === y);
-
-  const findOpenedNeighbors = (currentX: number, currentY: number) => {
-    let result = { x: Infinity, y: Infinity };
-    [[0, 0], ...CURSOR_DIRECTIONS].some(([dx, dy]) => {
-      const [x, y] = [currentX + dx, currentY + dy];
-      if (y < 0 || y >= tiles.height || x < 0 || x >= tiles.width) return false;
-      if (!checkTileHasOpened(tiles.get(y, x))) return false;
-      result = { x, y };
-      return true;
-    });
-    return result;
-  };
-
-  /** Find opened neighbors around a target absolute tile position */
-  const findOpenedNeighborsAroundTarget = (targetX: number, targetY: number) => {
-    let result = { x: Infinity, y: Infinity };
-    const currentRelativeX = cursorOriginX - startPoint.x;
-    const currentRelativeY = cursorOriginY - startPoint.y;
-
-    // First, check if current position is a valid neighbor of target
-    const currentIsNeighbor =
-      CURSOR_DIRECTIONS.some(([dx, dy]) => cursorOriginX === targetX + dx && cursorOriginY === targetY + dy) ||
-      (cursorOriginX === targetX && cursorOriginY === targetY);
-
-    if (currentIsNeighbor) {
-      // Check if current position is opened and accessible
-      if (
-        currentRelativeY >= 0 &&
-        currentRelativeY < tiles.height &&
-        currentRelativeX >= 0 &&
-        currentRelativeX < tiles.width &&
-        checkTileHasOpened(tiles.get(currentRelativeY, currentRelativeX))
-      ) {
-        return { x: currentRelativeX, y: currentRelativeY };
-      }
-    }
-
-    // If current position is not valid, find the closest opened neighbor
-    let minDistance = Infinity;
-    // Check 8 directions + self position around the target
-    [[0, 0], ...CURSOR_DIRECTIONS].forEach(([dx, dy]) => {
-      const absX = targetX + dx;
-      const absY = targetY + dy;
-      // Convert to relative coordinates
-      const relativeX = absX - startPoint.x;
-      const relativeY = absY - startPoint.y;
-
-      if (relativeY < 0 || relativeY >= tiles.height || relativeX < 0 || relativeX >= tiles.width) {
-        return;
-      }
-
-      const tileContent = tiles.get(relativeY, relativeX);
-      if (!checkTileHasOpened(tileContent)) return;
-
-      // Calculate distance from current position
-      const distance = Math.abs(relativeX - currentRelativeX) + Math.abs(relativeY - currentRelativeY);
-      if (distance < minDistance) {
-        minDistance = distance;
-        result = { x: relativeX, y: relativeY };
-      }
-    });
-    return result;
-  };
-
-  /**
-   * Draw Cursor
-   * @param ctx - CanvasRenderingContext2D
-   * @param x - x position of cursor
-   * @param y - y position of cursor
-   * @param color - color of cursor
-   * @param reviveAt - revive time of cursor
-   * @param rotated - rotated angle of cursor
-   * @param scale - scale of cursor for not player's cursor
-   */
-  const drawCursor = useCallback(
-    (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, reviveAt: number = 0, rotated: number = 0, scale: number = 1) => {
-      const adjustedScale = zoom * scale;
-      ctx.save();
-      ctx.fillStyle = color;
-      ctx.translate(x, y);
-      if (scale === 1) {
-        // up 0, rightup 1, right 2, rightdown 3, down 4, leftdown 5, left 6, leftup 7
-        const angle = (Math.round((rotated + Math.PI) / (Math.PI / 4)) + 2) % 8;
-
-        const centerOffset = BASE_OFFSET >> 2; // tileSize / 8
-
-        if (angle === 0) ctx.translate(BASE_OFFSET, centerOffset);
-        else if (angle === 1) ctx.translate(tileSize - centerOffset, centerOffset);
-        else if (angle === 2) ctx.translate(tileSize - centerOffset, BASE_OFFSET);
-        else if (angle === 3) ctx.translate(tileSize - centerOffset, tileSize - centerOffset);
-        else if (angle === 4) ctx.translate(BASE_OFFSET, tileSize - centerOffset);
-        else if (angle === 5) ctx.translate(centerOffset, tileSize - centerOffset);
-        else if (angle === 6) ctx.translate(centerOffset, BASE_OFFSET);
-        else if (angle === 7) ctx.translate(centerOffset, centerOffset);
-      } else ctx.translate(BASE_OFFSET, BASE_OFFSET);
-
-      ctx.rotate(rotated - Math.PI / 4);
-
-      ctx.scale(adjustedScale, adjustedScale);
-      ctx.fill(cachedVectorAssets!.cursor);
-      ctx.restore();
-      if (!(reviveAt > 0 && Date.now() < reviveAt && cachedVectorAssets?.stun)) return;
-      const stunScale = zoom / 2;
-      ctx.save();
-      ctx.translate(x - BASE_OFFSET, y - BASE_OFFSET);
-      ctx.fillStyle = 'white';
-      ctx.strokeStyle = 'black';
-      ctx.scale(stunScale, stunScale);
-      cachedVectorAssets.stun.forEach(stunPath => {
-        ctx.fill(stunPath);
-        ctx.stroke(stunPath);
-      });
-      ctx.restore();
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tileSize, cachedVectorAssets],
-  );
-
-  const drawOtherUserCursors = useCallback(() => {
-    const canvas = canvasRefs.otherCursorsRef.current;
-    if (!canvas) return;
-    const otherCursorsCtx = canvas.getContext('2d');
-    if (!otherCursorsCtx) return;
-
-    // 🚀 HIGH QUALITY: Setup high-resolution rendering
-    setupHighResCanvas(canvas, otherCursorsCtx);
-    otherCursorsCtx.clearRect(0, 0, windowWidth, windowHeight);
-    cursors.forEach(cursor => {
-      const { position, color, revive_at } = cursor;
-      const { x: pointerX, y: pointerY } = cursor?.pointer ?? { x: Infinity, y: Infinity };
-      const [drawX, drawY] = [position.x - cursorOriginX + otherCursorPaddingWidth, position.y - cursorOriginY + otherCursorPaddingHeight];
-      const [distanceX, distanceY] = [position.x - pointerX, position.y - pointerY];
-      const rotate = distanceX !== 0 || distanceY !== 0 ? Math.atan2(distanceY, distanceX) : 0;
-      drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CURSOR_COLORS[color], revive_at, rotate);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cursors, cursorOriginX, cursorOriginY, tilePaddingWidth, tilePaddingHeight, tileSize, windowWidth, windowHeight, canvasRefs.otherCursorsRef]);
-
-  const drawPointer = useCallback(
-    (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, border: number) => {
-      if (!ctx) return;
-      ctx.beginPath();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = border;
-      ctx.strokeRect(x + border / 2, y + border / 2, tileSize - border, tileSize - border);
-      ctx.closePath();
-    },
-    [tileSize],
-  );
-
-  const drawOtherUserPointers = (borderPixel: number) => {
-    const canvas = canvasRefs.otherPointerRef.current;
-    if (!canvas) return;
-    const otherPointerCtx = canvas.getContext('2d');
-    if (!otherPointerCtx) return;
-
-    setupHighResCanvas(canvas, otherPointerCtx);
-    otherPointerCtx.clearRect(0, 0, windowWidth, windowHeight);
-    cursors.forEach(({ pointer, color }) => {
-      const { x, y } = pointer ?? { x: 0, y: 0 };
-      const [drawX, drawY] = [x - cursorOriginX + otherCursorPaddingWidth, y - cursorOriginY + otherCursorPaddingHeight];
-      drawPointer(otherPointerCtx, drawX * tileSize, drawY * tileSize, OTHER_CURSOR_COLORS[color], borderPixel);
-    });
-  };
-
-  // Check if the other cursor is on the tile
-  const checkIsOtherCursorOnTile = (tileX: number, tileY: number) =>
-    cursors.some(c => c.position.x === tileX + startPoint.x && c.position.y === tileY + startPoint.y);
-
-  /**
-   * Find path using A* algorithm avoiding flags and move cursor in 8 directions
-   * @param startX x position of start point
-   * @param startY y position of start point
-   * @param targetX x position of target point
-   * @param targetY y position of target point
-   * */
-  const findPathUsingAStar = (startX: number, startY: number, targetX: number, targetY: number) => {
-    // Early return: if already at target, return empty path
-    if (startX === targetX && startY === targetY) return [{ x: 0, y: 0 }];
-
-    // Early return: if target is directly adjacent, return direct path
-    const dx = targetX - startX;
-    const dy = targetY - startY;
-    const isAdjacent = Math.abs(dx) <= 1 && Math.abs(dy) <= 1 && (dx !== 0 || dy !== 0);
-    if (isAdjacent) {
-      // Check if the target tile is accessible
-      const targetRelativeY = targetY;
-      const targetRelativeX = targetX;
-      if (
-        targetRelativeY >= 0 &&
-        targetRelativeY < tiles.height &&
-        targetRelativeX >= 0 &&
-        targetRelativeX < tiles.width &&
-        checkTileHasOpened(tiles.get(targetRelativeY, targetRelativeX)) &&
-        !checkIsOtherCursorOnTile(targetRelativeX, targetRelativeY)
-      ) {
-        return [
-          { x: 0, y: 0 },
-          { x: dx, y: dy },
-        ];
-      }
-    }
-
-    // Function to get neighbors of a node
-    const getNeighbors = (grid: (TileNode | null)[][], node: TileNode) => {
-      const neighbors = [];
-      for (const [dx, dy] of CURSOR_DIRECTIONS) {
-        // Check if the neighbor is within bounds and not a flag or other cursor
-        const [x, y] = [node.x + dx, node.y + dy];
-        // Check if the neighbor is within bounds
-        if (y < 0 || y >= grid.length || x < 0 || x >= grid[y].length) continue;
-        // Check if the tile is opened and not occupied by another cursor
-        if (grid[y][x] === null || checkIsOtherCursorOnTile(x, y)) continue;
-        // Add the neighbor node
-        neighbors.push({ node: grid[y][x], isDiagonal: dx !== 0 && dy !== 0 });
-      }
-      return neighbors;
-    };
-
-    /** calculate distance from target */
-    const getLeftPaths = (temp: TileNode, x: number, y: number): XYType => ({ x: temp.x - x, y: temp.y - y });
-
-    /** initialize tiles */
-    const [start, target] = [new TileNode(startX, startY), new TileNode(targetX, targetY)];
-
-    const grid: (TileNode | null)[][] = [];
-    for (let i = 0; i < tiles.height; i++) {
-      const row: (TileNode | null)[] = [];
-      for (let j = 0; j < tiles.width; j++) {
-        row.push(checkTileHasOpened(tiles.get(i, j)) ? new TileNode(j, i) : null);
-      }
-      grid.push(row);
-    }
-
-    // Check if target is accessible
-    if (targetY < 0 || targetY >= grid.length || targetX < 0 || targetX >= grid[targetY]?.length || grid[targetY][targetX] === null) {
-      return [];
-    }
-
-    /** initialize open and close list */
-    let openNodeList = [start];
-    const closedList: TileNode[] = [];
-    start.gScore = 0;
-    start.heuristic = Math.abs(startX - targetX) + Math.abs(startY - targetY);
-    start.fTotal = start.gScore + start.heuristic;
-
-    while (openNodeList.length > 0) {
-      const nowNode = openNodeList.reduce((a, b) => (a.fTotal < b.fTotal ? a : b));
-      const leftPaths = getLeftPaths(nowNode, startX, startY);
-      setLeftMovingPaths(leftPaths);
-      if (nowNode.x === target.x && nowNode.y === target.y) {
-        const path = [];
-        for (let temp = nowNode; temp; temp = temp.parent!) path.unshift({ x: temp.x - startX, y: temp.y - startY });
-        return path;
-      }
-      openNodeList = openNodeList.filter(node => node !== nowNode);
-      closedList.push(nowNode);
-
-      /** Find neighbor nodes from current node. */
-      const neighbors = getNeighbors(grid, nowNode);
-      for (const { node, isDiagonal } of neighbors) {
-        if (closedList.includes(node)) continue;
-        // Apply different cost for diagonal movement
-        const tempG = nowNode.gScore + (isDiagonal ? 14 : 10);
-        if (tempG >= node.gScore) continue;
-        if (!openNodeList.includes(node)) openNodeList.push(node);
-        node.parent = nowNode;
-        node.gScore = tempG;
-        node.heuristic = Math.abs(node.x - target.x) + Math.abs(node.y - target.y);
-        node.fTotal = node.gScore + node.heuristic;
-      }
-    }
-    return [];
-  };
-
-  const renderInteractionCanvas = () => {
-    const { interactionCanvasRef, myCursorRef, otherCursorsRef, otherPointerRef } = canvasRefs;
-    const { current: interactionCanvas } = interactionCanvasRef;
-    const { current: myCursorCanvas } = myCursorRef;
-    const { current: otherCursorsCanvas } = otherCursorsRef;
-    const { current: otherPointerCanvas } = otherPointerRef;
-
-    if (!interactionCanvas || !myCursorCanvas || !otherCursorsCanvas || !otherPointerCanvas) return;
-    const [interactionCtx, myCursorCtx] = [interactionCanvas.getContext('2d'), myCursorCanvas.getContext('2d')];
-    if (!interactionCtx || !myCursorCtx) return;
-
-    // 🚀 HIGH QUALITY: Setup high-resolution rendering for all canvases
-    setupHighResCanvas(interactionCanvas, interactionCtx);
-    setupHighResCanvas(myCursorCanvas, myCursorCtx);
-
-    // intialize canvases
-    myCursorCtx.clearRect(0, 0, windowWidth, windowHeight);
-    interactionCtx.clearRect(0, 0, windowWidth, windowHeight);
-
-    // setting cursor color
-    const cursorColor = CURSOR_COLORS[color];
-    const borderPixel = 5 * zoom;
-
-    // for rendering cursor position
-    const cursorPosition = {
-      x: (relativeX / paddingTiles) * tileSize,
-      y: (relativeY / paddingTiles) * tileSize,
-    };
-    const clickCanvasPosition = {
-      x: cursorPosition.x + (clickX - cursorOriginX) * tileSize,
-      y: cursorPosition.y + (clickY - cursorOriginY) * tileSize,
-    };
-    // Setting compensation value for cursor positions
-    const compensation = {
-      x: lastMovingPosition.x - cursorOriginX - leftMovingPaths.x - tilePaddingWidth + relativeX + 0.5,
-      y: lastMovingPosition.y - cursorOriginY - leftMovingPaths.y - tilePaddingHeight + relativeY + 0.5,
-    };
-
-    // If both distanceX and distanceY are 0, the cursor will not rotate.
-    const rotate = (cursorOriginX !== clickX || cursorOriginY !== clickY) && forwardPath ? Math.atan2(-forwardPath.y, -forwardPath.x) : 0;
-    drawCursor(myCursorCtx, cursorPosition.x, cursorPosition.y, cursorColor, 0, rotate);
-    drawPointer(interactionCtx, clickCanvasPosition.x, clickCanvasPosition.y, cursorColor, borderPixel);
-    drawOtherUserCursors();
-    drawOtherUserPointers(borderPixel);
-
-    // Draw Cursor Movement path
-    const scaledPoints = movingPaths?.map(vec => {
-      const [vX, vY] = [vec.x + compensation.x, vec.y + compensation.y];
-      return { x: vX * tileSize, y: vY * tileSize };
-    });
-    if (scaledPoints.length <= 1) return;
-
-    const baseCornerRadius = tileSize * 0.15;
-    // Initializing moving path
-    interactionCtx.beginPath();
-    interactionCtx.strokeStyle = cursorColor;
-    interactionCtx.lineWidth = tileSize / 10;
-    interactionCtx.lineJoin = interactionCtx.lineCap = 'round';
-    interactionCtx.miterLimit = 2;
-    interactionCtx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
-
-    // after index 0, draw path
-    for (let i = 1; i < scaledPoints.length - 1; i++) {
-      const [prev, curr, next] = [...scaledPoints.slice(i - 1, i + 2)];
-      const [prevVectorX, prevVectorY] = [curr.x - prev.x, curr.y - prev.y];
-      const [nextVectorX, nextVectorY] = [next.x - curr.x, next.y - curr.y];
-      const [len1, len2] = [Math.hypot(prevVectorX, prevVectorY), Math.hypot(nextVectorX, nextVectorY)];
-      const cross = prevVectorX * nextVectorY - prevVectorY * nextVectorX;
-      const dot = prevVectorX * nextVectorX + prevVectorY * nextVectorY;
-      // If angle is almost straight, do not round
-      const cosTheta = dot / (len1 * len2);
-      const isStraight = Math.abs(cross) < 1e-6 || cosTheta > 0.995;
-      if (isStraight) interactionCtx.lineTo(curr.x, curr.y);
-      else {
-        // Clamp radius to local segment lengths to avoid overshooting
-        const cornerRadius = Math.min(baseCornerRadius, 0.5 * Math.min(len1, len2));
-        interactionCtx.arcTo(curr.x, curr.y, next.x, next.y, cornerRadius);
-      }
-    }
-    const [beforeLast, last] = [...scaledPoints.slice(-2)];
-    const [lastPointX, lastPointY] = [(last.x + beforeLast.x) / 2, (last.y + beforeLast.y) / 2];
-    const pathRotate = Math.PI + Math.atan2(last.y - beforeLast.y, last.x - beforeLast.x);
-    interactionCtx.lineTo(lastPointX, lastPointY);
-    drawCursor(interactionCtx, lastPointX - BASE_OFFSET, lastPointY - BASE_OFFSET, cursorColor, 0, pathRotate, 0.6);
-    interactionCtx.stroke();
-  };
-
-  /** Load Assets and Render (optimized) */
-  useLayoutEffect(() => {
-    if (!isInitializing && !tiles.isEmpty) return;
-
-    const loadFontOptional = async () => {
-      try {
-        if (document.fonts.check('1em LOTTERIACHAB')) return;
-
-        const lotteriaChabFont = new FontFace(
-          'LOTTERIACHAB',
-          "url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2302@1.0/LOTTERIACHAB.woff2') format('woff2')",
-        );
-        await lotteriaChabFont.load();
-        document.fonts.add(lotteriaChabFont);
-      } catch {
-        console.warn('Font loading failed, using fallback font');
-      }
-    };
-
-    const cursor = makePath2d(cursorPaths);
-    const stun = makePath2dFromArray(stunPaths);
-    const [flagPath, pole] = flagPaths.map(makePath2d);
-    const [inner, outer] = boomPaths.map(makePath2d);
-    const flag = { flag: flagPath, pole };
-    const boom = { inner, outer };
-    setCachedVectorAssets({ cursor, stun, flag, boom });
-
-    setIsInitializing(false);
-    loadFontOptional();
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles, isInitializing]);
-
-  // Render Intreraction Objects When Cursor is Moving, Clicking, or other cursor sets.
-  useEffect(() => {
-    if (!isInitializing) renderInteractionCanvas();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cursorOriginX, cursorOriginY, startPoint, clickX, clickY, color, cursors, leftMovingPaths]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -859,6 +184,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
           <ChatComponent />
           <Tilemap className={S.canvas} tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} />
+          <canvas className={S.canvas} id="ShockwaveCanvas" ref={shockwaveCanvasRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="MyCursor" ref={canvasRefs.myCursorRef} width={windowWidth} height={windowHeight} />

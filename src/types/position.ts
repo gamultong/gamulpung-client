@@ -3,6 +3,12 @@ export type XYType = {
   y: number;
 };
 
+export interface ActiveExplosion {
+  id: number;
+  position: XYType;
+  startTime: number;
+}
+
 export type PositionType = { position: XYType };
 
 export const Direction = {
