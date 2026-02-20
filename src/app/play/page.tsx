@@ -14,7 +14,7 @@ import Inactive from '@/components/inactive';
 import CanvasDashboard from '@/components/canvasDashboard';
 import TutorialStep from '@/components/tutorialstep';
 import ScoreBoardComponent from '@/components/scoreboard';
-import { SendMessageEvent, SendSetWindowPayloadType, XYType, Direction } from '@/types';
+import { SendMessageEvent, SendSetWindowPayloadType, XYType, Direction, ActiveExplosion } from '@/types';
 // WebGPU imports removed - using simple CPU processing only
 import { VECTORIZED_TILE_LUT } from '@/utils/tiles';
 import { TileGrid, Tile, makeClosedTile, makeFlagTile } from '@/utils/tileGrid';
@@ -62,9 +62,11 @@ export default function Play() {
   /** states */
   const [leftReviveTime, setLeftReviveTime] = useState<number>(-1); // secs
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
+  const [activeExplosions, setActiveExplosions] = useState<ActiveExplosion[]>([]);
 
   const reviveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const connectedRef = useRef<boolean>(false);
+  const explosionIdRef = useRef(0);
 
   const zoomHandler = (e: KeyboardEvent) => {
     const key = e.key.toLowerCase();
@@ -293,12 +295,22 @@ export default function Play() {
     return { width, height };
   }, [zoom, windowWidth, windowHeight]);
 
+  const onExplosion = useCallback((position: XYType) => {
+    const id = ++explosionIdRef.current;
+    setActiveExplosions(prev => [...prev, { id, position, startTime: performance.now() }]);
+  }, []);
+
+  const removeExplosion = useCallback((id: number) => {
+    setActiveExplosions(prev => prev.filter(e => e.id !== id));
+  }, []);
+
   /** Message handler for tile processing */
   useMessageHandler({
     getCurrentTileWidthAndHeight,
     replaceTiles,
     setLeftReviveTime,
     setIsInitialized,
+    onExplosion,
   });
 
   /** STABLE & FAST: Reliable tile computation using TileGrid (Uint8Array) */
@@ -422,6 +434,8 @@ export default function Play() {
         paddingTiles={RENDER_RANGE}
         cursorOriginX={cursorOriginPosition.x}
         cursorOriginY={cursorOriginPosition.y}
+        activeExplosions={activeExplosions}
+        removeExplosion={removeExplosion}
       />
     </div>
   );

@@ -10,7 +10,7 @@ import useWebSocketStore from '@/store/websocketStore';
 import { useRenderTiles, useRenderStartPoint, useTileSize, useStartPoint, useEndPoint, useTileStore } from '@/store/tileStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
-import { XYType, VectorImagesType, SendMessageEvent, PositionType, Direction } from '@/types';
+import { XYType, VectorImagesType, SendMessageEvent, PositionType, Direction, ActiveExplosion } from '@/types';
 import { isTileOpened, isTileClosed, isTileFlag } from '@/utils/tileGrid';
 import { CURSOR_COLORS, CURSOR_DIRECTIONS, OTHER_CURSOR_COLORS } from '@/constants';
 import { makePath2d, makePath2dFromArray } from '@/utils';
@@ -40,9 +40,18 @@ interface CanvasRenderComponentProps {
   cursorOriginY: number;
   paddingTiles: number;
   leftReviveTime: number;
+  activeExplosions: ActiveExplosion[];
+  removeExplosion: (id: number) => void;
 }
 
-const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTiles, cursorOriginX, cursorOriginY, leftReviveTime }) => {
+const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
+  paddingTiles,
+  cursorOriginX,
+  cursorOriginY,
+  leftReviveTime,
+  activeExplosions,
+  removeExplosion,
+}) => {
   // Get tiles and related data from zustand store
   const tiles = useRenderTiles();
   const tileSize = useTileSize();
@@ -76,6 +85,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const longPressPositionRef = useRef<{ x: number; y: number } | null>(null);
   const didLongPressRef = useRef<boolean>(false);
+  const shockwaveCanvasRef = useRef<HTMLCanvasElement>(null);
   const canvasRefs = {
     interactionCanvasRef: useRef<HTMLCanvasElement>(null),
     otherCursorsRef: useRef<HTMLCanvasElement>(null),
@@ -180,7 +190,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     const moveAnimation = (dx: number, dy: number) => {
       const { interactionCanvasRef: I_canvas, otherCursorsRef: C_canvas, otherPointerRef: P_canvas } = canvasRefs;
       const tilemap = document.getElementById('Tilemap');
-      const currentRefs = [I_canvas.current, C_canvas.current, P_canvas.current, tilemap];
+      const currentRefs = [I_canvas.current, C_canvas.current, P_canvas.current, shockwaveCanvasRef.current, tilemap];
       const start = performance.now();
       const animate = (now: number) => {
         const elapsed = now - start;
@@ -838,6 +848,211 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursorOriginX, cursorOriginY, startPoint, clickX, clickY, color, cursors, leftMovingPaths]);
 
+  // Shockwave animation loop
+  useEffect(() => {
+    const canvas = shockwaveCanvasRef.current;
+    if (!canvas || activeExplosions.length === 0) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const DURATION = 2000;
+    const MAX_RADIUS_TILES = 4;
+    const RING_COUNT = 5;
+    const SPARK_COUNT = 16;
+    const RAY_COUNT = 12;
+
+    // Generate stable spark angles per explosion (seeded by id)
+    const sparkAnglesMap = new Map<number, number[]>();
+    for (const e of activeExplosions) {
+      if (!sparkAnglesMap.has(e.id)) {
+        const angles: number[] = [];
+        let seed = e.id * 9301 + 49297;
+        for (let i = 0; i < SPARK_COUNT; i++) {
+          seed = (seed * 9301 + 49297) % 233280;
+          angles.push((seed / 233280) * Math.PI * 2);
+        }
+        sparkAnglesMap.set(e.id, angles);
+      }
+    }
+
+    let animationFrameId: number;
+
+    // Setup canvas once, not every frame
+    setupHighResCanvas(canvas, ctx);
+
+    const animate = () => {
+      const now = performance.now();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const completedIds: number[] = [];
+
+      for (const explosion of activeExplosions) {
+        const elapsed = now - explosion.startTime;
+        if (elapsed >= DURATION) {
+          completedIds.push(explosion.id);
+          continue;
+        }
+
+        const progress = elapsed / DURATION;
+
+        // Convert absolute tile coords to canvas pixel coords
+        const relTileX = explosion.position.x - startPoint.x;
+        const relTileY = explosion.position.y - startPoint.y;
+        const centerX = (relTileX + 0.5 - tilePaddingWidth) * tileSize;
+        const centerY = (relTileY + 0.5 - tilePaddingHeight) * tileSize;
+
+        const maxRadiusPx = MAX_RADIUS_TILES * tileSize;
+
+        // === 1. Screen flash (brief full-canvas overlay) ===
+        if (progress < 0.08) {
+          const flashAlpha = 0.25 * (1 - progress / 0.08);
+          ctx.fillStyle = `rgba(255, 200, 100, ${flashAlpha})`;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // === 2. Radial light rays from center ===
+        if (progress < 0.7) {
+          const rayProgress = progress / 0.7;
+          const rayLength = rayProgress * rayProgress * maxRadiusPx * 1.2;
+          const rayOpacity = 0.35 * (1 - rayProgress);
+          ctx.save();
+          ctx.translate(centerX, centerY);
+          ctx.globalCompositeOperation = 'lighter';
+          for (let i = 0; i < RAY_COUNT; i++) {
+            const angle = (i / RAY_COUNT) * Math.PI * 2 + progress * 0.5;
+            const rayWidth = tileSize * 0.08 * (1 - rayProgress * 0.6);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(
+              Math.cos(angle - rayWidth) * rayLength,
+              Math.sin(angle - rayWidth) * rayLength,
+            );
+            ctx.lineTo(
+              Math.cos(angle + rayWidth) * rayLength,
+              Math.sin(angle + rayWidth) * rayLength,
+            );
+            ctx.closePath();
+            ctx.fillStyle = `rgba(255, 180, 60, ${rayOpacity})`;
+            ctx.fill();
+          }
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.restore();
+        }
+
+        // === 3. Multi-layer radial glow ===
+        if (progress < 0.7) {
+          const glowProgress = progress / 0.7;
+          const glowEased = glowProgress * glowProgress;
+          const glowRadius = glowEased * maxRadiusPx * 0.8;
+          const glowOpacity = 0.5 * (1 - glowProgress);
+          const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, glowRadius || 1);
+          gradient.addColorStop(0, `rgba(255, 220, 80, ${glowOpacity})`);
+          gradient.addColorStop(0.3, `rgba(255, 100, 20, ${glowOpacity * 0.7})`);
+          gradient.addColorStop(0.6, `rgba(200, 40, 10, ${glowOpacity * 0.3})`);
+          gradient.addColorStop(1, 'rgba(150, 20, 5, 0)');
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, glowRadius || 1, 0, Math.PI * 2);
+          ctx.fillStyle = gradient;
+          ctx.fill();
+        }
+
+        // === 4. Concentric shockwave rings ===
+        for (let ring = 0; ring < RING_COUNT; ring++) {
+          const ringDelay = ring * 0.1;
+          const ringProgress = Math.max(0, Math.min(1, (progress - ringDelay) / (1 - ringDelay)));
+          if (ringProgress <= 0) continue;
+
+          const ringEased = ringProgress * ringProgress;
+          const radius = ringEased * maxRadiusPx;
+
+          const fadeIn = Math.min(1, ringProgress / 0.15);
+          const fadeOut = Math.max(0, 1 - (ringProgress - 0.15) / 0.85);
+          const opacity = fadeIn * fadeOut * (1 - ring * 0.12);
+
+          const lineWidth = Math.max(2, tileSize * 0.3 * (1 - ringProgress * 0.8));
+
+          // Double stroke: outer glow + inner bright
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(255, 60, 10, ${opacity * 0.4})`;
+          ctx.lineWidth = lineWidth * 2.5;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          const r = 255;
+          const g = Math.round(80 + ring * 25);
+          const b = Math.round(10 + ring * 10);
+          ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+          ctx.lineWidth = lineWidth;
+          ctx.stroke();
+        }
+
+        // === 5. Flying spark particles ===
+        const sparkAngles = sparkAnglesMap.get(explosion.id)!;
+        if (progress > 0.02 && progress < 0.8) {
+          const sparkProgress = (progress - 0.02) / 0.78;
+          const sparkEased = sparkProgress * sparkProgress;
+          const sparkOpacity = Math.min(1, sparkProgress / 0.1) * Math.max(0, 1 - (sparkProgress - 0.3) / 0.7);
+          for (let i = 0; i < SPARK_COUNT; i++) {
+            const angle = sparkAngles[i];
+            const speed = 0.6 + (i % 3) * 0.25;
+            const dist = sparkEased * maxRadiusPx * speed;
+            const sx = centerX + Math.cos(angle) * dist;
+            const sy = centerY + Math.sin(angle) * dist;
+            const sparkSize = tileSize * 0.06 * (1 - sparkProgress * 0.7);
+
+            ctx.beginPath();
+            ctx.arc(sx, sy, Math.max(1, sparkSize), 0, Math.PI * 2);
+            const bright = i % 2 === 0;
+            ctx.fillStyle = bright
+              ? `rgba(255, 255, 180, ${sparkOpacity})`
+              : `rgba(255, 140, 40, ${sparkOpacity * 0.8})`;
+            ctx.fill();
+          }
+        }
+
+        // === 6. White-hot core flash ===
+        if (progress < 0.4) {
+          const flashProgress = progress / 0.4;
+          const flashRadius = tileSize * 0.5 * (1 - flashProgress * flashProgress);
+          const flashOpacity = 1.0 * (1 - flashProgress);
+          // White-hot center
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, flashRadius, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 255, 240, ${flashOpacity})`;
+          ctx.fill();
+          // Orange halo
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, flashRadius * 2, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 150, 30, ${flashOpacity * 0.5})`;
+          ctx.fill();
+          // Red outer halo
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, flashRadius * 3, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(200, 50, 10, ${flashOpacity * 0.2})`;
+          ctx.fill();
+        }
+      }
+
+      // Remove completed explosions
+      completedIds.forEach(id => removeExplosion(id));
+
+      // Continue loop if there are still active explosions
+      if (activeExplosions.length > completedIds.length) {
+        animationFrameId = requestAnimationFrame(animate);
+      }
+    };
+
+    animationFrameId = requestAnimationFrame(animate);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeExplosions, startPoint, tilePaddingWidth, tilePaddingHeight, tileSize, removeExplosion]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -859,6 +1074,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({ paddingTi
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
           <ChatComponent />
           <Tilemap className={S.canvas} tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} />
+          <canvas className={S.canvas} id="ShockwaveCanvas" ref={shockwaveCanvasRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} id="MyCursor" ref={canvasRefs.myCursorRef} width={windowWidth} height={windowHeight} />

@@ -22,10 +22,11 @@ interface UseMessageHandlerOptions {
   replaceBinaryTiles?: (binaryData: Uint8Array) => Promise<void>;
   setLeftReviveTime: (time: number) => void;
   setIsInitialized: (initialized: boolean) => void;
+  onExplosion: (position: { x: number; y: number }) => void;
 }
 
 export default function useMessageHandler(options: UseMessageHandlerOptions) {
-  const { getCurrentTileWidthAndHeight, replaceTiles, replaceBinaryTiles, setLeftReviveTime, setIsInitialized } = options;
+  const { getCurrentTileWidthAndHeight, replaceTiles, replaceBinaryTiles, setLeftReviveTime, setIsInitialized, onExplosion } = options;
 
   // Store hooks - only stable setters, no reactive state in callback deps
   const { sendMessage } = useWebSocketStore();
@@ -66,6 +67,11 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
             // The Explosion event is applied on all the cursor in the view.
             const { position: explode_position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
             const { x, y } = explode_position;
+
+            // Trigger shockwave animation for ALL explosions in view
+            onExplosion(explode_position);
+
+            // Stun only if cursor is within 3x3 impact zone
             const { x: cursorX, y: cursorY } = position;
             if (cursorX >= x - 1 && cursorX <= x + 1 && cursorY >= y - 1 && cursorY <= y + 1) {
               console.log('explosion', performance.now());
@@ -154,7 +160,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
         console.error(e);
       }
     },
-    [replaceTiles, setLeftReviveTime, setIsInitialized, getCurrentTileWidthAndHeight, sendMessage, setRanking],
+    [replaceTiles, setLeftReviveTime, setIsInitialized, getCurrentTileWidthAndHeight, sendMessage, setRanking, onExplosion],
   );
 
   /** Handle binary WebSocket frames (future: server sends 1-byte-per-tile data) */
