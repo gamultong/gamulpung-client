@@ -21,7 +21,7 @@ import useMessageHandler from '@/hooks/useMessageHandler';
 import { useCursorStore } from '@/store/cursorStore';
 import { useTileStore, useTiles } from '@/store/tileStore';
 import SkillTree from '@/components/skilltree';
-import { RENDER_RANGE, ORIGIN_TILE_SIZE, MAX_TILE_COUNT, WS_URL } from './constants';
+import { RENDER_RANGE, MAX_TILE_COUNT, WS_URL } from './constants';
 
 export default function Play() {
   /** stores */
