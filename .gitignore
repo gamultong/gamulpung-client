@@ -44,3 +44,4 @@ next-env.d.ts
 .cursor/debug.log
 .claude/settings.local.json
 .claude/settings.json
+.omc/
