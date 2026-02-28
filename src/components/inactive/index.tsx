@@ -17,7 +17,7 @@ export default function Inactive({ time }: { time: number }) {
         <Image src={host + '/review.png'} alt="review" width={300} height={100} />
         기다리는 동안 간단한 설문 참여하기
       </Link> */}
-      <div className={S.ad}>광고 받습니다: kkh061101@naver.com</div>
+      <div className={S.ad}>Contact To kkh061101@naver.com</div>
     </div>
   );
 }
