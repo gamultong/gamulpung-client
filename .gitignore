@@ -42,6 +42,5 @@ next-env.d.ts
 # Rust / WASM build output
 /wasm/target/
 .cursor/debug.log
-.claude/settings.local.json
-.claude/settings.json
+.claude/
 .omc/
