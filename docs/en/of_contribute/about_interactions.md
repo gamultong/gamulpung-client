@@ -1,102 +1,131 @@
 # About Interactions
 
-You can interact with the client through `onClick` and `onMouseDown` events. All interactions are handled on the interaction canvas.
+## Overview
+
+User input is handled by the `useInputHandlers` hook.
+It detects mouse/touch events, calculates tile coordinates, and executes appropriate actions based on tile state.
+
+**File**: `src/hooks/useInputHandlers.ts`
 
 ---
 
-## Overview of Click Interactions  
-Users can interact with the tile grid using mouse clicks, and there are two types:  
+## Click Types
 
-- **Normal Click (Left Click)**: Used to open tiles or move the cursor.  
-- **Special Click (Right Click)**: Used to set or remove flags on tiles.  
-
-The system calculates the tile position and evaluates the tile state to perform the appropriate action.
-
----
-
-## Coordinate System  
-To determine the tile clicked by the user, the system performs the following coordinate transformations:  
-
-1. **Canvas Coordinates**  
-  Adjust the mouse click position relative to the screen to fit the canvas grid.  
-
-2. **Relative Tile Coordinates**  
-  Convert the click position to a relative position within the tile grid. This is calculated by dividing the adjusted click position by the tile size, considering the spacing between tiles.  
-
-3. **Absolute Tile Coordinates**  
-  Adjust the relative coordinates based on the origin to calculate the absolute position of the tile.  
+| Input | Event | Action |
+|-------|-------|--------|
+| Left click | `handleClick()` | Open tile or move |
+| Right click | `handleRightClick()` | Set/remove flag or install bomb |
+| Long press (500ms) | `handleLongPress()` | Dismantle flagged mine (DISMANTLE_MINE) |
 
 ---
 
-## Tile States and Content  
-Each tile in the grid can have one of the following states:  
+## Coordinate Conversion
 
-- **Closed Tile**: A tile that has not been interacted with yet.  
-- **Flagged Tile**: A tile marked as a potential mine.  
-- **Opened Tile**: A revealed tile (no mine).  
-- **Out of Bounds Tile**: When a click is outside the grid.  
+How screen click positions are converted to tile grid coordinates:
 
----
+```
+1. Canvas coordinates
+   Convert mouse event clientX/clientY to canvas-relative position
 
-## Click Types  
-The type of click interaction is determined by the mouse button:  
+2. Relative tile coordinates
+   Divide click position by tile size to get grid-relative position
+   (accounts for zoom level and tile padding)
 
-| **Click Type**   | **Mouse Button** | **Action**                       |  
-|------------------|------------------|----------------------------------|  
-| **Normal Click** | Left Click       | Open tile or move cursor.        |  
-| **Special Click**| Right Click      | Set or remove flag on tile.      |  
-
----
-
-## Actions Based on Tile State  
-
-### Normal Click (Left Click)  
-
-| **Tile State**   | **Action**                                      |  
-|------------------|-------------------------------------------------|  
-| **Closed Tile**  | Open the tile to reveal its content.            |  
-| **Opened Tile**  | Move the cursor to the tile if a path exists.   |  
-| **Flagged Tile** | No action.                                      |  
-| **Out of Bounds**| No action.                                      |  
-
-### Special Click (Right Click)  
-
-| **Tile State**   | **Action**                                      |  
-|------------------|-------------------------------------------------|  
-| **Closed Tile**  | Set a flag on the tile (mark as suspected mine).|  
-| **Flagged Tile** | Remove the flag (revert to closed state).       |  
-| **Opened Tile**  | No action.                                      |  
-| **Out of Bounds**| No action.                                      |  
+3. Absolute world coordinates
+   Adjust relative coordinates based on cursor origin (cursorPosition)
+   → Absolute tile position to send to server
+```
 
 ---
 
-## Tile Movement  
-When the user normal clicks on an opened or exploded tile:  
+## Actions by Tile State
 
-- The system attempts to move the cursor to the clicked tile.  
-- Movement occurs only if there is a valid path from the current position to the target tile.  
-- Movement speed is fixed at 5 tiles per second.  
+### Left Click
+
+| Tile State | Adjacent (within 1 tile) | Distant |
+|-----------|--------------------------|---------|
+| Closed | Send `OPEN_TILES` → open tile | A* pathfind → move then open |
+| Opened | Move (1 tile) | A* pathfind → move |
+| Flagged | No action | Move to nearest open neighbor |
+| Bomb | No action | A* pathfind → move |
+
+### Right Click
+
+| Tile State | Normal Mode | Bomb Mode |
+|-----------|-------------|-----------|
+| Closed | `SET_FLAG` → set flag | `INSTALL_BOMB` → install bomb |
+| Flagged | `SET_FLAG` → remove flag | No action |
+| Opened | No action | No action |
+
+### Long Press (500ms)
+
+| Tile State | Action |
+|-----------|--------|
+| Flagged | `DISMANTLE_MINE` → dismantle flag |
+| Other | No action |
 
 ---
 
-## Chat  
-Pressing the Enter key activates the chat component. Typing a message and pressing Enter again sends the chat, making it visible to other users.
+## A* Pathfinding
+
+**File**: `src/utils/aStar.ts`
+
+When clicking a distant tile, the A* algorithm calculates the optimal path.
+
+### Features
+
+- **8-directional movement**: Cardinal + diagonal
+- **Impassable tiles**: Flag tiles are treated as obstacles
+- **Early exit**: Skips full search if target is adjacent
+- **Cost calculation**: Straight 1.0, diagonal 1.414 (Euclidean distance)
+
+### Path Execution Flow
+
+```
+A* path calculation
+  → Generate waypoints array [start, ..., destination]
+  ↓
+useMovement:
+  → setInterval at MOVE_SPEED (ms) intervals
+  → Each step:
+      1. Calculate direction to next waypoint
+      2. Move cursor 1 tile
+      3. Send MOVE event to server
+      4. Call padtiles() (shift grid in movement direction)
+      5. CSS transform animation
+  → Execute original action on arrival
+```
+
+### Movement Speed
+
+Base movement interval: `MOVE_SPEED` (ms/tile)
+
+Movement speed changes based on skills purchased from the skill tree:
+
+```typescript
+// Speed multiplier calculation in useSkillTree
+const speedMultiplier = purchasedSkills
+  .filter(skill => skill.type === 'speed')
+  .reduce((mult, skill) => mult * skill.value, 1.0);
+```
 
 ---
 
-## Event Handling  
-When the user interacts with a tile:  
+## Chat
 
-1. The system calculates the tile position (relative and absolute).  
-2. Retrieves the content of the clicked tile.  
-3. Evaluates the click type (normal or special).  
-4. Performs the appropriate action:  
-  - Normal Click: Open the tile.  
-  - Special Click: Set or remove a flag.  
-  - Normal Click (valid tile): Move the cursor.  
+Toggle chat input mode with the Enter key:
+
+1. Enter → Activate chat input
+2. Type message
+3. Enter → Send `CHAT` event to server
+4. Displayed as speech bubble for other users (8 seconds)
+
+Movement/click inputs are disabled while chatting.
 
 ---
 
-## Special Conditions  
-- If an adjacent tile explodes during interaction, all tile controls are restricted for a certain period (e.g., 3 minutes).  
-- Clicks outside the grid are ignored and marked as "Out of Bounds".  
+## Special Conditions
+
+- **Stun state**: All inputs disabled for 10 seconds when within 3x3 explosion range
+- **Revive countdown**: `inactive` component shows countdown overlay
+- **Out-of-grid click**: Ignored (early return after bounds check)

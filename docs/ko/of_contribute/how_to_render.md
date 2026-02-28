@@ -1,119 +1,182 @@
-# 타일 렌더링 방법  
+# 타일 렌더링 방법
 
-이 프로젝트는 애니메이션 효율성을 위해 3개의 `<canvas>` 요소를 사용하여 그래픽을 렌더링합니다:  
+이 프로젝트는 **2개의 렌더링 레이어**를 사용합니다:
 
-1. **타일 캔버스**: 타일을 렌더링.  
-2. **상호작용 캔버스**: 커서 경로와 상호작용 범위를 그리기.  
-3. **커서 캔버스**: 사용자 커서를 그리기.  
-
----
-
-## 프레임 생성 방법  
-
-### 0. 시작 및 종료 지점 초기화  
-
-클라이언트의 창 크기와 최초 타일 크기를 기준으로 타일을 초기화하고 시작 및 종료 지점을 설정합니다.  
-이는 클라이언트 창에 렌더링할 수 있는 타일 개수를 기준으로 계산됩니다.  
-자세한 내용은 `play/page.tsx`에서 확인할 수 있습니다.  
+1. **Pixi.js Stage**: WebGL 기반 타일 렌더링 (스프라이트 풀)
+2. **Canvas 2D**: 커서, 경로, 폭발 애니메이션 오버레이
 
 ---
 
-### 1. 서버에 연결  
+## 렌더링 파이프라인 전체 흐름
 
-이 Hook은 WebSocket이 열려 있지 않고 시작 및 종료 지점이 정의된 경우 지정된 URL과 뷰 크기를 사용하여 WebSocket을 재연결 시도합니다.  
-자세한 내용은 `play/page.tsx`에서 확인할 수 있습니다.  
-
----
-
-### 2. WebSocket을 사용하여 서버에서 타일 데이터 가져오기  
-
-타일 및 커서 데이터를 서버에서 가져오려면 WebSocket 연결을 설정하고 들어오는 메시지를 수신 대기합니다. 메시지를 수신하면 데이터를 파싱하고 상태를 업데이트합니다.  
-
-- 시작 및 종료 지점을 기준으로 모든 타일을 요청하고, 초기에는 모든 타일을 "??"로 설정합니다.  
-
-**주의사항**:  
-- `start_y`와 `end_y` 좌표는 y축이 반전되어 있으므로 반대로 설정합니다.  
-이유: 백엔드는 데카르트 좌표계를 사용, 프론트엔드는 브라우저의 렌더링 방향을 기반으로 잡음.
-
-- 추출된 값을 `replaceTiles` 함수에서 사용해 타일을 업데이트합니다. 
-  1. 수신된 헥스 데이터로 이루어진 문자열을 다음과 같이 파싱합니다.
-  0 - 열림확인, 1 - 지뢰확인, 2 - 깃발확인, 3 ~ 4 색상(00 red, 01 yellow, 10 blue, 11 purple), 5 ~ 7 지뢰 갯수(000 0개, 010 2개 ... 111 8개)
-  2. 한 줄이 다 채워졌다면 다음 줄을 채웁니다.
-  3. 모든 줄이 채워졌다면 y축을 반전시키고, 요청한 부분만 타일을 교체합니다.
-
-서버에서 요청된 타일이 전달되면, 더미 데이터 타일을 전달된 타일로 교체합니다.  
-자세한 내용은 `play/page.tsx`에서 확인할 수 있습니다.  
-
----
-
-### 3. Path2D 객체와 폰트 캐싱  
-
-렌더링 성능을 개선하기 위해 Path2D 객체를 캐싱하고, 
-초기 폰트 미적용 문제를 예방하기 위해 `fontface.load()`를 사용해 로컬 폰트를 Promise 객체로 로딩될 때까지 기다립니다.
-자세한 내용은 `components/canvas/index.tsx`에서 확인할 수 있습니다.  
+```
+텍스처 프리렌더링 (한 번만)
+  → useTilemapTextures: 숫자, 깃발, 폭탄 텍스처 생성
+  ↓
+renderTiles 변경 감지
+  → Tilemap useLayoutEffect 트리거
+  ↓
+뷰포트 내 보이는 타일 범위 계산
+  → startCol/endCol, startRow/endRow
+  ↓
+스프라이트 풀 확보
+  → ensurePool()로 필요한 만큼 확장
+  ↓
+타일별 렌더링
+  → 타일 타입에 따라 적절한 풀에서 스프라이트 할당
+  ↓
+미사용 스프라이트 숨김
+  → hidePoolFrom()
+  ↓
+Canvas 2D 오버레이
+  → 커서, 경로, 폭발 효과 그리기
+```
 
 ---
 
-### 4. 캔버스에 타일 렌더링  
+## 1. 텍스처 생성 (useTilemapTextures)
 
-모든 속성이 캐싱되면 로딩 상태를 `false`로 설정하고 타일 캔버스에 타일을 렌더링합니다.  
-렌더링은 타일 맵, 타일 크기, 커서 위치, 클릭 위치, 색상, 줌 등 속성에 따라 다릅니다.  
+**파일**: `src/hooks/useTilemapTextures.ts`
 
-- **내 커서 캔버스**
-  단순히 클라이언트의 화면 가운데에 클라이언트의 커서를 표시하는 데 사용되는 캔버스입니다.
+게임 시작 시 필요한 텍스처를 **미리 생성**하여 캐싱합니다.
 
-- **타일 캔버스**:  
-  이 캔버스에서는 React-Pixi를 활용한 그래픽입니다.
-  - 내부 좌표 정의: 그라디언트를 적용할 영역을 설정.  
-  - 타일 텍스쳐
-    1. 타일 텍스쳐 생성: 벡터 경로를 그리기 위해 가상의 캔버스를 생성 후 벡터를 그린 후 캔버스를 텍스쳐로 캐싱합니다.
-    2. 타일 텍스쳐 캐싱: 타일 크기가 달라질 때 이미 캐싱된 텍스쳐가 있으면 그것을 가져옵니다.
-  - 타일 컴포넌트
-    1. 타일 컴포넌트 생성: 생성한 텍스쳐를 PIXI.js의 Sprite 컴포넌트를 활용해 렌더링합니다.
-    2. 타일 컴포넌트 캐싱: 캐싱되어 있는 타일 스프라이트를 복제합니다.
-  - 렌더링 최적화: 텍스쳐를 부드럽게 하는 Antialiasing이 사용되지 않으며, 클라이언트의 움직임이 감지될 때 Resolution(화질)이 낮아집니다. 
+### 텍스처 종류
 
-- **상호작용 캔버스**:  
-  - 클릭된 타일 강조: 클릭된 타일에 테두리를 그려 시각적 피드백 제공.  
-  - 클라이언트 커서 경로 그리기: 경로가 존재하면(`paths.length > 0`), 타일 내 중심을 연결하는 선을 그림.  
+| 텍스처 | 생성 방법 | 캐시 키 |
+|--------|-----------|---------|
+| 타일 그라디언트 (outer/inner) | 4px 캔버스에 색상 보간 → `Texture.from()` | `"${색상1}${색상2}${tileSize}"` |
+| 숫자 (1~8) | 캔버스에 폰트 렌더링 → `canvasToTexture()` | 숫자 인덱스 |
+| 깃발 (4색) | SVG Path2D → 캔버스 → `canvasToTexture()` | `"flag${인덱스}"` |
+| 폭탄 | SVG Path2D → 캔버스 → `canvasToTexture()` | `"boom"` |
 
-- **커서 캔버스**:  
-  - 캔버스 설정: 다른 사용자 커서를 그리기 위한 캔버스 가져오기.  
-  - 이전 그림 지우기: `clearRect`를 사용해 캔버스를 정리.  
-  - 커서 그리기:  
-    - `cursors` 배열의 각 커서를 순회.  
-    - 각 커서의 정확한 위치를 계산.  
-    - `drawCursor` 함수를 사용해 위치와 색상이 올바른 커서를 그림.  
+### 동시성 제한
 
-- **(40% 미만 제외)클라이언트 움직임으로 인한 캔버스 애니메이션**
-  - 내 커서 캔버스를 제외한 모든 캔버스들이 내 커서가 이동함에 따라 타일 상태가 바뀌는 사이 다음 경로를 향해 css transform 효과를 설정합니다.
+텍스처 생성은 GPU 작업이므로, `createLimiter(8)`로 **최대 8개 동시 실행**하여 메인 스레드/GPU 과부하를 방지합니다.
 
-자세한 코드는 `components/canvas/index.tsx`에서 확인할 수 있습니다.  
+### 체커보드 색상
+
+타일은 위치에 따라 2가지 색상 조합을 사용합니다:
+
+```
+패리티 = (col + row) & 1
+패리티 0: tileColors.outer[0], tileColors.inner[0]  (밝은 색)
+패리티 1: tileColors.outer[1], tileColors.inner[1]  (어두운 색)
+```
+
+색상 정의는 `src/assets/renderPaths.json`의 `tileColors`에 있습니다.
 
 ---
 
-### 5. 캔버스 업데이트  
+## 2. Pixi.js 타일 렌더링 (Tilemap)
 
-다음 이벤트가 발생하면 캔버스를 업데이트해야 합니다:  
+**파일**: `src/components/tilemap/index.tsx`
 
-#### 5-1. 클라이언트 커서 위치 변경 시  
+### Stage 구조
 
-이전 타일 로드 방식과 유사하게, 이동 방향에 따라 타일을 로드합니다.  
-이동 방향 반대쪽에 타일을 밀어내고 빈 공간을 "??"로 채운 후 타일을 로드 및 교체합니다.  
+```
+<Stage>  (Pixi Application)
+  └── <Container name="container">
+        ├── <Container name="background">     ← outerPool, innerPool, numberPool
+        ├── <Container name="closed-layer">   ← closedPool (outer + inner 쌍)
+        ├── <Container name="boom-layer">     ← boomPool
+        └── <Container name="flag-layer">     ← flagPool
+```
 
-대각선 이동도 동일한 방식으로 처리됩니다. 이동 방향의 타일을 로드하고, 반대 방향의 타일을 밀어낸 후 빈 공간을 채우고 타일을 교체합니다.  
+### 스프라이트 풀 패턴
 
-이후 시작 및 종료 지점을 설정하고, 커서 위치를 기준으로 모든 캔버스를 다시 렌더링합니다.  
+매 프레임 스프라이트를 생성/파괴하면 **GC 부담과 GPU 할당 비용**이 발생합니다.
+대신 **오브젝트 풀**을 사용하여 스프라이트를 재사용합니다.
 
-#### 5-2. 다른 커서 상태 변경 시  
+```
+풀 종류:
+  outerPool    — 열린 타일의 외부 배경
+  innerPool    — 열린 타일의 내부 배경 (패딩 적용)
+  closedPool   — 닫힌/깃발 타일의 outer+inner 쌍
+  boomPool     — 폭탄 스프라이트
+  flagPool     — 깃발 스프라이트
+  numberPool   — 숫자(1~7) 스프라이트
+```
 
-다른 커서 위치를 기준으로 커서 캔버스를 다시 렌더링합니다.  
+**풀 관리 함수** (`src/utils/pixiSpritePool.ts`):
+- `ensurePool(pool, container, needed)`: 풀 크기가 부족하면 스프라이트 추가
+- `hidePoolFrom(pool, fromIndex)`: 사용하지 않는 스프라이트 숨김
 
-#### 5-3. 특정 타일이 업데이트된 경우  
+### 보이는 타일 범위 계산
 
-해당 타일을 교체하고 모든 캔버스를 다시 렌더링합니다.  
-타일 교체시 "??"같은 더미데이터를 사용하지 않고 hex 값을 파싱하여 즉각 반영됩니다.
+```typescript
+const startCol = Math.max(0, Math.ceil(tilePadWidth - 1));
+const endCol = Math.min(totalCols - 1, (tilePadWidth + (windowWidth + tileSize) / tileSize) >>> 0);
+const startRow = Math.max(0, Math.ceil(tilePadHeight - 1));
+const endRow = Math.min(totalRows - 1, (tilePadHeight + (windowHeight + tileSize) / tileSize) >>> 0);
+```
 
-#### 5-4. 클라이언트가 타일의 크기를 조절한 경우
+뷰포트 밖의 타일은 렌더링하지 않아 GPU 부하를 줄입니다.
 
-시작 및 종료 지점을 설정하고, 커서 위치를 기준으로 모든 캔버스를 다시 렌더링합니다.  
+### 타일 타입별 렌더링
+
+| 타일 타입 | 사용 풀 | 렌더링 |
+|-----------|---------|--------|
+| FILL (0xFF) | closedPool | 닫힌 타일 모양으로 표시 |
+| Closed (0x10-0x11) | closedPool | outer + inner 체커보드 |
+| Flag (0x20-0x27) | closedPool + flagPool | 체커보드 + 깃발 오버레이 |
+| Opened (0x00-0x07) | outerPool + innerPool | 열린 배경 |
+| Bomb (0x08) | outerPool + innerPool + boomPool | 열린 배경 + 폭탄 |
+| Number (0x01-0x07) | outerPool + innerPool + numberPool | 열린 배경 + 숫자 |
+
+### 갭 없는 타일 배치
+
+부동소수점 좌표를 정수로 스냅하여 타일 사이 틈을 방지합니다:
+
+```typescript
+const xFloat = (colIdx - tilePadWidth) * tileSize;
+const startX = Math.round(xFloat);
+const endX = Math.round(xFloat + tileSize);
+const w = endX - startX;  // 반올림으로 인해 1px 차이 보정
+```
+
+---
+
+## 3. Canvas 2D 오버레이
+
+### 커서 렌더링 (useCursorRenderer)
+
+**파일**: `src/hooks/useCursorRenderer.ts`
+
+Pixi Stage 위에 Canvas 2D로 그려지는 요소:
+
+- **내 커서**: 화면 중앙에 고정, 클릭 방향으로 회전
+- **이동 경로**: A* 경로를 부드러운 곡선으로 표시
+- **다른 유저 커서**: 상대 좌표로 위치 계산, 기절 상태 표시
+- **클릭 타겟**: 클릭한 타일에 테두리 강조
+
+### 폭발 애니메이션 (useShockwaveAnimation)
+
+**파일**: `src/hooks/useShockwaveAnimation.ts`
+
+`requestAnimationFrame` 루프로 60fps 애니메이션을 실행합니다:
+
+```
+진행도 0%~100%:
+  0~8%   : 화면 전체 흰색 섬광
+  0~70%  : 방사형 광선 (12개 방향)
+  5~100% : 동심원 링 (5개 레이어, 시차 적용)
+  0~80%  : 비산하는 스파크 (불꽃 입자)
+  0~40%  : 중앙 백열 코어
+```
+
+각 폭발은 `useExplosionManager`에서 `{ position, startTime, id }`로 추적됩니다.
+
+---
+
+## 4. 커서 이동 시 캔버스 애니메이션
+
+커서가 경로를 따라 이동할 때, 실제 타일 데이터가 바뀌기 전에 **CSS transform**으로 캔버스를 밀어 부드러운 이동 효과를 줍니다.
+
+```
+MOVE 이벤트 전송
+  → CSS transform: translate(dx * tileSize, dy * tileSize)
+  → 타일 데이터 도착 후 transform 리셋
+  → 새 타일로 렌더링
+```
+
+이 방식은 Pixi Stage를 다시 그리지 않고도 즉시 시각적 피드백을 제공합니다.
