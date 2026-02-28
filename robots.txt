@@ -1,5 +1,5 @@
 User-Agent: *
 Allow: /
 
-Host: https://gamultong.github.io/gamulpung-client/
-Sitemap: https://gamultong.github.io/gamulpung-client//sitemap.xml
+Host: https://gamultong.github.io/gamulpung-client
+Sitemap: https://gamultong.github.io/gamulpung-client/sitemap.xml
