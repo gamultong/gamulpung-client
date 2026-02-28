@@ -22,10 +22,25 @@ const siteUrl = host || 'https://gamulpung.com';
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: 'Gamulpung',
+    default: 'Gamulpung - Infinite Multiplayer Minesweeper | 무한 멀티플레이어 지뢰찾기',
     template: '%s | Gamulpung',
   },
-  description: 'Gamulpung, Web Multi-play Infinity Minesweeper Game',
+  description:
+    'Play infinite multiplayer minesweeper online for free. Explore an endless map with real-time co-op. 무한으로 펼쳐지는 맵에서 다른 플레이어와 실시간으로 함께하는 온라인 지뢰찾기 게임.',
+  keywords: [
+    'minesweeper',
+    'multiplayer minesweeper',
+    'online minesweeper',
+    'infinite minesweeper',
+    'co-op minesweeper',
+    'browser game',
+    '지뢰찾기',
+    '멀티플레이어 지뢰찾기',
+    '온라인 지뢰찾기',
+    '무한 지뢰찾기',
+    '지뢰찾기 같이하기',
+    '지뢰찾기 온라인',
+  ],
   alternates: {
     canonical: '/',
     languages: {
@@ -39,17 +54,23 @@ export const metadata: Metadata = {
     alternateLocale: 'ko_KR',
     url: siteUrl,
     siteName: 'Gamulpung',
+    title: 'Gamulpung - Infinite Multiplayer Minesweeper',
+    description:
+      'Play infinite multiplayer minesweeper online for free. Explore an endless map with real-time co-op.',
     images: [
       {
         url: siteUrl + '/ogimage.png',
-        alt: 'Gamulpung',
+        width: 1200,
+        height: 630,
+        alt: 'Gamulpung - Infinite Multiplayer Minesweeper Game',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Gamulpung',
-    description: 'Gamulpung, Web Multi-play Infinity Minesweeper Game',
+    title: 'Gamulpung - Infinite Multiplayer Minesweeper',
+    description:
+      'Play infinite multiplayer minesweeper online for free. Explore an endless map with real-time co-op.',
     images: siteUrl + '/ogimage.png',
   },
 };
@@ -71,10 +92,29 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               '@context': 'https://schema.org',
-              '@type': 'Organization',
-              name: 'Gamulpung',
+              '@type': 'VideoGame',
+              name: 'Gamulpung - Infinite Multiplayer Minesweeper',
+              alternateName: '가물퐁 - 무한 멀티플레이어 지뢰찾기',
+              description:
+                'Play infinite multiplayer minesweeper online for free. Explore an endless map with real-time co-op.',
               url: siteUrl,
-              logo: siteUrl + '/icon.png',
+              image: siteUrl + '/ogimage.png',
+              genre: ['Puzzle', 'Multiplayer', 'Strategy'],
+              gamePlatform: 'Web Browser',
+              applicationCategory: 'Game',
+              operatingSystem: 'Any',
+              playMode: ['MultiPlayer', 'CoOperative'],
+              numberOfPlayers: {
+                '@type': 'QuantitativeValue',
+                minValue: 1,
+              },
+              offers: {
+                '@type': 'Offer',
+                price: '0',
+                priceCurrency: 'USD',
+                availability: 'https://schema.org/InStock',
+              },
+              inLanguage: ['en', 'ko'],
             }),
           }}
         />
@@ -87,11 +127,6 @@ export default function RootLayout({
               '@type': 'WebSite',
               name: 'Gamulpung',
               url: siteUrl,
-              potentialAction: {
-                '@type': 'SearchAction',
-                target: siteUrl + '/?q={search_term_string}',
-                'query-input': 'required name=search_term_string',
-              },
             }),
           }}
         />

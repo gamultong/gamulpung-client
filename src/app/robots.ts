@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 
 export default function robots(): MetadataRoute.Robots {
-  const host = 'https://gamultong.github.io/gamulpung-client/';
+  const host = process.env.NEXT_PUBLIC_HOST || 'https://gamulpung.com';
   return {
     rules: [
       {
