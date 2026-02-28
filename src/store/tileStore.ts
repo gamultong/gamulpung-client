@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Direction, XYType } from '@/types';
 import { TileGrid, Tile } from '@/utils/tileGrid';
+import { restoreCachedTiles } from '@/utils/tileCache';
 
 interface TileStore {
   // Canonical tile data (flat Uint8Array via TileGrid)
@@ -63,7 +64,11 @@ export const useTileStore = create<TileStore>((set, get) => ({
     const { UP, ALL, DOWN, LEFT, RIGHT, DOWN_LEFT, DOWN_RIGHT, UP_LEFT, UP_RIGHT } = Direction;
 
     if (type === ALL) {
-      set({ tiles: new TileGrid(width, height) });
+      const newGrid = new TileGrid(width, height);
+      const worldStartX = Math.min(from_x, to_x);
+      const worldStartY = Math.min(from_y, to_y);
+      restoreCachedTiles(worldStartX, worldStartY, newGrid.data, width, height);
+      set({ tiles: newGrid });
       return;
     }
 
