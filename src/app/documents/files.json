@@ -1,6 +1,6 @@
 {
   "blog": ["firstbeta_statistics"],
-  "contribute-guide": ["overview", "back", "about_dashboard", "about_interactions", "how_to_render", "kinds_of_websocket_events"],
+  "contribute-guide": ["overview", "architecture", "data_flow", "tile_system", "back", "about_dashboard", "about_interactions", "how_to_render", "kinds_of_websocket_events"],
   "how-to-play": ["rules_of_pung"],
   "release-notes": ["v0-1-2", "v0-1-1"],
   "dummy": ["dummy"]
