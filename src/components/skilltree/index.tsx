@@ -1,6 +1,7 @@
 import S from './style.module.scss';
 import { useState } from 'react';
-import ReactFlow, { Background } from 'react-flow-renderer';
+import { ReactFlow, Background } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import useSkillTree from '@/hooks/useSkillTree';
 
 export default function SkillTree() {

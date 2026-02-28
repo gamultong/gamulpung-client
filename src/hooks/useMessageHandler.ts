@@ -47,8 +47,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
           /** When receiving requested tiles */
           case TILES_STATE: {
             const { tiles_li } = payload as GetTilesStatePayloadType;
-            // use replaceTiles
-            const promises = [];
+            // Process each chunk sequentially so tiles render progressively
             for (const tiles of tiles_li) {
               const { data, range } = tiles;
               const { top_left, bottom_right } = range;
@@ -58,9 +57,8 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
 
               let isAll: 'PART' | 'All' = 'PART';
               if (resWidth === width && resHeight === height) isAll = 'All';
-              promises.push(replaceTiles(top_left.x, bottom_right.y, bottom_right.x, top_left.y, data, isAll));
+              await replaceTiles(top_left.x, bottom_right.y, bottom_right.x, top_left.y, data, isAll);
             }
-            await Promise.all(promises);
             break;
           }
           case EXPLOSION: {

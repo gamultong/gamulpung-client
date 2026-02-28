@@ -43,3 +43,5 @@ next-env.d.ts
 /wasm/target/
 .cursor/debug.log
 .claude/settings.local.json
+.claude/settings.json
+.omc/

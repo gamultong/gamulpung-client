@@ -1,9 +1,9 @@
 'use client';
 
-import { useCursorStore } from '@/store/cursorStore';
+// import { useCursorStore } from '@/store/cursorStore';
 import { useSkillTreeStore } from '@/store/skillTreeStore';
 import { useMemo, useState } from 'react';
-import { useNodesState, useEdgesState, MarkerType } from 'react-flow-renderer';
+import { useNodesState, useEdgesState, MarkerType } from '@xyflow/react';
 
 // TO-DO add categories and values for each skill
 export interface SkillItem {
@@ -56,7 +56,7 @@ const createInitialEdges = () =>
 
 export default function useSkillTree() {
   const ORIGIN_MOVE_SPEED = 200;
-  const { score } = useCursorStore();
+  // const { score } = useCursorStore();
   const purchasedSkills = useSkillTreeStore(s => s.purchasedSkills);
   const setPurchasedSkills = useSkillTreeStore(s => s.setPurchasedSkills);
   const [nodes, setNodes, onNodesChange] = useNodesState(createInitialNodes());
@@ -80,7 +80,7 @@ export default function useSkillTree() {
     if (!selectedSkill) return;
     if (purchasedSkills.includes(selectedSkill.id)) return;
     // check cost
-    if (selectedSkill.cost > score) return;
+    // if (selectedSkill.cost > score) return;
 
     const prerequisiteSkills = SKILL_DATA.filter(skill => skill.nexts.includes(selectedSkill.id));
     const hasAllPrerequisites = prerequisiteSkills.every(skill => purchasedSkills.includes(skill.id));

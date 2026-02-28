@@ -5,6 +5,7 @@ import { VECTORIZED_TILE_LUT } from '@/utils/tiles';
 import { TileGrid, Tile, makeClosedTile, makeFlagTile } from '@/utils/tileGrid';
 import { initWasm, getWasmSync, hexEncoder } from '@/utils/wasmTileEngine';
 import { useTileStore } from '@/store/tileStore';
+import { cacheTiles } from '@/utils/tileCache';
 
 interface UseTileProcessingOptions {
   padtiles: (sx: number, sy: number, ex: number, ey: number, dir: Direction) => void;
@@ -171,6 +172,12 @@ export default function useTileProcessing({
         applyTileChanges(allChanges);
       }
       console.log('replace', performance.now());
+
+      // Populate world-coordinate tile cache for instant restore on revisit
+      const updatedTiles = useTileStore.getState().tiles;
+      if (!updatedTiles.isEmpty) {
+        cacheTiles(startPoint.x, startPoint.y, updatedTiles.data, updatedTiles.width, updatedTiles.height);
+      }
     },
     [padtiles, processTileData, startPoint, applyTileChanges, applyPackedChanges, setTiles],
   );

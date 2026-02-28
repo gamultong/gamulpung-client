@@ -1,5 +1,5 @@
 'use client';
-import { useLayoutEffect, useCallback } from 'react';
+import { useLayoutEffect, useCallback, useRef, useEffect } from 'react';
 import { SendMessageEvent, SendSetWindowPayloadType, XYType } from '@/types';
 import { RENDER_RANGE, ORIGIN_TILE_SIZE } from '@/app/play/constants';
 
@@ -63,14 +63,25 @@ export default function useTileViewport({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowWidth, windowHeight, zoom, cursorOriginPosition, cursorPosition, isInitialized]);
 
-  /** Handling zoom event, same as the initial request */
+  /** Handling zoom event — debounced to avoid flooding server with SET_WINDOW requests */
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useLayoutEffect(() => {
     if (!isInitialized) return;
-    const payload: SendSetWindowPayloadType = getCurrentTileWidthAndHeight();
-    sendMessage(SendMessageEvent.SET_WINDOW, payload);
-
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      const payload: SendSetWindowPayloadType = getCurrentTileWidthAndHeight();
+      sendMessage(SendMessageEvent.SET_WINDOW, payload);
+    }, 200);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowWidth, windowHeight, zoom, isInitialized]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   return { getCurrentTileWidthAndHeight };
 }

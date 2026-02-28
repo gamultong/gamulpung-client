@@ -11,10 +11,10 @@
   },
   "dependencies": {
     "@pixi/react": "^7.1.2",
+    "@xyflow/react": "^12.10.1",
     "next": "^14.2.35",
     "pixi.js": "^7.4.2",
     "qs": "^6.14.1",
-    "react-flow-renderer": "^10.3.17",
     "sass": "^1.80.7",
     "showdown": "^2.1.0",
     "zustand": "^5.0.1"
