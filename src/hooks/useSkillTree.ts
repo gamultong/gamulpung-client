@@ -3,7 +3,7 @@
 import { useCursorStore } from '@/store/cursorStore';
 import { useSkillTreeStore } from '@/store/skillTreeStore';
 import { useMemo, useState } from 'react';
-import { useNodesState, useEdgesState, MarkerType } from 'react-flow-renderer';
+import { useNodesState, useEdgesState, MarkerType } from '@xyflow/react';
 
 // TO-DO add categories and values for each skill
 export interface SkillItem {

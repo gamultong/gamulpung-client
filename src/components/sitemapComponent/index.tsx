@@ -1,7 +1,8 @@
 'use client';
 
 import { CSSProperties, useCallback, useEffect } from 'react';
-import ReactFlow, { Node, Edge, Controls, Background, useNodesState, useEdgesState, MarkerType, NodeMouseHandler } from 'react-flow-renderer';
+import { ReactFlow, Node, Edge, Controls, Background, useNodesState, useEdgesState, MarkerType, NodeMouseHandler } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import data from './sitemap.json';
 
 interface DataItem {
@@ -29,8 +30,8 @@ const activeNodeStyle: CSSProperties = {
 };
 
 export default function SiteMapGraph() {
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   useEffect(() => {
     const [initialNodes, initialEdges] = [[], []] as [Node[], Edge[]];
