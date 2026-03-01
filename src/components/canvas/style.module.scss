@@ -55,6 +55,11 @@
 }
 
 .canvasContainer {
+  touch-action: none;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+  height: 100%;
   .canvas {
     top: -5svh;
     left: -5svw;
@@ -63,6 +68,7 @@
     width: 110svw;
     height: 110svh;
     cursor: pointer;
+    touch-action: none;
   }
 }
 
