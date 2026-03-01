@@ -22,3 +22,15 @@
     position: absolute;
   }
 }
+
+@media (max-width: 768px) {
+  .chat {
+    font-size: 12px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    max-width: 60vw;
+    .message {
+      font-size: 12px;
+    }
+  }
+}
