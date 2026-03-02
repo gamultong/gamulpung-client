@@ -55,6 +55,7 @@ export default function SkillTree() {
                 onNodeClick={onNodeClick}
                 nodesDraggable={false}
                 fitView
+                style={{ width: '100%', height: '100%' }}
               >
                 <Background />
               </ReactFlow>

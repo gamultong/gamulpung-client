@@ -44,7 +44,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const { MOVE_SPEED } = useSkillTree();
   const { windowHeight, windowWidth } = useScreenSize();
   const { setPosition: setClickPosition, x: clickX, y: clickY, setMovecost } = useClickStore();
-  const { position: cursorPosition, zoom, color, setPosition: setCursorPosition, setOriginPosition, isBombMode, zoomUp, zoomDown } = useCursorStore();
+  const { position: cursorPosition, zoom, color, setPosition: setCursorPosition, setOriginPosition, isBombMode, interactionMode, zoomUp, zoomDown } = useCursorStore();
   const { cursors } = useOtherUserCursorsStore();
   const { sendMessage } = useWebSocketStore();
   const { useAnimation } = useAnimationStore();
@@ -149,6 +149,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     cursorOriginX,
     cursorOriginY,
     isBombMode,
+    interactionMode,
     movingPaths,
     moveCursor,
     clickEvent,

@@ -194,25 +194,44 @@
   left: 0 !important;
   bottom: 0 !important;
   width: 100% !important;
-  height: 65vh !important;
+  height: 75vh !important;
   border-radius: 20px 20px 0 0 !important;
   z-index: 10 !important;
   animation: slideUp 0.25s ease-out;
+  padding-bottom: 16px !important;
+  overflow: hidden;
+
+  > span {
+    order: 1;
+  }
+  .toggleButton {
+    order: 2;
+  }
+  .skillContainer {
+    order: 3;
+  }
 
   .skillContainer {
     flex: 1;
     width: 100%;
+    flex-direction: column !important;
+    min-height: 0;
+    overflow: hidden;
+
     .skillCanvas {
       width: 100% !important;
-      height: 100% !important;
-      flex: 1;
+      height: calc(75vh - 130px);
+      min-height: 100px;
+      overflow: hidden;
     }
     .skillInfo {
       width: 100% !important;
+      height: auto !important;
       flex-direction: row !important;
       align-items: center !important;
       gap: 12px !important;
       padding: 8px !important;
+      flex-shrink: 0;
 
       button {
         width: auto !important;
@@ -269,7 +288,22 @@
   .closed {
     height: auto;
     width: auto;
-    padding: 8px 16px;
-    border-radius: 16px;
+    padding: 0;
+    background-color: transparent;
+
+    .toggleButton {
+      background-color: rgba(0, 0, 0, 0.5);
+      padding: 8px 16px;
+      border: 2px solid rgba(255, 255, 255, 0.25);
+      border-radius: 12px;
+      font-size: 13px;
+      height: auto;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+
+      &:active {
+        background-color: rgba(0, 0, 0, 0.65);
+        transform: scale(0.95);
+      }
+    }
   }
 }

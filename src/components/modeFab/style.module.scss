@@ -1,0 +1,66 @@
+@font-face {
+  font-family: 'GeekbleMalang2WOFF2';
+  src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2302_01@1.0/GeekbleMalang2WOFF2.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
+
+.fab {
+  position: absolute;
+  bottom: 60px;
+  right: 10px;
+  z-index: 2;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background-color: rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  color: white;
+  font-family: 'GeekbleMalang2WOFF2';
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition:
+    border-color 0.15s,
+    background-color 0.15s,
+    transform 0.1s;
+
+  &:active {
+    transform: scale(0.9);
+  }
+
+  .icon {
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .label {
+    font-size: 9px;
+    line-height: 1;
+    opacity: 0.8;
+  }
+}
+
+.flagMode {
+  border-color: #4caf50;
+  background-color: rgba(76, 175, 80, 0.3);
+
+  &:active {
+    background-color: rgba(76, 175, 80, 0.45);
+  }
+}
+
+.bombMode {
+  border-color: #e53935;
+  background-color: rgba(229, 57, 53, 0.25);
+
+  &:active {
+    background-color: rgba(229, 57, 53, 0.4);
+  }
+}

@@ -3,6 +3,7 @@ import React, { useRef } from 'react';
 import { XYType, SendMessageEvent } from '@/types';
 import { TileGrid, isTileClosed, isTileFlag } from '@/utils/tileGrid';
 import { CanvasRefs } from '@/hooks/useMovement';
+import { InteractionMode } from '@/store/cursorStore';
 
 interface UseInputHandlersOptions {
   canvasRefs: CanvasRefs;
@@ -14,6 +15,7 @@ interface UseInputHandlersOptions {
   cursorOriginX: number;
   cursorOriginY: number;
   isBombMode: boolean;
+  interactionMode: InteractionMode;
   movingPaths: XYType[];
   moveCursor: (relativeTileX: number, relativetileY: number, clickedX: number, clickedY: number, onComplete?: (x: number, y: number) => void) => void;
   clickEvent: (x: number, y: number, clickType: SendMessageEvent) => void;
@@ -45,6 +47,7 @@ export default function useInputHandlers({
   cursorOriginX,
   cursorOriginY,
   isBombMode,
+  interactionMode,
   movingPaths,
   moveCursor,
   clickEvent,
@@ -80,7 +83,9 @@ export default function useInputHandlers({
     const isFlagged = isTileFlag(clickedTile);
     const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
     const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
-    const clickType = event.buttons !== 2 ? 'general' : 'special';
+    // Touch + flag/bomb mode: treat tap as special (flag/bomb action)
+    const isModeTap = pointerTypeRef.current === 'touch' && interactionMode !== 'normal';
+    const clickType = event.buttons !== 2 && !isModeTap ? 'general' : 'special';
     const isActionable = isClosed || isFlagged;
 
     // Handle in-range actions immediately (only for closed/flagged tiles)
@@ -199,21 +204,28 @@ export default function useInputHandlers({
     };
 
     if (event.pointerType === 'touch') {
-      // Touch: 300ms → SET_FLAG, 700ms → DISMANTLE_MINE
-      longPressTimerRef.current = setTimeout(() => {
-        const flagEvent = isBombMode ? SendMessageEvent.INSTALL_BOMB : SendMessageEvent.SET_FLAG;
-        executeAction(flagEvent);
+      if (interactionMode !== 'normal') {
+        // Flag/bomb mode: long-press only does dismantle (tap already handles flag/bomb)
+        longPressTimerRef.current = setTimeout(() => {
+          executeAction(SendMessageEvent.DISMANTLE_MINE);
+        }, LONG_PRESS_DURATION);
+      } else {
+        // Normal mode: 300ms → SET_FLAG, 700ms → DISMANTLE_MINE
+        longPressTimerRef.current = setTimeout(() => {
+          const flagEvent = isBombMode ? SendMessageEvent.INSTALL_BOMB : SendMessageEvent.SET_FLAG;
+          executeAction(flagEvent);
 
-        // Start second timer for dismantle
-        dismantleTimerRef.current = setTimeout(() => {
-          const position = longPressPositionRef.current;
-          if (!position || isPinching?.()) return;
-          const { tileX, tileY, isInRange, isActionable } = resolveTileAt(position);
+          // Start second timer for dismantle
+          dismantleTimerRef.current = setTimeout(() => {
+            const position = longPressPositionRef.current;
+            if (!position || isPinching?.()) return;
+            const { tileX, tileY, isInRange, isActionable } = resolveTileAt(position);
 
-          if (isInRange && isActionable) clickEvent(tileX, tileY, SendMessageEvent.DISMANTLE_MINE);
-          dismantleTimerRef.current = null;
-        }, TOUCH_DISMANTLE_DURATION - TOUCH_FLAG_DURATION);
-      }, TOUCH_FLAG_DURATION);
+            if (isInRange && isActionable) clickEvent(tileX, tileY, SendMessageEvent.DISMANTLE_MINE);
+            dismantleTimerRef.current = null;
+          }, TOUCH_DISMANTLE_DURATION - TOUCH_FLAG_DURATION);
+        }, TOUCH_FLAG_DURATION);
+      }
     } else {
       // Mouse: 500ms → DISMANTLE_MINE (unchanged)
       longPressTimerRef.current = setTimeout(() => {
