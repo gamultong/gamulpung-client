@@ -97,6 +97,51 @@ When the user interacts with a tile:
 
 ---
 
-## Special Conditions  
-- If an adjacent tile explodes during interaction, all tile controls are restricted for a certain period (e.g., 3 minutes).  
-- Clicks outside the grid are ignored and marked as "Out of Bounds".  
+## Special Conditions
+- If an adjacent tile explodes during interaction, all tile controls are restricted for a certain period (e.g., 3 minutes).
+- Clicks outside the grid are ignored and marked as "Out of Bounds".
+
+---
+
+## Mobile Touch Interactions
+
+On mobile devices (screen width 768px or below), right-click is unavailable, so a dedicated touch interaction system is provided.
+
+### Interaction Mode FAB
+
+A circular button (FAB) is displayed at the bottom-right of the screen. Tap it to cycle through modes:
+
+| **Mode** | **Icon** | **Tap Action** |
+|----------|---------|----------------|
+| **Normal** | 🖐 TAP | Open tile / move cursor (same as left click) |
+| **Flag** | ⚑ FLAG | Set / remove flag (same as right click) |
+| **Bomb** | 💣 BOMB | Install bomb |
+
+Cycle order: Normal → Flag → Bomb → Normal → ...
+
+### Touch Gestures
+
+| **Gesture** | **Action** |
+|------------|-----------|
+| **Tap** | Perform action based on current mode (see table above) |
+| **Long press (Normal mode)** | 300ms → set flag, 700ms → dismantle mine |
+| **Long press (Flag/Bomb mode)** | Dismantle mine |
+| **Pinch in/out** | Zoom in/out |
+| **Drag** | Pan the map |
+
+### Mobile Bottom Bar
+
+A compact info bar is displayed at the bottom of the screen:
+
+- **Default view**: Score, bomb count, zoom level, expand toggle
+- **Expanded**: Cursor coordinates, pointer coordinates, animation toggle
+
+### Differences from Desktop
+
+| | **Desktop** | **Mobile** |
+|--|-----------|----------|
+| **Set flag** | Right click | FAB flag mode + tap, or long press (300ms) |
+| **Install bomb** | Bomb mode + right click | FAB bomb mode + tap |
+| **Dismantle mine** | Long press (700ms) | Long press |
+| **Zoom** | Keyboard (-/=) | Pinch or bottom bar buttons |
+| **Dashboard** | Bottom-right panel | Bottom compact bar |

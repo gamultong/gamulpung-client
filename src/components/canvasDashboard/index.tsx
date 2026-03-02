@@ -61,10 +61,7 @@ export default function CanvasDashboard({ renderRange, maxTileCount }: CanvasDas
           {/* Compact bar: always visible */}
           <div className={S.mobileCompact}>
             <span className={S.mobileScore}>{score} pts</span>
-            <button type="button" className={`${S.mobileBomb} ${isBombMode ? S.bombMode : ''}`} onClick={toggleBombMode}>
-              <span>💣</span>
-              <span>x{bombCount}</span>
-            </button>
+            <span className={S.mobileBombCount}>💣 {bombCount}</span>
             <div className={S.mobileZoom}>
               <button onPointerDown={lessZoom}>-</button>
               <span>{Math.ceil(zoom * 100)}%</span>

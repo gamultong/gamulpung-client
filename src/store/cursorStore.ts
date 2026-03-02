@@ -2,6 +2,8 @@ import { XYType } from '@/types';
 import { CursorColor } from '@/types/canvas';
 import { create } from 'zustand';
 
+export type InteractionMode = 'normal' | 'flag' | 'bomb';
+
 export interface ItemsStateType {
   bomb: number;
 }
@@ -23,6 +25,9 @@ interface ClientCursorState extends CursorState {
   setPosition: (position: XYType) => void;
   setOriginPosition: (position: XYType) => void;
   isBombMode: boolean;
+  interactionMode: InteractionMode;
+  setInteractionMode: (mode: InteractionMode) => void;
+  cycleInteractionMode: () => void;
   zoom: number;
   setZoom: (zoom: number) => void;
   zoomUp: () => void;
@@ -57,11 +62,18 @@ export const useCursorStore = create<ClientCursorState>(set => ({
   zoom: 1,
   score: 0,
   isBombMode: false,
+  interactionMode: 'normal',
   items: { bomb: 0 },
   setId: id => set({ id }),
   setColor: color => set({ color }),
   setZoom: zoom => set({ zoom }),
-  setIsBombMode: (isBombMode: boolean) => set({ isBombMode }),
+  setIsBombMode: (isBombMode: boolean) => set({ isBombMode, interactionMode: isBombMode ? 'bomb' : 'normal' }),
+  setInteractionMode: (mode: InteractionMode) => set({ interactionMode: mode, isBombMode: mode === 'bomb' }),
+  cycleInteractionMode: () =>
+    set(s => {
+      const next: InteractionMode = s.interactionMode === 'normal' ? 'flag' : s.interactionMode === 'flag' ? 'bomb' : 'normal';
+      return { interactionMode: next, isBombMode: next === 'bomb' };
+    }),
   setOriginPosition: (position: XYType) => set({ originPosition: position }),
   setPosition: (position: XYType) => set({ position }),
   zoomUp: () => set(s => ({ zoom: s.zoom * 1.5 < 1.7 ? s.zoom * 1.5 : s.zoom })),
