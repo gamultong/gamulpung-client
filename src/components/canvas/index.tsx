@@ -14,6 +14,7 @@ import useSkillTree from '@/hooks/useSkillTree';
 import useMovement from '@/hooks/useMovement';
 import useCursorRenderer from '@/hooks/useCursorRenderer';
 import useInputHandlers from '@/hooks/useInputHandlers';
+import usePinchZoom from '@/hooks/usePinchZoom';
 import useShockwaveAnimation from '@/hooks/useShockwaveAnimation';
 
 interface CanvasRenderComponentProps {
@@ -43,7 +44,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const { MOVE_SPEED } = useSkillTree();
   const { windowHeight, windowWidth } = useScreenSize();
   const { setPosition: setClickPosition, x: clickX, y: clickY, setMovecost } = useClickStore();
-  const { position: cursorPosition, zoom, color, setPosition: setCursorPosition, setOriginPosition, isBombMode } = useCursorStore();
+  const { position: cursorPosition, zoom, color, setPosition: setCursorPosition, setOriginPosition, isBombMode, interactionMode, zoomUp, zoomDown } = useCursorStore();
   const { cursors } = useOtherUserCursorsStore();
   const { sendMessage } = useWebSocketStore();
   const { useAnimation } = useAnimationStore();
@@ -51,6 +52,18 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   // Computed constants
   const [relativeX, relativeY] = [cursorOriginX - startPoint.x, cursorOriginY - startPoint.y];
   const [tilePaddingWidth, tilePaddingHeight] = [((paddingTiles - 1) * relativeX) / paddingTiles, ((paddingTiles - 1) * relativeY) / paddingTiles];
+
+  // Canvas inline styles to fix svw/svh vs innerWidth/innerHeight mismatch on mobile
+  const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const canvasStyle: React.CSSProperties | undefined =
+    isMobileViewport && windowWidth > 0
+      ? {
+          width: windowWidth,
+          height: windowHeight,
+          top: -(windowHeight - windowHeight / 1.1) / 2,
+          left: -(windowWidth - windowWidth / 1.1) / 2,
+        }
+      : undefined;
 
   // Canvas refs
   const shockwaveCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -122,6 +135,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     leftMovingPaths,
   });
 
+  // Pinch zoom hook
+  const { handleTouchStart, handleTouchMove, handleTouchEnd, isPinching } = usePinchZoom({ zoomUp, zoomDown });
+
   // Input handlers hook
   const { handleClick, handlePointerDown, handlePointerUp, handlePointerMove } = useInputHandlers({
     canvasRefs,
@@ -133,6 +149,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     cursorOriginX,
     cursorOriginY,
     isBombMode,
+    interactionMode,
     movingPaths,
     moveCursor,
     clickEvent,
@@ -140,6 +157,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     isAlreadyCursorNeighbor,
     findOpenedNeighbors,
     findOpenedNeighborsAroundTarget,
+    isPinching,
   });
 
   // Shockwave animation hook
@@ -183,13 +201,14 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
       {!isInitializing && (
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
           <ChatComponent />
-          <Tilemap className={S.canvas} tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} />
-          <canvas className={S.canvas} id="ShockwaveCanvas" ref={shockwaveCanvasRef} width={windowWidth} height={windowHeight} />
-          <canvas className={S.canvas} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
-          <canvas className={S.canvas} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />
-          <canvas className={S.canvas} id="MyCursor" ref={canvasRefs.myCursorRef} width={windowWidth} height={windowHeight} />
+          <Tilemap className={S.canvas} tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} style={canvasStyle} />
+          <canvas className={S.canvas} style={canvasStyle} id="ShockwaveCanvas" ref={shockwaveCanvasRef} width={windowWidth} height={windowHeight} />
+          <canvas className={S.canvas} style={canvasStyle} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
+          <canvas className={S.canvas} style={canvasStyle} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />
+          <canvas className={S.canvas} style={canvasStyle} id="MyCursor" ref={canvasRefs.myCursorRef} width={windowWidth} height={windowHeight} />
           <canvas
             className={S.canvas}
+            style={canvasStyle}
             id="InteractionCanvas"
             ref={canvasRefs.interactionCanvasRef}
             width={windowWidth}
@@ -198,7 +217,14 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
             onPointerUp={handlePointerUp}
             onPointerMove={handlePointerMove}
             onPointerCancel={handlePointerUp}
-            onClick={handleClick}
+            onClick={e => {
+              if (isPinching()) return;
+              handleClick(e);
+            }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
           />
         </div>
       )}

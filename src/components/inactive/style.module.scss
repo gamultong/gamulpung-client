@@ -51,3 +51,16 @@
     }
   }
 }
+
+@media (max-width: 768px) {
+  .inactive {
+    font-size: 16px;
+    gap: 12px;
+    .alert,
+    .ad {
+      padding: 16px;
+      gap: 12px;
+      max-width: 85vw;
+    }
+  }
+}

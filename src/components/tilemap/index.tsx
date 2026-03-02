@@ -14,9 +14,10 @@ interface TilemapProps {
   tilePadWidth: number;
   tilePadHeight: number;
   className?: string;
+  style?: React.CSSProperties;
 }
 
-export default function Tilemap({ tilePadWidth, tilePadHeight, className }: TilemapProps) {
+export default function Tilemap({ tilePadWidth, tilePadHeight, className, style }: TilemapProps) {
   const tiles = useRenderTiles();
   const tileSize = useTileSize();
   const { tileColors } = RenderPaths;
@@ -284,6 +285,7 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className }: Tile
     <Stage
       id="Tilemap"
       className={className}
+      style={style}
       width={windowWidth}
       height={windowHeight}
       options={{

@@ -61,3 +61,59 @@
     text-align: left;
   }
 }
+
+@media (max-width: 768px) {
+  .scoreboard {
+    font-size: 13px;
+    right: 10px;
+    top: 60px;
+    width: auto;
+    min-width: auto;
+    padding: 8px 14px;
+    border-radius: 12px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+
+    // Reset all SVGs in mobile to inline
+    svg {
+      position: static !important;
+      margin: 0 !important;
+      transform: scale(0.7);
+      vertical-align: middle;
+    }
+
+    .toggle {
+      padding-bottom: 0;
+      border-bottom: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .scoreList {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+      gap: 2px;
+
+      .scoreItem {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 4px;
+
+        span {
+          display: inline-flex;
+          align-items: center;
+          gap: 2px;
+        }
+      }
+    }
+
+    p {
+      margin-left: 14px;
+      font-size: 12px;
+    }
+  }
+}
