@@ -1,15 +1,17 @@
 'use client';
 import S from './style.module.scss';
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 
 import useScreenSize from '@/hooks/useScreenSize';
 import { useClickStore, useAnimationStore } from '@/store/interactionStore';
 import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
 import { useRenderTiles, useRenderStartPoint, useTileSize, useStartPoint, useEndPoint, useTileStore } from '@/store/tileStore';
+import { useColoredTileStore } from '@/store/coloredTileStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
-import { ActiveExplosion } from '@/types';
+import ColorOverlay from '@/components/colorOverlay';
+import { ActiveExplosion, Direction } from '@/types';
 import useSkillTree from '@/hooks/useSkillTree';
 import useMovement from '@/hooks/useMovement';
 import useCursorRenderer from '@/hooks/useCursorRenderer';
@@ -40,7 +42,15 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const startPoint = useRenderStartPoint();
   const viewStart = useStartPoint();
   const viewEnd = useEndPoint();
-  const { padtiles } = useTileStore();
+  const { padtiles: rawPadtiles } = useTileStore();
+  const { padColorTiles } = useColoredTileStore();
+  const padtiles = useCallback(
+    (sx: number, sy: number, ex: number, ey: number, dir: Direction) => {
+      rawPadtiles(sx, sy, ex, ey, dir);
+      padColorTiles(sx, sy, ex, ey, dir);
+    },
+    [rawPadtiles, padColorTiles],
+  );
   const { MOVE_SPEED } = useSkillTree();
   const { windowHeight, windowWidth } = useScreenSize();
   const { setPosition: setClickPosition, x: clickX, y: clickY, setMovecost } = useClickStore();
@@ -202,6 +212,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
           <ChatComponent />
           <Tilemap className={S.canvas} tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} style={canvasStyle} />
+          <ColorOverlay tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} style={canvasStyle} />
           <canvas className={S.canvas} style={canvasStyle} id="ShockwaveCanvas" ref={shockwaveCanvasRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} style={canvasStyle} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} style={canvasStyle} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />

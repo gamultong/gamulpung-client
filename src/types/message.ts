@@ -7,6 +7,15 @@ import { ItemsStateType } from '@/store/cursorStore';
 import { PositionType, XYType } from './position';
 import { WindowSizeType } from './window';
 
+export const COLORMAP = {
+  NONE: 0,
+  RED: 1,
+  BLUE: 2,
+  YELLOW: 3,
+  PURPLE: 4,
+};
+export type COLORMAP = (typeof COLORMAP)[keyof typeof COLORMAP];
+
 export const SendMessageEvent = {
   CHAT: 'CHAT',
   MOVE: 'MOVE',
@@ -27,6 +36,7 @@ export const GetMessageEvent = {
   QUIT_CURSOR: 'QUIT-CURSOR',
   SCOREBOARD_STATE: 'SCOREBOARD-STATE',
   TILES_STATE: 'TILES-STATE',
+  COLORED_TILES_STATE: 'COLORED-TILES-STATE',
 } as const;
 export type GetMessageEvent = (typeof GetMessageEvent)[keyof typeof GetMessageEvent];
 
@@ -35,7 +45,7 @@ export type SendMovePayloadType = PositionType;
 export type SendOpenTilesPayloadType = PositionType;
 export type SendSetFlagPayloadType = PositionType;
 export type SendSetWindowPayloadType = WindowSizeType;
-export type SendCreateCursorPayloadType = WindowSizeType;
+export type SendCreateCursorPayloadType = WindowSizeType & { color: COLORMAP };
 export type SendDismantleMinePayloadType = PositionType;
 export type SendInstallBombPayloadType = PositionType;
 
@@ -65,7 +75,8 @@ export type GetPayloadType =
   | GetExplosionPayloadType
   | GetScoreboardPayloadType
   | GetTilesPayloadType
-  | GetTilesStatePayloadType;
+  | GetTilesStatePayloadType
+  | GetColoredTilesStatePayloadType;
 
 /**
  * When Using
@@ -75,7 +86,7 @@ export type CursorIdType = { id: string };
 export type GetChatPayloadType = SendChatPayloadType & CursorIdType;
 
 // iso format string
-export type CursorStateType = CursorIdType & PositionType & { active_at: string; score: number; items: ItemsStateType };
+export type CursorStateType = CursorIdType & PositionType & { active_at: string; score: number; items: ItemsStateType; color: COLORMAP };
 export type GetCursorStatePayloadType = { cursors: CursorStateType[] };
 export type GetExplosionPayloadType = PositionType;
 
@@ -92,3 +103,4 @@ export type GetTilesPayloadType = {
 
 // When getting & changing TILES-STATE
 export type GetTilesStatePayloadType = { tiles_li: GetTilesPayloadType[] };
+export type GetColoredTilesStatePayloadType = { colored_tiles_li: GetTilesPayloadType[] }; // use colormap

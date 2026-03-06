@@ -11,6 +11,8 @@ import {
   GetChatPayloadType,
   SendMessageEvent,
   SendCreateCursorPayloadType,
+  COLORMAP,
+  GetColoredTilesStatePayloadType,
 } from '@/types';
 import { useCursorStore, useOtherUserCursorsStore, OtherCursorState } from '@/store/cursorStore';
 import { useRankStore } from '@/store/rankingStore';
@@ -19,6 +21,7 @@ import useWebSocketStore from '@/store/websocketStore';
 interface UseMessageHandlerOptions {
   getCurrentTileWidthAndHeight: () => { width: number; height: number };
   replaceTiles: (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => Promise<void>;
+  replaceColoredTiles: (end_x: number, end_y: number, start_x: number, start_y: number, hexData: string, type: 'All' | 'PART') => Promise<void>;
   replaceBinaryTiles?: (binaryData: Uint8Array) => Promise<void>;
   setLeftReviveTime: (time: number) => void;
   setIsInitialized: (initialized: boolean) => void;
@@ -26,7 +29,7 @@ interface UseMessageHandlerOptions {
 }
 
 export default function useMessageHandler(options: UseMessageHandlerOptions) {
-  const { getCurrentTileWidthAndHeight, replaceTiles, replaceBinaryTiles, setLeftReviveTime, setIsInitialized, onExplosion } = options;
+  const { getCurrentTileWidthAndHeight, replaceTiles, replaceColoredTiles, replaceBinaryTiles, setLeftReviveTime, setIsInitialized, onExplosion } = options;
 
   // Store hooks - only stable setters, no reactive state in callback deps
   const { sendMessage } = useWebSocketStore();
@@ -34,7 +37,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
 
   const handleWebSocketMessage = useCallback(
     async (wsMessage: string) => {
-      const { MY_CURSOR, CHAT, CURSORS_STATE, EXPLOSION, QUIT_CURSOR, SCOREBOARD_STATE, TILES_STATE } = GetMessageEvent;
+      const { MY_CURSOR, CHAT, CURSORS_STATE, EXPLOSION, QUIT_CURSOR, SCOREBOARD_STATE, TILES_STATE, COLORED_TILES_STATE } = GetMessageEvent;
 
       // Read current state inside callback to avoid stale closures
       const { position, id: clientCursorId, setPosition, setOriginPosition, setId, setScore, setItems } = useCursorStore.getState();
@@ -61,6 +64,21 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
             }
             break;
           }
+          case COLORED_TILES_STATE: {
+            const { colored_tiles_li } = payload as GetColoredTilesStatePayloadType;
+            for (const tiles of colored_tiles_li) {
+              const { data, range } = tiles;
+              const { top_left, bottom_right } = range;
+              const { width, height } = getCurrentTileWidthAndHeight();
+              const [totalWidth, totalHeight] = [bottom_right.x - top_left.x + 1, top_left.y - bottom_right.y + 1];
+              const [resWidth, resHeight] = [(totalWidth / 2) >>> 0, (totalHeight / 2) >>> 0];
+
+              let isAll: 'PART' | 'All' = 'PART';
+              if (resWidth === width && resHeight === height) isAll = 'All';
+              await replaceColoredTiles(top_left.x, bottom_right.y, bottom_right.x, top_left.y, data, isAll);
+            }
+            break;
+          }
           case EXPLOSION: {
             // The Explosion event is applied on all the cursor in the view.
             const { position: explode_position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
@@ -80,7 +98,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
           case SCOREBOARD_STATE: {
             const { scoreboard } = payload as GetScoreboardPayloadType;
             setRanking(Object.entries(scoreboard).map(([ranking, score]) => ({ ranking: +ranking, score })));
-            const windowSize: SendCreateCursorPayloadType = getCurrentTileWidthAndHeight();
+            const windowSize: SendCreateCursorPayloadType = { ...getCurrentTileWidthAndHeight(), color: COLORMAP.RED };
             if (!clientCursorId) sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
             break;
           }
@@ -158,7 +176,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
         console.error(e);
       }
     },
-    [replaceTiles, setLeftReviveTime, setIsInitialized, getCurrentTileWidthAndHeight, sendMessage, setRanking, onExplosion],
+    [replaceTiles, replaceColoredTiles, setLeftReviveTime, setIsInitialized, getCurrentTileWidthAndHeight, sendMessage, setRanking, onExplosion],
   );
 
   /** Handle binary WebSocket frames (future: server sends 1-byte-per-tile data) */
