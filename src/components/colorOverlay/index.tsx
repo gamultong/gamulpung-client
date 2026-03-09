@@ -131,9 +131,6 @@ export default function ColorOverlay({ tilePadWidth, tilePadHeight, className, s
       id="ColorOverlay"
       className={className}
       style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
         pointerEvents: 'none',
         ...style,
       }}

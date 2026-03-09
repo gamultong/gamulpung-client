@@ -38,7 +38,9 @@ export default function useColoredTileProcessing({
 
       const isAll = type === 'All';
       const yOffset = end_y - currentStartPoint.y;
-      const xOffset = isAll ? 0 : start_x - currentStartPoint.x - 1;
+      // end_x here is already inner-trimmed (original end_x - 1).
+      // colIndex=0 in hex data = left edge of original range = end_x + 1 in world coords.
+      const xOffset = isAll ? 0 : end_x + 1 - currentStartPoint.x;
 
       const totalTiles = columnlength * tilesPerRow;
       const changes: Array<{ row: number; col: number; value: number }> = [];

@@ -29,7 +29,8 @@ interface UseMessageHandlerOptions {
 }
 
 export default function useMessageHandler(options: UseMessageHandlerOptions) {
-  const { getCurrentTileWidthAndHeight, replaceTiles, replaceColoredTiles, replaceBinaryTiles, setLeftReviveTime, setIsInitialized, onExplosion } = options;
+  const { getCurrentTileWidthAndHeight, replaceTiles, replaceColoredTiles, replaceBinaryTiles, setLeftReviveTime, setIsInitialized, onExplosion } =
+    options;
 
   // Store hooks - only stable setters, no reactive state in callback deps
   const { sendMessage } = useWebSocketStore();
@@ -83,6 +84,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
             // The Explosion event is applied on all the cursor in the view.
             const { position: explode_position } = payload as GetExplosionPayloadType; // It should be changed tile content to 'B'
             const { x, y } = explode_position;
+            console.log('explosion position', explode_position);
 
             // Trigger shockwave animation for ALL explosions in view
             onExplosion(explode_position);

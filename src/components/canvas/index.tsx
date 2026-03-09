@@ -212,7 +212,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
           <ChatComponent />
           <Tilemap className={S.canvas} tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} style={canvasStyle} />
-          <ColorOverlay tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} style={canvasStyle} />
+          <ColorOverlay className={S.canvas} tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} style={canvasStyle} />
           <canvas className={S.canvas} style={canvasStyle} id="ShockwaveCanvas" ref={shockwaveCanvasRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} style={canvasStyle} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} style={canvasStyle} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />
