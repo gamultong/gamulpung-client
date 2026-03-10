@@ -2,13 +2,12 @@
 import { Container, Stage } from '@pixi/react';
 import { useLayoutEffect, useRef, useEffect, useState } from 'react';
 import { Texture, SCALE_MODES, Container as PixiContainer } from 'pixi.js';
-import { CURSOR_COLORS } from '@/constants';
 import useScreenSize from '@/hooks/useScreenSize';
 import { ensurePool, hidePoolFrom } from '@/utils/pixiSpritePool';
 import { useRenderColorTiles } from '@/store/coloredTileStore';
 import { useTileSize } from '@/store/tileStore';
 import { useCursorStore } from '@/store/cursorStore';
-import { COLORMAP } from '@/types';
+import { COLORMAP, COLORMAP_HEX } from '@/types';
 
 interface ColorOverlayProps {
   tilePadWidth: number;
@@ -17,19 +16,12 @@ interface ColorOverlayProps {
   style?: React.CSSProperties;
 }
 
-// COLORMAP index → color hex (index 0 = NONE, skip)
-const COLOR_HEX: Record<number, string> = {
-  [COLORMAP.RED]: CURSOR_COLORS['0'],
-  [COLORMAP.BLUE]: CURSOR_COLORS['2'],
-  [COLORMAP.YELLOW]: CURSOR_COLORS['1'],
-  [COLORMAP.PURPLE]: CURSOR_COLORS['3'],
-};
-
 const OVERLAY_ALPHA = 0.3;
 
 function buildColorTextures(): Map<number, Texture> {
   const map = new Map<number, Texture>();
-  for (const [colorIndex, hex] of Object.entries(COLOR_HEX)) {
+  for (const [colorIndex, hex] of Object.entries(COLORMAP_HEX)) {
+    if (Number(colorIndex) === COLORMAP.NONE) continue;
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 1;
     const ctx = canvas.getContext('2d')!;

@@ -41,7 +41,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
       const { MY_CURSOR, CHAT, CURSORS_STATE, EXPLOSION, QUIT_CURSOR, SCOREBOARD_STATE, TILES_STATE, COLORED_TILES_STATE } = GetMessageEvent;
 
       // Read current state inside callback to avoid stale closures
-      const { position, id: clientCursorId, setPosition, setOriginPosition, setId, setScore, setItems } = useCursorStore.getState();
+      const { position, id: clientCursorId, setPosition, setOriginPosition, setId, setScore, setItems, setColor } = useCursorStore.getState();
       const { cursors: nowCursors, setCursors } = useOtherUserCursorsStore.getState();
 
       try {
@@ -100,7 +100,9 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
           case SCOREBOARD_STATE: {
             const { scoreboard } = payload as GetScoreboardPayloadType;
             setRanking(Object.entries(scoreboard).map(([ranking, score]) => ({ ranking: +ranking, score })));
-            const windowSize: SendCreateCursorPayloadType = { ...getCurrentTileWidthAndHeight(), color: COLORMAP.RED };
+            const colors = Object.values(COLORMAP).filter(v => v !== COLORMAP.NONE);
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const windowSize: SendCreateCursorPayloadType = { ...getCurrentTileWidthAndHeight(), color };
             if (!clientCursorId) sendMessage(SendMessageEvent.CREATE_CURSOR, windowSize);
             break;
           }
@@ -112,6 +114,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
             for (const cursor of cursors) {
               if (cursor.id === clientCursorId) {
                 // Handle own cursor
+                setColor(cursor.color);
                 setScore(cursor.score);
                 setItems(cursor.items);
                 setPosition(cursor.position);
@@ -119,7 +122,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
                 continue;
               }
               serverMap.set(cursor.id, {
-                color: 'red',
+                color: cursor.color,
                 id: cursor.id,
                 position: cursor.position,
                 message: '',
