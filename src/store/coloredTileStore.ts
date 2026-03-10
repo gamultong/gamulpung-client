@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Direction, XYType } from '@/types';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { TileGrid, Tile } from '@/utils/tileGrid';
 
 const COLOR_NONE = 0;

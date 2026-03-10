@@ -26,6 +26,7 @@ export default function useColoredTileProcessing({
   cursorPosition,
   cursorOriginPosition,
   renderStartPoint,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   setColorTiles,
   setRenderColorTiles,
   applyColorChanges,
@@ -73,9 +74,7 @@ export default function useColoredTileProcessing({
         const colorValue = (n0 << 4) | n1;
 
         const col = colIndex + xOffset;
-        if (colorTiles.get(row, col) !== colorValue) {
-          changes.push({ row, col, value: colorValue });
-        }
+        if (colorTiles.get(row, col) !== colorValue) changes.push({ row, col, value: colorValue });
       }
 
       return changes;

@@ -45,6 +45,7 @@ function buildColorTextures(): Map<number, Texture> {
 export default function ColorOverlay({ tilePadWidth, tilePadHeight, className, style }: ColorOverlayProps) {
   const colorTiles = useRenderColorTiles();
   const tileSize = useTileSize();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { zoom } = useCursorStore();
   const { windowHeight, windowWidth } = useScreenSize();
 

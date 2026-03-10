@@ -29,8 +29,8 @@ interface UseMessageHandlerOptions {
 }
 
 export default function useMessageHandler(options: UseMessageHandlerOptions) {
-  const { getCurrentTileWidthAndHeight, replaceTiles, replaceColoredTiles, replaceBinaryTiles, setLeftReviveTime, setIsInitialized, onExplosion } =
-    options;
+  const { getCurrentTileWidthAndHeight, setLeftReviveTime, setIsInitialized, onExplosion } = options;
+  const { replaceTiles, replaceBinaryTiles, replaceColoredTiles } = options;
 
   // Store hooks - only stable setters, no reactive state in callback deps
   const { sendMessage } = useWebSocketStore();
@@ -139,13 +139,9 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
               if (updated) {
                 result.push(updated);
                 seen.add(existing.id);
-              } else {
-                result.push(existing);
-              }
+              } else result.push(existing);
             }
-            for (const [id, cursor] of serverMap) {
-              if (!seen.has(id)) result.push(cursor);
-            }
+            for (const [id, cursor] of serverMap) if (!seen.has(id)) result.push(cursor);
             setCursors(result);
             break;
           }
