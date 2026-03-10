@@ -16,6 +16,29 @@ export const COLORMAP = {
 };
 export type COLORMAP = (typeof COLORMAP)[keyof typeof COLORMAP];
 
+export const COLORMAP_HEX: Record<COLORMAP, string> = {
+  [COLORMAP.NONE]: '',
+  [COLORMAP.RED]: '#FF4D00',
+  [COLORMAP.BLUE]: '#0094FF',
+  [COLORMAP.YELLOW]: '#F0C800',
+  [COLORMAP.PURPLE]: '#BC3FDC',
+};
+
+export const COLORMAP_HEX_LIGHT: Record<COLORMAP, string> = {
+  [COLORMAP.NONE]: '',
+  [COLORMAP.RED]: '#FBCBB6',
+  [COLORMAP.BLUE]: '#A8DBFF',
+  [COLORMAP.YELLOW]: '#FFEE99',
+  [COLORMAP.PURPLE]: '#E8BEF3',
+};
+
+export const FLAG_INDEX_TO_COLORMAP: COLORMAP[] = [
+  COLORMAP.RED,    // flag 0 → red
+  COLORMAP.YELLOW, // flag 1 → yellow
+  COLORMAP.BLUE,   // flag 2 → blue
+  COLORMAP.PURPLE, // flag 3 → purple
+];
+
 export const SendMessageEvent = {
   CHAT: 'CHAT',
   MOVE: 'MOVE',
