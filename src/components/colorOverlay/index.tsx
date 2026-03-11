@@ -1,7 +1,7 @@
 'use client';
 import { Container, Stage } from '@pixi/react';
 import { useLayoutEffect, useRef, useEffect, useState } from 'react';
-import { Texture, SCALE_MODES, Container as PixiContainer } from 'pixi.js';
+import { Texture, SCALE_MODES, Container as PixiContainer, Graphics } from 'pixi.js';
 import useScreenSize from '@/hooks/useScreenSize';
 import { ensurePool, hidePoolFrom } from '@/utils/pixiSpritePool';
 import { useRenderColorTiles } from '@/store/coloredTileStore';
@@ -17,6 +17,12 @@ interface ColorOverlayProps {
 }
 
 const OVERLAY_ALPHA = 0.3;
+const OUTLINE_WIDTH = 3;
+const OUTLINE_ALPHA = 0.85;
+
+function hexToNumber(hex: string): number {
+  return parseInt(hex.replace('#', ''), 16);
+}
 
 function buildColorTextures(): Map<number, Texture> {
   const map = new Map<number, Texture>();
@@ -43,6 +49,7 @@ export default function ColorOverlay({ tilePadWidth, tilePadHeight, className, s
 
   const colorLayerRef = useRef<PixiContainer | null>(null);
   const poolRef = useRef<import('pixi.js').Sprite[]>([]);
+  const outlineGfxRef = useRef<Graphics | null>(null);
 
   const [colorTextures, setColorTextures] = useState<Map<number, Texture> | null>(null);
 
@@ -88,6 +95,14 @@ export default function ColorOverlay({ tilePadWidth, tilePadHeight, className, s
 
     let idx = 0;
 
+    // Ensure Graphics object exists for outlines
+    if (!outlineGfxRef.current) {
+      outlineGfxRef.current = new Graphics();
+      colorLayer.addChild(outlineGfxRef.current);
+    }
+    const gfx = outlineGfxRef.current;
+    gfx.clear();
+
     for (let rowIdx = startRow; rowIdx <= endRow; rowIdx++) {
       for (let colIdx = startCol; colIdx <= endCol; colIdx++) {
         const colorValue = colorTiles.get(rowIdx, colIdx);
@@ -111,6 +126,33 @@ export default function ColorOverlay({ tilePadWidth, tilePadHeight, className, s
         sprite.height = endY - startY;
         sprite.alpha = OVERLAY_ALPHA;
         sprite.visible = true;
+
+        // Draw outlines on edges adjacent to a different color
+        const hex = COLORMAP_HEX[colorValue as COLORMAP];
+        if (!hex) continue;
+        const lineColor = hexToNumber(hex);
+        gfx.lineStyle(OUTLINE_WIDTH, lineColor, OUTLINE_ALPHA);
+
+        // Top edge
+        if (colorTiles.get(rowIdx - 1, colIdx) !== colorValue) {
+          gfx.moveTo(startX, startY);
+          gfx.lineTo(endX, startY);
+        }
+        // Bottom edge
+        if (colorTiles.get(rowIdx + 1, colIdx) !== colorValue) {
+          gfx.moveTo(startX, endY);
+          gfx.lineTo(endX, endY);
+        }
+        // Left edge
+        if (colorTiles.get(rowIdx, colIdx - 1) !== colorValue) {
+          gfx.moveTo(startX, startY);
+          gfx.lineTo(startX, endY);
+        }
+        // Right edge
+        if (colorTiles.get(rowIdx, colIdx + 1) !== colorValue) {
+          gfx.moveTo(endX, startY);
+          gfx.lineTo(endX, endY);
+        }
       }
     }
 

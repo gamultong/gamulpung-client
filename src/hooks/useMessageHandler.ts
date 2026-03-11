@@ -21,7 +21,7 @@ import useWebSocketStore from '@/store/websocketStore';
 interface UseMessageHandlerOptions {
   getCurrentTileWidthAndHeight: () => { width: number; height: number };
   replaceTiles: (end_x: number, end_y: number, start_x: number, start_y: number, unsortedTiles: string, type: 'All' | 'PART') => Promise<void>;
-  replaceColoredTiles: (end_x: number, end_y: number, start_x: number, start_y: number, hexData: string, type: 'All' | 'PART') => Promise<void>;
+  replaceColoredTiles: (end_x: number, end_y: number, start_x: number, start_y: number, coloredTilesData: string, myTilesData: string, type: 'All' | 'PART') => Promise<void>;
   replaceBinaryTiles?: (binaryData: Uint8Array) => Promise<void>;
   setLeftReviveTime: (time: number) => void;
   setIsInitialized: (initialized: boolean) => void;
@@ -68,7 +68,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
           case COLORED_TILES_STATE: {
             const { colored_tiles_li } = payload as GetColoredTilesStatePayloadType;
             for (const tiles of colored_tiles_li) {
-              const { data, range } = tiles;
+              const { colored_tiles_data, my_tiles_data, range } = tiles;
               const { top_left, bottom_right } = range;
               const { width, height } = getCurrentTileWidthAndHeight();
               const [totalWidth, totalHeight] = [bottom_right.x - top_left.x + 1, top_left.y - bottom_right.y + 1];
@@ -76,7 +76,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
 
               let isAll: 'PART' | 'All' = 'PART';
               if (resWidth === width && resHeight === height) isAll = 'All';
-              await replaceColoredTiles(top_left.x, bottom_right.y, bottom_right.x, top_left.y, data, isAll);
+              await replaceColoredTiles(top_left.x, bottom_right.y, bottom_right.x, top_left.y, colored_tiles_data, my_tiles_data, isAll);
             }
             break;
           }

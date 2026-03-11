@@ -21,7 +21,7 @@ import ScoreBoardComponent from '@/components/scoreboard';
 import useMessageHandler from '@/hooks/useMessageHandler';
 import { useCursorStore } from '@/store/cursorStore';
 import { useTileStore, useTiles } from '@/store/tileStore';
-import { useColoredTileStore, useColorTiles } from '@/store/coloredTileStore';
+import { useColoredTileStore, useColorTiles, useMyColoredTiles } from '@/store/coloredTileStore';
 import SkillTree from '@/components/skilltree';
 import ModeFab from '@/components/modeFab';
 import { RENDER_RANGE, MAX_TILE_COUNT, WS_URL } from './constants';
@@ -49,10 +49,13 @@ export default function Play() {
     reset: resetTiles,
   } = useTileStore();
   const cachingColorTiles = useColorTiles();
+  const cachingMyColoredTiles = useMyColoredTiles();
   const {
     setColorTiles,
     setRenderColorTiles,
+    setRenderMyColoredTiles,
     applyColorChanges,
+    applyMyColoredTileChanges,
     padColorTiles,
     reset: resetColorTiles,
   } = useColoredTileStore();
@@ -87,12 +90,15 @@ export default function Play() {
     padColorTiles,
     startPoint,
     cachingColorTiles,
+    cachingMyColoredTiles,
     cursorPosition,
     cursorOriginPosition,
     renderStartPoint,
     setColorTiles,
     setRenderColorTiles,
+    setRenderMyColoredTiles,
     applyColorChanges,
+    applyMyColoredTileChanges,
   });
 
   const { getCurrentTileWidthAndHeight } = useTileViewport({

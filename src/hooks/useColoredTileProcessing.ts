@@ -9,12 +9,15 @@ interface UseColoredTileProcessingOptions {
   padColorTiles: (sx: number, sy: number, ex: number, ey: number, dir: Direction) => void;
   startPoint: XYType;
   cachingColorTiles: TileGrid;
+  cachingMyColoredTiles: TileGrid;
   cursorPosition: XYType;
   cursorOriginPosition: XYType;
   renderStartPoint: XYType;
   setColorTiles: (tiles: TileGrid) => void;
   setRenderColorTiles: (tiles: TileGrid) => void;
+  setRenderMyColoredTiles: (tiles: TileGrid) => void;
   applyColorChanges: (changes: Array<{ row: number; col: number; value: number }>) => void;
+  applyMyColoredTileChanges: (changes: Array<{ row: number; col: number; value: number }>) => void;
 }
 
 const COLOR_NONE = 0;
@@ -23,30 +26,29 @@ export default function useColoredTileProcessing({
   padColorTiles,
   startPoint,
   cachingColorTiles,
+  cachingMyColoredTiles,
   cursorPosition,
   cursorOriginPosition,
   renderStartPoint,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   setColorTiles,
   setRenderColorTiles,
+  setRenderMyColoredTiles,
   applyColorChanges,
+  applyMyColoredTileChanges,
 }: UseColoredTileProcessingOptions) {
-  const processColorData = useCallback(
-    (end_x: number, end_y: number, start_x: number, start_y: number, hexData: string, type: 'All' | 'PART', currentStartPoint: XYType) => {
+  const processHexData = useCallback(
+    (end_x: number, end_y: number, start_x: number, start_y: number, hexData: string, type: 'All' | 'PART', currentStartPoint: XYType, referenceGrid: TileGrid) => {
       const rowlengthBytes = Math.abs(end_x - start_x + 1) << 1;
       const tilesPerRow = rowlengthBytes >> 1;
       const columnlength = Math.abs(start_y - end_y + 1);
 
       const isAll = type === 'All';
       const yOffset = end_y - currentStartPoint.y;
-      // end_x here is already inner-trimmed (original end_x - 1).
-      // colIndex=0 in hex data = left edge of original range = end_x + 1 in world coords.
       const xOffset = isAll ? 0 : end_x + 1 - currentStartPoint.x;
 
       const totalTiles = columnlength * tilesPerRow;
       const changes: Array<{ row: number; col: number; value: number }> = [];
-
-      const colorTiles = useColoredTileStore.getState().colorTiles;
 
       for (let tileIndex = 0; tileIndex < totalTiles; tileIndex++) {
         const rowIndex = Math.floor(tileIndex / tilesPerRow);
@@ -55,26 +57,25 @@ export default function useColoredTileProcessing({
         const reversedI = columnlength - 1 - rowIndex;
         const row = reversedI + yOffset;
 
-        if (row < 0 || row >= colorTiles.height) continue;
-        if (colorTiles.width === 0) continue;
+        if (row < 0 || row >= referenceGrid.height) continue;
+        if (referenceGrid.width === 0) continue;
 
         const tStart = Math.max(0, -xOffset);
-        const tEnd = Math.min(tilesPerRow, colorTiles.width - xOffset);
+        const tEnd = Math.min(tilesPerRow, referenceGrid.width - xOffset);
         if (colIndex < tStart || colIndex >= tEnd) continue;
 
         const byteOffset = rowIndex * rowlengthBytes + (colIndex << 1);
         const firstChar = hexData.charCodeAt(byteOffset);
         const secondChar = hexData.charCodeAt(byteOffset + 1);
 
-        // hex 2글자 → 1바이트 → COLORMAP 값 (0-4)
         const n0 = firstChar < 128 ? HEX_NIBBLE[firstChar] : -1;
         const n1 = secondChar < 128 ? HEX_NIBBLE[secondChar] : -1;
         if (n0 < 0 || n1 < 0) continue;
 
-        const colorValue = (n0 << 4) | n1;
+        const value = (n0 << 4) | n1;
 
         const col = colIndex + xOffset;
-        if (colorTiles.get(row, col) !== colorValue) changes.push({ row, col, value: colorValue });
+        if (referenceGrid.get(row, col) !== value) changes.push({ row, col, value });
       }
 
       return changes;
@@ -83,31 +84,37 @@ export default function useColoredTileProcessing({
   );
 
   const replaceColoredTiles = useCallback(
-    async (end_x: number, end_y: number, start_x: number, start_y: number, hexData: string, type: 'All' | 'PART') => {
-      if (hexData.length === 0) return;
+    async (end_x: number, end_y: number, start_x: number, start_y: number, coloredTilesData: string, myTilesData: string, type: 'All' | 'PART') => {
+      if (coloredTilesData.length === 0 && myTilesData.length === 0) return;
 
       if (type === 'All') padColorTiles(start_x, start_y, end_x, end_y, Direction.ALL);
 
       const innerStartX = start_x + 1;
       const innerEndX = end_x - 1;
 
-      const changes = processColorData(innerEndX, end_y, innerStartX, start_y, hexData, type, startPoint);
-      if (changes.length > 0) applyColorChanges(changes);
+      const { colorTiles, myColoredTiles } = useColoredTileStore.getState();
+
+      if (coloredTilesData.length > 0) {
+        const colorChanges = processHexData(innerEndX, end_y, innerStartX, start_y, coloredTilesData, type, startPoint, colorTiles);
+        if (colorChanges.length > 0) applyColorChanges(colorChanges);
+      }
+
+      if (myTilesData.length > 0) {
+        const myChanges = processHexData(innerEndX, end_y, innerStartX, start_y, myTilesData, type, startPoint, myColoredTiles);
+        if (myChanges.length > 0) applyMyColoredTileChanges(myChanges);
+      }
     },
-    [padColorTiles, processColorData, startPoint, applyColorChanges],
+    [padColorTiles, processHexData, startPoint, applyColorChanges, applyMyColoredTileChanges],
   );
 
-  const computedRenderColorTiles = useMemo(() => {
-    if (cachingColorTiles.isEmpty) return TileGrid.empty();
+  const shiftGrid = useCallback((grid: TileGrid, offsetX: number, offsetY: number, fillValue: number): TileGrid => {
+    if (grid.isEmpty) return TileGrid.empty();
+    if (offsetX === 0 && offsetY === 0) return grid;
 
-    const offsetX = cursorOriginPosition.x - cursorPosition.x;
-    const offsetY = cursorOriginPosition.y - cursorPosition.y;
-    if (offsetX === 0 && offsetY === 0) return cachingColorTiles;
-
-    const w = cachingColorTiles.width;
-    const h = cachingColorTiles.height;
-    const srcData = cachingColorTiles.data;
-    const result = new TileGrid(w, h, COLOR_NONE);
+    const w = grid.width;
+    const h = grid.height;
+    const srcData = grid.data;
+    const result = new TileGrid(w, h, fillValue);
     const dstData = result.data;
 
     const srcRowStart = Math.max(0, offsetY);
@@ -128,12 +135,29 @@ export default function useColoredTileProcessing({
     }
 
     return result;
+  }, []);
+
+  const computedRenderColorTiles = useMemo(() => {
+    const offsetX = cursorOriginPosition.x - cursorPosition.x;
+    const offsetY = cursorOriginPosition.y - cursorPosition.y;
+    return shiftGrid(cachingColorTiles, offsetX, offsetY, COLOR_NONE);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cachingColorTiles, cursorOriginPosition, renderStartPoint]);
+
+  const computedRenderMyColoredTiles = useMemo(() => {
+    const offsetX = cursorOriginPosition.x - cursorPosition.x;
+    const offsetY = cursorOriginPosition.y - cursorPosition.y;
+    return shiftGrid(cachingMyColoredTiles, offsetX, offsetY, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cachingMyColoredTiles, cursorOriginPosition, renderStartPoint]);
 
   useLayoutEffect(() => {
     setRenderColorTiles(computedRenderColorTiles);
   }, [computedRenderColorTiles, setRenderColorTiles]);
+
+  useLayoutEffect(() => {
+    setRenderMyColoredTiles(computedRenderMyColoredTiles);
+  }, [computedRenderMyColoredTiles, setRenderMyColoredTiles]);
 
   return { replaceColoredTiles };
 }

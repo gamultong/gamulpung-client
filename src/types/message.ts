@@ -126,4 +126,13 @@ export type GetTilesPayloadType = {
 
 // When getting & changing TILES-STATE
 export type GetTilesStatePayloadType = { tiles_li: GetTilesPayloadType[] };
-export type GetColoredTilesStatePayloadType = { colored_tiles_li: GetTilesPayloadType[] }; // use colormap
+
+export type GetColoredTilesPayloadType = {
+  my_tiles_data: string;
+  colored_tiles_data: string;
+  range: {
+    top_left: XYType;
+    bottom_right: XYType;
+  };
+};
+export type GetColoredTilesStatePayloadType = { colored_tiles_li: GetColoredTilesPayloadType[] };
