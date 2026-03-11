@@ -16,7 +16,7 @@ interface ColorOverlayProps {
   style?: React.CSSProperties;
 }
 
-const OVERLAY_ALPHA = 0.3;
+const OVERLAY_ALPHA = 0.5;
 
 function buildColorTextures(): Map<number, Texture> {
   const map = new Map<number, Texture>();
