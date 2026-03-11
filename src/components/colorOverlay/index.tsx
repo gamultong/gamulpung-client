@@ -16,7 +16,7 @@ interface ColorOverlayProps {
   style?: React.CSSProperties;
 }
 
-const OVERLAY_ALPHA = 0.3;
+const OVERLAY_ALPHA = 0.5;
 const OUTLINE_WIDTH = 3;
 const OUTLINE_ALPHA = 0.85;
 
