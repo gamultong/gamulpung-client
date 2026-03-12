@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://gamultong.github.io/gamulpung-client/sitemap.xml

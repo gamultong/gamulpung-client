@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, useEffect, useState } from 'react';
 import { Texture, SCALE_MODES, Container as PixiContainer, Graphics } from 'pixi.js';
 import useScreenSize from '@/hooks/useScreenSize';
 import { ensurePool, hidePoolFrom } from '@/utils/pixiSpritePool';
-import { useRenderColorTiles } from '@/store/coloredTileStore';
+import { useRenderColorTiles, useRenderMyColoredTiles } from '@/store/coloredTileStore';
 import { useTileSize } from '@/store/tileStore';
 import { useCursorStore } from '@/store/cursorStore';
 import { COLORMAP, COLORMAP_HEX } from '@/types';
@@ -42,6 +42,7 @@ function buildColorTextures(): Map<number, Texture> {
 
 export default function ColorOverlay({ tilePadWidth, tilePadHeight, className, style }: ColorOverlayProps) {
   const colorTiles = useRenderColorTiles();
+  const myColoredTiles = useRenderMyColoredTiles();
   const tileSize = useTileSize();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { zoom } = useCursorStore();
@@ -127,29 +128,32 @@ export default function ColorOverlay({ tilePadWidth, tilePadHeight, className, s
         sprite.alpha = OVERLAY_ALPHA;
         sprite.visible = true;
 
-        // Draw outlines on edges adjacent to a different color
+        // Draw outlines only on my tiles
+        const isMine = myColoredTiles.get(rowIdx, colIdx) === 1;
+        if (!isMine) continue;
+
         const hex = COLORMAP_HEX[colorValue as COLORMAP];
         if (!hex) continue;
         const lineColor = hexToNumber(hex);
         gfx.lineStyle(OUTLINE_WIDTH, lineColor, OUTLINE_ALPHA);
 
-        // Top edge
-        if (colorTiles.get(rowIdx - 1, colIdx) !== colorValue) {
+        // Top edge: draw if adjacent tile is not mine with same color
+        if (myColoredTiles.get(rowIdx - 1, colIdx) !== 1 || colorTiles.get(rowIdx - 1, colIdx) !== colorValue) {
           gfx.moveTo(startX, startY);
           gfx.lineTo(endX, startY);
         }
         // Bottom edge
-        if (colorTiles.get(rowIdx + 1, colIdx) !== colorValue) {
+        if (myColoredTiles.get(rowIdx + 1, colIdx) !== 1 || colorTiles.get(rowIdx + 1, colIdx) !== colorValue) {
           gfx.moveTo(startX, endY);
           gfx.lineTo(endX, endY);
         }
         // Left edge
-        if (colorTiles.get(rowIdx, colIdx - 1) !== colorValue) {
+        if (myColoredTiles.get(rowIdx, colIdx - 1) !== 1 || colorTiles.get(rowIdx, colIdx - 1) !== colorValue) {
           gfx.moveTo(startX, startY);
           gfx.lineTo(startX, endY);
         }
         // Right edge
-        if (colorTiles.get(rowIdx, colIdx + 1) !== colorValue) {
+        if (myColoredTiles.get(rowIdx, colIdx + 1) !== 1 || colorTiles.get(rowIdx, colIdx + 1) !== colorValue) {
           gfx.moveTo(endX, startY);
           gfx.lineTo(endX, endY);
         }
@@ -158,7 +162,7 @@ export default function ColorOverlay({ tilePadWidth, tilePadHeight, className, s
 
     hidePoolFrom(poolRef.current, idx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colorTiles, colorTextures]);
+  }, [colorTiles, myColoredTiles, colorTextures]);
 
   if (!colorTextures) return null;
   return (

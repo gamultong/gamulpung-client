@@ -102,7 +102,8 @@ export default function useInputHandlers({
     }
 
     // Handle out-of-range clicks: move to nearest opened tile, then perform action
-    if (!isInRange && isBombActionable) {
+    // Skip if general click on an already-open tile (just move there instead)
+    if (!isInRange && isBombActionable && !(clickType === 'general' && isTileOpen(clickedTile))) {
       const { x: targetX, y: targetY } = findOpenedNeighborsAroundTarget(tileX, tileY);
       if (targetX === Infinity || targetY === Infinity || movingPaths.length > 0) return;
 
