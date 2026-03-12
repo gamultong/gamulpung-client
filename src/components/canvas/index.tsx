@@ -149,7 +149,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const { handleTouchStart, handleTouchMove, handleTouchEnd, isPinching } = usePinchZoom({ zoomUp, zoomDown });
 
   // Input handlers hook
-  const { handleClick, handlePointerDown, handlePointerUp, handlePointerMove } = useInputHandlers({
+  const { handleClick, handleMouseDown, handlePointerDown, handlePointerUp, handlePointerMove } = useInputHandlers({
     canvasRefs,
     tiles,
     tileSize,
@@ -225,6 +225,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
             width={windowWidth}
             height={windowHeight}
             onPointerDown={handlePointerDown}
+            onMouseDown={handleMouseDown}
             onPointerUp={handlePointerUp}
             onPointerMove={handlePointerMove}
             onPointerCancel={handlePointerUp}
