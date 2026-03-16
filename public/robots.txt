@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://gamultong.github.io/gamulpung-client/sitemap.xml
+Sitemap: https://gamulpung.kimgh06.com/sitemap.xml
