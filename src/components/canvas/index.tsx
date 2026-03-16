@@ -11,13 +11,14 @@ import { useColoredTileStore } from '@/store/coloredTileStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
 import ColorOverlay from '@/components/colorOverlay';
-import { ActiveExplosion, Direction } from '@/types';
+import { ActiveExplosion, ActiveBombMarker, Direction } from '@/types';
 import useSkillTree from '@/hooks/useSkillTree';
 import useMovement from '@/hooks/useMovement';
 import useCursorRenderer from '@/hooks/useCursorRenderer';
 import useInputHandlers from '@/hooks/useInputHandlers';
 import usePinchZoom from '@/hooks/usePinchZoom';
 import useShockwaveAnimation from '@/hooks/useShockwaveAnimation';
+import useBombMarkerAnimation from '@/hooks/useBombMarkerAnimation';
 
 interface CanvasRenderComponentProps {
   cursorOriginX: number;
@@ -26,6 +27,8 @@ interface CanvasRenderComponentProps {
   leftReviveTime: number;
   activeExplosions: ActiveExplosion[];
   removeExplosion: (id: number) => void;
+  activeBombMarkers: ActiveBombMarker[];
+  removeBombMarker: (id: number) => void;
 }
 
 const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
@@ -35,6 +38,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   leftReviveTime,
   activeExplosions,
   removeExplosion,
+  activeBombMarkers,
+  removeBombMarker,
 }) => {
   // Store subscriptions
   const tiles = useRenderTiles();
@@ -77,6 +82,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   // Canvas refs
   const shockwaveCanvasRef = useRef<HTMLCanvasElement>(null);
+  const bombMarkerCanvasRef = useRef<HTMLCanvasElement>(null);
   const canvasRefs = {
     interactionCanvasRef: useRef<HTMLCanvasElement>(null),
     otherCursorsRef: useRef<HTMLCanvasElement>(null),
@@ -181,6 +187,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     tilePaddingHeight,
   });
 
+  // Bomb marker animation hook (reads position from stores directly for frame-accurate sync)
+  useBombMarkerAnimation({
+    canvasRef: bombMarkerCanvasRef,
+    activeBombMarkers,
+    removeBombMarker,
+  });
+
   // Prevent default right click event
   useEffect(() => {
     const preventContextMenu = (event: MouseEvent) => event.preventDefault();
@@ -214,6 +227,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
           <Tilemap className={S.canvas} tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} style={canvasStyle} />
           <ColorOverlay className={S.canvas} tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} style={canvasStyle} />
           <canvas className={S.canvas} style={canvasStyle} id="ShockwaveCanvas" ref={shockwaveCanvasRef} width={windowWidth} height={windowHeight} />
+          <canvas className={S.canvas} style={canvasStyle} id="BombMarkerCanvas" ref={bombMarkerCanvasRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} style={canvasStyle} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} style={canvasStyle} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} style={canvasStyle} id="MyCursor" ref={canvasRefs.myCursorRef} width={windowWidth} height={windowHeight} />

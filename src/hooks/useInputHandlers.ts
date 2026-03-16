@@ -146,7 +146,7 @@ export default function useInputHandlers({
     const isModeTap = pointerTypeRef.current === 'touch' && interactionMode !== 'normal';
     const clickType = event.buttons !== 2 && !isModeTap ? 'general' : 'special';
     const isActionable = isClosed || isFlagged;
-    const isBombActionable = isActionable || (isBombMode && isTileOpen(clickedTile));
+    const isBombActionable = isActionable || (isBombMode && (isTileOpen(clickedTile) || isTileBomb(clickedTile)));
 
     // Handle in-range actions immediately
     if (isInRange) {
@@ -162,7 +162,7 @@ export default function useInputHandlers({
 
     // Handle out-of-range clicks: move to nearest opened tile, then perform action
     // Skip if general click on an already-open tile (just move there instead)
-    if (!isInRange && isBombActionable && !(clickType === 'general' && isTileOpen(clickedTile))) {
+    if (!isInRange && isBombActionable && !(clickType === 'general' && (isTileOpen(clickedTile) || isTileBomb(clickedTile)))) {
       const { x: targetX, y: targetY } = findOpenedNeighborsAroundTarget(tileX, tileY);
       if (targetX === Infinity || targetY === Infinity || movingPaths.length > 0) return;
 
@@ -208,7 +208,7 @@ export default function useInputHandlers({
       const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
 
       const rightClickEvent = isBombMode ? SendMessageEvent.INSTALL_BOMB : SendMessageEvent.SET_FLAG;
-      const isRightClickActionable = isBombMode ? (isClosed || isFlagged || isTileOpen(clickedTile)) : (isClosed || isFlagged);
+      const isRightClickActionable = isBombMode ? (isClosed || isFlagged || isTileOpen(clickedTile) || isTileBomb(clickedTile)) : (isClosed || isFlagged);
       if (isInRange && isRightClickActionable) {
         clickEvent(tileX, tileY, rightClickEvent);
       } else if (!isInRange && isRightClickActionable) {
@@ -245,15 +245,16 @@ export default function useInputHandlers({
       const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
       const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
       const isOpen = isTileOpen(clickedTile);
+      const isBomb = isTileBomb(clickedTile);
       const isActionable = isClosed || isFlagged;
-      return { tileX, tileY, isClosed, isFlagged, isOpen, isInRange, isActionable };
+      return { tileX, tileY, isClosed, isFlagged, isOpen, isBomb, isInRange, isActionable };
     };
 
     const executeAction = (actionEvent: SendMessageEvent) => {
       const position = longPressPositionRef.current;
       if (!position || isPinching?.()) return;
-      const { tileX, tileY, isInRange, isActionable, isOpen } = resolveTileAt(position);
-      const canAct = isActionable || (isBombMode && isOpen && actionEvent === SendMessageEvent.INSTALL_BOMB);
+      const { tileX, tileY, isInRange, isActionable, isOpen, isBomb } = resolveTileAt(position);
+      const canAct = isActionable || (isBombMode && (isOpen || isBomb) && actionEvent === SendMessageEvent.INSTALL_BOMB);
 
       if (isInRange && canAct) clickEvent(tileX, tileY, actionEvent);
       else if (canAct) {

@@ -10,6 +10,7 @@ import useTileProcessing from '@/hooks/useTileProcessing';
 import useColoredTileProcessing from '@/hooks/useColoredTileProcessing';
 import useTileViewport from '@/hooks/useTileViewport';
 import useExplosionManager from '@/hooks/useExplosionManager';
+import useBombMarkerManager from '@/hooks/useBombMarkerManager';
 
 /** components */
 import CanvasRenderComponent from '@/components/canvas';
@@ -72,6 +73,7 @@ export default function Play() {
 
   // Extracted hooks
   const { activeExplosions, onExplosion, removeExplosion } = useExplosionManager();
+  const { activeBombMarkers, onBombPosition, removeBombMarker } = useBombMarkerManager();
 
   const { replaceTiles } = useTileProcessing({
     padtiles,
@@ -171,6 +173,7 @@ export default function Play() {
     setLeftReviveTime,
     setIsInitialized,
     onExplosion,
+    onBombPosition,
   });
 
   useEffect(() => {
@@ -199,6 +202,8 @@ export default function Play() {
         cursorOriginY={cursorOriginPosition.y}
         activeExplosions={activeExplosions}
         removeExplosion={removeExplosion}
+        activeBombMarkers={activeBombMarkers}
+        removeBombMarker={removeBombMarker}
       />
     </div>
   );

@@ -13,6 +13,7 @@ import {
   SendCreateCursorPayloadType,
   COLORMAP,
   GetColoredTilesStatePayloadType,
+  GetBombPositionPayloadType,
 } from '@/types';
 import { useCursorStore, useOtherUserCursorsStore, OtherCursorState } from '@/store/cursorStore';
 import { useRankStore } from '@/store/rankingStore';
@@ -26,10 +27,11 @@ interface UseMessageHandlerOptions {
   setLeftReviveTime: (time: number) => void;
   setIsInitialized: (initialized: boolean) => void;
   onExplosion: (position: { x: number; y: number }) => void;
+  onBombPosition: (position: { x: number; y: number }, color: number) => void;
 }
 
 export default function useMessageHandler(options: UseMessageHandlerOptions) {
-  const { getCurrentTileWidthAndHeight, setLeftReviveTime, setIsInitialized, onExplosion } = options;
+  const { getCurrentTileWidthAndHeight, setLeftReviveTime, setIsInitialized, onExplosion, onBombPosition } = options;
   const { replaceTiles, replaceBinaryTiles, replaceColoredTiles } = options;
 
   // Store hooks - only stable setters, no reactive state in callback deps
@@ -38,7 +40,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
 
   const handleWebSocketMessage = useCallback(
     async (wsMessage: string) => {
-      const { MY_CURSOR, CHAT, CURSORS_STATE, EXPLOSION, QUIT_CURSOR, SCOREBOARD_STATE, TILES_STATE, COLORED_TILES_STATE } = GetMessageEvent;
+      const { MY_CURSOR, CHAT, CURSORS_STATE, EXPLOSION, BOMB_POSITION, QUIT_CURSOR, SCOREBOARD_STATE, TILES_STATE, COLORED_TILES_STATE } = GetMessageEvent;
 
       // Read current state inside callback to avoid stale closures
       const { position, id: clientCursorId, setPosition, setOriginPosition, setId, setScore, setItems, setColor } = useCursorStore.getState();
@@ -95,6 +97,11 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
               console.log('explosion', performance.now());
               setLeftReviveTime(10);
             }
+            break;
+          }
+          case BOMB_POSITION: {
+            const { position: bombPos, color: bombColor } = payload as GetBombPositionPayloadType;
+            onBombPosition(bombPos, bombColor);
             break;
           }
           case SCOREBOARD_STATE: {
@@ -177,7 +184,7 @@ export default function useMessageHandler(options: UseMessageHandlerOptions) {
         console.error(e);
       }
     },
-    [replaceTiles, replaceColoredTiles, setLeftReviveTime, setIsInitialized, getCurrentTileWidthAndHeight, sendMessage, setRanking, onExplosion],
+    [replaceTiles, replaceColoredTiles, setLeftReviveTime, setIsInitialized, getCurrentTileWidthAndHeight, sendMessage, setRanking, onExplosion, onBombPosition],
   );
 
   /** Handle binary WebSocket frames (future: server sends 1-byte-per-tile data) */

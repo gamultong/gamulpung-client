@@ -55,6 +55,7 @@ export const GetMessageEvent = {
   CHAT: 'CHAT',
   CURSORS_STATE: 'CURSORS-STATE',
   EXPLOSION: 'EXPLOSION',
+  BOMB_POSITION: 'BOMB-POSITION',
   MY_CURSOR: 'MY-CURSOR',
   QUIT_CURSOR: 'QUIT-CURSOR',
   SCOREBOARD_STATE: 'SCOREBOARD-STATE',
@@ -92,10 +93,16 @@ export type GetMessageType = {
   payload: GetPayloadType;
 };
 
+export type GetBombPositionPayloadType = {
+  color: COLORMAP;
+  position: XYType;
+};
+
 export type GetPayloadType =
   | GetChatPayloadType
   | GetCursorStatePayloadType
   | GetExplosionPayloadType
+  | GetBombPositionPayloadType
   | GetScoreboardPayloadType
   | GetTilesPayloadType
   | GetTilesStatePayloadType

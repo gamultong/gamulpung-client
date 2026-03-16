@@ -9,6 +9,13 @@ export interface ActiveExplosion {
   startTime: number;
 }
 
+export interface ActiveBombMarker {
+  id: number;
+  position: XYType;
+  color: number;
+  startTime: number;
+}
+
 export type PositionType = { position: XYType };
 
 export const Direction = {
