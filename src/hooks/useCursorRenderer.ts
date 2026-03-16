@@ -4,7 +4,7 @@ import RenderPaths from '@/assets/renderPaths.json';
 import { XYType, VectorImagesType } from '@/types';
 import { TileGrid } from '@/utils/tileGrid';
 import { OtherCursorState } from '@/store/cursorStore';
-import { CURSOR_COLORS, OTHER_CURSOR_COLORS } from '@/constants';
+import { COLORMAP, COLORMAP_HEX, COLORMAP_HEX_LIGHT } from '@/types';
 import { makePath2d, makePath2dFromArray } from '@/utils';
 import { CanvasRefs } from '@/hooks/useMovement';
 
@@ -16,7 +16,7 @@ interface UseCursorRendererOptions {
   windowWidth: number;
   windowHeight: number;
   cursors: OtherCursorState[];
-  color: string;
+  color: COLORMAP;
   cursorOriginX: number;
   cursorOriginY: number;
   relativeX: number;
@@ -147,7 +147,7 @@ export default function useCursorRenderer({
       const [drawX, drawY] = [position.x - cursorOriginX + otherCursorPaddingWidth, position.y - cursorOriginY + otherCursorPaddingHeight];
       const [distanceX, distanceY] = [position.x - pointerX, position.y - pointerY];
       const rotate = distanceX !== 0 || distanceY !== 0 ? Math.atan2(distanceY, distanceX) : 0;
-      drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, CURSOR_COLORS[cColor], revive_at, rotate);
+      drawCursor(otherCursorsCtx, drawX * tileSize, drawY * tileSize, COLORMAP_HEX[cColor], revive_at, rotate);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursors, cursorOriginX, cursorOriginY, tilePaddingWidth, tilePaddingHeight, tileSize, windowWidth, windowHeight, canvasRefs.otherCursorsRef]);
@@ -164,7 +164,7 @@ export default function useCursorRenderer({
       cursors.forEach(({ pointer, color: cColor }) => {
         const { x, y } = pointer ?? { x: 0, y: 0 };
         const [drawX, drawY] = [x - cursorOriginX + otherCursorPaddingWidth, y - cursorOriginY + otherCursorPaddingHeight];
-        drawPointer(otherPointerCtx, drawX * tileSize, drawY * tileSize, OTHER_CURSOR_COLORS[cColor], borderPixel);
+        drawPointer(otherPointerCtx, drawX * tileSize, drawY * tileSize, COLORMAP_HEX_LIGHT[cColor], borderPixel);
       });
     },
     [cursors, cursorOriginX, cursorOriginY, otherCursorPaddingWidth, otherCursorPaddingHeight, tileSize, windowWidth, windowHeight, drawPointer, canvasRefs.otherPointerRef],
@@ -187,7 +187,7 @@ export default function useCursorRenderer({
     myCursorCtx.clearRect(0, 0, windowWidth, windowHeight);
     interactionCtx.clearRect(0, 0, windowWidth, windowHeight);
 
-    const cursorColor = CURSOR_COLORS[color];
+    const cursorColor = COLORMAP_HEX[color];
     const borderPixel = 5 * zoom;
 
     const cursorPos = {

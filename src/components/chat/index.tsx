@@ -5,7 +5,7 @@ import { CSSProperties, useEffect, useRef, useState } from 'react';
 import useWebSocketStore from '@/store/websocketStore';
 import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useScreenSize from '@/hooks/useScreenSize';
-import { SendMessageEvent } from '@/types';
+import { SendMessageEvent, COLORMAP, COLORMAP_HEX } from '@/types';
 
 export default function ChatComponent() {
   /** constants */
@@ -36,7 +36,7 @@ export default function ChatComponent() {
   const clientStyle: CSSProperties = {
     left: '51%',
     top: '51%',
-    backgroundColor: color,
+    backgroundColor: COLORMAP_HEX[color],
     opacity: getOpacity(startChatTime),
   };
 
@@ -99,7 +99,7 @@ export default function ChatComponent() {
           value={message}
           maxLength={MAX_MESSAGE_LENGTH}
           onChange={ChangingMessage}
-          style={{ width: `${messageWidth + 5}px`, color: color === 'yellow' ? 'black' : 'white' }}
+          style={{ width: `${messageWidth + 5}px`, color: color === COLORMAP.YELLOW ? 'black' : 'white' }}
         />
         <div ref={messageRef} aria-hidden>
           {message}
@@ -112,8 +112,8 @@ export default function ChatComponent() {
           style={{
             left: `${windowWidth / 2 + (cursor.position.x - originPosition.x - 1 / zoom / 2) * zoom * 80}px`,
             top: `${windowHeight / 2 + (cursor.position.y - originPosition.y - 1 / zoom / 2) * zoom * 80}px`,
-            backgroundColor: cursor.color,
-            color: cursor.color === 'yellow' ? 'black' : 'white',
+            backgroundColor: COLORMAP_HEX[cursor.color],
+            color: cursor.color === COLORMAP.YELLOW ? 'black' : 'white',
             opacity: getOpacity(cursor.messageTime),
           }}
         >

@@ -8,23 +8,3 @@ export const CURSOR_DIRECTIONS = [
   [1, -1], // right-up
   [1, 1], // right-down
 ];
-export const CURSOR_COLORS: { [key: string]: string } = {
-  red: '#FF4D00',
-  blue: '#0094FF',
-  yellow: '#F0C800',
-  purple: '#BC3FDC',
-  '0': '#FF4D00',
-  '1': '#F0C800',
-  '2': '#0094FF',
-  '3': '#BC3FDC',
-};
-export const OTHER_CURSOR_COLORS: { [key: string]: string } = {
-  red: '#FBCBB6',
-  blue: '#A8DBFF',
-  yellow: '#FFEE99',
-  purple: '#E8BEF3',
-  '0': '#FBCBB6',
-  '1': '#A8DBFF',
-  '2': '#FFEE99',
-  '3': '#E8BEF3',
-};

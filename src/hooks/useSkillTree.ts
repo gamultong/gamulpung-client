@@ -4,6 +4,7 @@
 import { useSkillTreeStore } from '@/store/skillTreeStore';
 import { useMemo, useState } from 'react';
 import { useNodesState, useEdgesState, MarkerType } from '@xyflow/react';
+import { useCursorStore } from '@/store/cursorStore';
 
 // TO-DO add categories and values for each skill
 export interface SkillItem {
@@ -16,13 +17,10 @@ export interface SkillItem {
 
 // please multiply cost by 1000 before deployment
 export const SKILL_DATA: SkillItem[] = [
-  { id: '1', name: 'SPEED I', description: 'Increase moving speed', nexts: ['2'], cost: 2 },
-  { id: '2', name: 'SPEED II', description: 'Increase moving speed', nexts: ['3'], cost: 4 },
-  { id: '3', name: 'CLICK I', description: 'Increase click intraction range', nexts: ['4'], cost: 8 },
-  { id: '4', name: 'SPEED III', description: 'Increase moving speed', nexts: ['5'], cost: 16 },
-  { id: '5', name: 'EXPLODE I', description: 'Increase intraction range', nexts: ['6'], cost: 32 },
-  { id: '6', name: 'SPEED IV', description: 'Increase moving speed', nexts: ['7'], cost: 64 },
-];
+  { id: '1', name: 'SPEED I', description: 'Increase moving speed', nexts: ['2'], cost: 100 },
+  { id: '2', name: 'SPEED II', description: 'Increase moving speed', nexts: ['3'], cost: 200 },
+  { id: '3', name: 'SPEED III', description: 'Increase moving speed', nexts: [], cost: 400 },
+  ];
 
 export type SkillDataItem = SkillItem;
 
@@ -33,7 +31,7 @@ const createInitialNodes = () => {
   const angleStep = (2 * Math.PI) / SKILL_DATA.length;
 
   return SKILL_DATA.map(({ id, name }, index) => {
-    const angle = (index - 2) * angleStep;
+    const angle = (index - 1) * angleStep;
     const x = radius * Math.cos(angle);
     const y = radius * Math.sin(angle);
     const position = { x, y };
@@ -59,6 +57,7 @@ export default function useSkillTree() {
   // const { score } = useCursorStore();
   const purchasedSkills = useSkillTreeStore(s => s.purchasedSkills);
   const setPurchasedSkills = useSkillTreeStore(s => s.setPurchasedSkills);
+  const {score} = useCursorStore();
   const [nodes, setNodes, onNodesChange] = useNodesState(createInitialNodes());
   const [edges, setEdges, onEdgesChange] = useEdgesState(createInitialEdges());
   const [selectedSkill, setSelectedSkill] = useState<SkillDataItem | null>(null);
@@ -80,7 +79,7 @@ export default function useSkillTree() {
     if (!selectedSkill) return;
     if (purchasedSkills.includes(selectedSkill.id)) return;
     // check cost
-    // if (selectedSkill.cost > score) return;
+    if (selectedSkill.cost > score) return;
 
     const prerequisiteSkills = SKILL_DATA.filter(skill => skill.nexts.includes(selectedSkill.id));
     const hasAllPrerequisites = prerequisiteSkills.every(skill => purchasedSkills.includes(skill.id));

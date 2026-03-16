@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Texture, SCALE_MODES, MIPMAP_MODES, WRAP_MODES } from 'pixi.js';
 import RenderPaths from '@/assets/renderPaths.json';
 import { fillCtxAndPath as fillPathInCtx, makePath2d, hexToRgb, lerp, canvasToTexture } from '@/utils';
-import { CURSOR_COLORS } from '@/constants';
+import { COLORMAP_HEX, FLAG_INDEX_TO_COLORMAP } from '@/types';
 
 // Concurrency limiter to avoid overwhelming main thread/GPU during mass texture creation
 function createLimiter(maxConcurrent: number) {
@@ -145,7 +145,7 @@ export default function useTilemapTextures(tileSize: number, zoom: number) {
           flagGradient.addColorStop(1, 'transparent');
           flagCtx.translate(flagCanvas.width / 6, flagCanvas.height / 6);
           flagCtx.scale(zoom / flagMinimalized / 4.5, zoom / flagMinimalized / 4.5);
-          fillPathInCtx(flagCtx, makePath2d(flagPaths[0]), CURSOR_COLORS[idx]);
+          fillPathInCtx(flagCtx, makePath2d(flagPaths[0]), COLORMAP_HEX[FLAG_INDEX_TO_COLORMAP[idx]]);
           fillPathInCtx(flagCtx, makePath2d(flagPaths[1]), flagGradient);
           const tex = await canvasToTexture(flagCanvas, tileSize, tileSize);
           textureCache.set(`flag${idx}`, tex);

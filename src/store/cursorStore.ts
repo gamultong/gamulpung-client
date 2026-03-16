@@ -1,5 +1,4 @@
-import { XYType } from '@/types';
-import { CursorColor } from '@/types/canvas';
+import { XYType, COLORMAP } from '@/types';
 import { create } from 'zustand';
 
 export type InteractionMode = 'normal' | 'flag' | 'bomb';
@@ -11,7 +10,7 @@ export interface ItemsStateType {
 interface CursorState {
   id: string;
   position: XYType;
-  color: CursorColor;
+  color: COLORMAP;
   revive_at?: number;
   score: number;
   items: ItemsStateType;
@@ -21,7 +20,7 @@ interface ClientCursorState extends CursorState {
   id: string;
   originPosition: XYType;
   setId: (id: string) => void;
-  setColor: (newColor: CursorColor) => void;
+  setColor: (newColor: COLORMAP) => void;
   setPosition: (position: XYType) => void;
   setOriginPosition: (position: XYType) => void;
   isBombMode: boolean;
@@ -57,7 +56,7 @@ interface OtherUserCursorListState {
 export const useCursorStore = create<ClientCursorState>(set => ({
   id: '',
   position: { x: 0, y: 0 },
-  color: 'blue',
+  color: COLORMAP.BLUE,
   originPosition: { x: 0, y: 0 },
   zoom: 1,
   score: 0,

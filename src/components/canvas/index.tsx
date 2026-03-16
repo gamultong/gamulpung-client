@@ -1,21 +1,24 @@
 'use client';
 import S from './style.module.scss';
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 
 import useScreenSize from '@/hooks/useScreenSize';
 import { useClickStore, useAnimationStore } from '@/store/interactionStore';
 import { useCursorStore, useOtherUserCursorsStore } from '@/store/cursorStore';
 import useWebSocketStore from '@/store/websocketStore';
 import { useRenderTiles, useRenderStartPoint, useTileSize, useStartPoint, useEndPoint, useTileStore } from '@/store/tileStore';
+import { useColoredTileStore } from '@/store/coloredTileStore';
 import ChatComponent from '@/components/chat';
 import Tilemap from '@/components/tilemap';
-import { ActiveExplosion } from '@/types';
+import ColorOverlay from '@/components/colorOverlay';
+import { ActiveExplosion, ActiveBombMarker, Direction } from '@/types';
 import useSkillTree from '@/hooks/useSkillTree';
 import useMovement from '@/hooks/useMovement';
 import useCursorRenderer from '@/hooks/useCursorRenderer';
 import useInputHandlers from '@/hooks/useInputHandlers';
 import usePinchZoom from '@/hooks/usePinchZoom';
 import useShockwaveAnimation from '@/hooks/useShockwaveAnimation';
+import useBombMarkerAnimation from '@/hooks/useBombMarkerAnimation';
 
 interface CanvasRenderComponentProps {
   cursorOriginX: number;
@@ -24,6 +27,8 @@ interface CanvasRenderComponentProps {
   leftReviveTime: number;
   activeExplosions: ActiveExplosion[];
   removeExplosion: (id: number) => void;
+  activeBombMarkers: ActiveBombMarker[];
+  removeBombMarker: (id: number) => void;
 }
 
 const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
@@ -33,6 +38,8 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   leftReviveTime,
   activeExplosions,
   removeExplosion,
+  activeBombMarkers,
+  removeBombMarker,
 }) => {
   // Store subscriptions
   const tiles = useRenderTiles();
@@ -40,7 +47,15 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const startPoint = useRenderStartPoint();
   const viewStart = useStartPoint();
   const viewEnd = useEndPoint();
-  const { padtiles } = useTileStore();
+  const { padtiles: rawPadtiles } = useTileStore();
+  const { padColorTiles } = useColoredTileStore();
+  const padtiles = useCallback(
+    (sx: number, sy: number, ex: number, ey: number, dir: Direction) => {
+      rawPadtiles(sx, sy, ex, ey, dir);
+      padColorTiles(sx, sy, ex, ey, dir);
+    },
+    [rawPadtiles, padColorTiles],
+  );
   const { MOVE_SPEED } = useSkillTree();
   const { windowHeight, windowWidth } = useScreenSize();
   const { setPosition: setClickPosition, x: clickX, y: clickY, setMovecost } = useClickStore();
@@ -67,6 +82,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
 
   // Canvas refs
   const shockwaveCanvasRef = useRef<HTMLCanvasElement>(null);
+  const bombMarkerCanvasRef = useRef<HTMLCanvasElement>(null);
   const canvasRefs = {
     interactionCanvasRef: useRef<HTMLCanvasElement>(null),
     otherCursorsRef: useRef<HTMLCanvasElement>(null),
@@ -139,7 +155,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
   const { handleTouchStart, handleTouchMove, handleTouchEnd, isPinching } = usePinchZoom({ zoomUp, zoomDown });
 
   // Input handlers hook
-  const { handleClick, handlePointerDown, handlePointerUp, handlePointerMove } = useInputHandlers({
+  const { handleClick, handleMouseDown, handlePointerDown, handlePointerUp, handlePointerMove } = useInputHandlers({
     canvasRefs,
     tiles,
     tileSize,
@@ -169,6 +185,13 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     startPoint,
     tilePaddingWidth,
     tilePaddingHeight,
+  });
+
+  // Bomb marker animation hook (reads position from stores directly for frame-accurate sync)
+  useBombMarkerAnimation({
+    canvasRef: bombMarkerCanvasRef,
+    activeBombMarkers,
+    removeBombMarker,
   });
 
   // Prevent default right click event
@@ -202,7 +225,9 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
         <div className={`${S.canvasContainer} ${leftReviveTime > 0 ? S.vibration : ''}`}>
           <ChatComponent />
           <Tilemap className={S.canvas} tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} style={canvasStyle} />
+          <ColorOverlay className={S.canvas} tilePadHeight={tilePaddingHeight} tilePadWidth={tilePaddingWidth} style={canvasStyle} />
           <canvas className={S.canvas} style={canvasStyle} id="ShockwaveCanvas" ref={shockwaveCanvasRef} width={windowWidth} height={windowHeight} />
+          <canvas className={S.canvas} style={canvasStyle} id="BombMarkerCanvas" ref={bombMarkerCanvasRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} style={canvasStyle} id="OtherCursors" ref={canvasRefs.otherCursorsRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} style={canvasStyle} id="OtherPointer" ref={canvasRefs.otherPointerRef} width={windowWidth} height={windowHeight} />
           <canvas className={S.canvas} style={canvasStyle} id="MyCursor" ref={canvasRefs.myCursorRef} width={windowWidth} height={windowHeight} />
@@ -214,6 +239,7 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
             width={windowWidth}
             height={windowHeight}
             onPointerDown={handlePointerDown}
+            onMouseDown={handleMouseDown}
             onPointerUp={handlePointerUp}
             onPointerMove={handlePointerMove}
             onPointerCancel={handlePointerUp}

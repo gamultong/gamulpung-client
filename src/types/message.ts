@@ -7,6 +7,38 @@ import { ItemsStateType } from '@/store/cursorStore';
 import { PositionType, XYType } from './position';
 import { WindowSizeType } from './window';
 
+export const COLORMAP = {
+  NONE: 0,
+  RED: 1,
+  BLUE: 2,
+  YELLOW: 3,
+  PURPLE: 4,
+};
+export type COLORMAP = (typeof COLORMAP)[keyof typeof COLORMAP];
+
+export const COLORMAP_HEX: Record<COLORMAP, string> = {
+  [COLORMAP.NONE]: '',
+  [COLORMAP.RED]: '#FF4D00',
+  [COLORMAP.BLUE]: '#0094FF',
+  [COLORMAP.YELLOW]: '#F0C800',
+  [COLORMAP.PURPLE]: '#BC3FDC',
+};
+
+export const COLORMAP_HEX_LIGHT: Record<COLORMAP, string> = {
+  [COLORMAP.NONE]: '',
+  [COLORMAP.RED]: '#FBCBB6',
+  [COLORMAP.BLUE]: '#A8DBFF',
+  [COLORMAP.YELLOW]: '#FFEE99',
+  [COLORMAP.PURPLE]: '#E8BEF3',
+};
+
+export const FLAG_INDEX_TO_COLORMAP: COLORMAP[] = [
+  COLORMAP.RED,    // flag 0 → red
+  COLORMAP.YELLOW, // flag 1 → yellow
+  COLORMAP.BLUE,   // flag 2 → blue
+  COLORMAP.PURPLE, // flag 3 → purple
+];
+
 export const SendMessageEvent = {
   CHAT: 'CHAT',
   MOVE: 'MOVE',
@@ -23,10 +55,12 @@ export const GetMessageEvent = {
   CHAT: 'CHAT',
   CURSORS_STATE: 'CURSORS-STATE',
   EXPLOSION: 'EXPLOSION',
+  BOMB_POSITION: 'BOMB-POSITION',
   MY_CURSOR: 'MY-CURSOR',
   QUIT_CURSOR: 'QUIT-CURSOR',
   SCOREBOARD_STATE: 'SCOREBOARD-STATE',
   TILES_STATE: 'TILES-STATE',
+  COLORED_TILES_STATE: 'COLORED-TILES-STATE',
 } as const;
 export type GetMessageEvent = (typeof GetMessageEvent)[keyof typeof GetMessageEvent];
 
@@ -35,7 +69,7 @@ export type SendMovePayloadType = PositionType;
 export type SendOpenTilesPayloadType = PositionType;
 export type SendSetFlagPayloadType = PositionType;
 export type SendSetWindowPayloadType = WindowSizeType;
-export type SendCreateCursorPayloadType = WindowSizeType;
+export type SendCreateCursorPayloadType = WindowSizeType & { color: COLORMAP };
 export type SendDismantleMinePayloadType = PositionType;
 export type SendInstallBombPayloadType = PositionType;
 
@@ -59,13 +93,20 @@ export type GetMessageType = {
   payload: GetPayloadType;
 };
 
+export type GetBombPositionPayloadType = {
+  color: COLORMAP;
+  position: XYType;
+};
+
 export type GetPayloadType =
   | GetChatPayloadType
   | GetCursorStatePayloadType
   | GetExplosionPayloadType
+  | GetBombPositionPayloadType
   | GetScoreboardPayloadType
   | GetTilesPayloadType
-  | GetTilesStatePayloadType;
+  | GetTilesStatePayloadType
+  | GetColoredTilesStatePayloadType;
 
 /**
  * When Using
@@ -75,7 +116,7 @@ export type CursorIdType = { id: string };
 export type GetChatPayloadType = SendChatPayloadType & CursorIdType;
 
 // iso format string
-export type CursorStateType = CursorIdType & PositionType & { active_at: string; score: number; items: ItemsStateType };
+export type CursorStateType = CursorIdType & PositionType & { active_at: string; score: number; items: ItemsStateType; color: COLORMAP };
 export type GetCursorStatePayloadType = { cursors: CursorStateType[] };
 export type GetExplosionPayloadType = PositionType;
 
@@ -92,3 +133,13 @@ export type GetTilesPayloadType = {
 
 // When getting & changing TILES-STATE
 export type GetTilesStatePayloadType = { tiles_li: GetTilesPayloadType[] };
+
+export type GetColoredTilesPayloadType = {
+  my_tiles_data: string;
+  colored_tiles_data: string;
+  range: {
+    top_left: XYType;
+    bottom_right: XYType;
+  };
+};
+export type GetColoredTilesStatePayloadType = { colored_tiles_li: GetColoredTilesPayloadType[] };

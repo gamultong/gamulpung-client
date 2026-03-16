@@ -7,8 +7,10 @@ import { useEffect, useLayoutEffect, useState, useRef } from 'react';
 import useScreenSize from '@/hooks/useScreenSize';
 import { useClickStore } from '@/store/interactionStore';
 import useTileProcessing from '@/hooks/useTileProcessing';
+import useColoredTileProcessing from '@/hooks/useColoredTileProcessing';
 import useTileViewport from '@/hooks/useTileViewport';
 import useExplosionManager from '@/hooks/useExplosionManager';
+import useBombMarkerManager from '@/hooks/useBombMarkerManager';
 
 /** components */
 import CanvasRenderComponent from '@/components/canvas';
@@ -20,6 +22,7 @@ import ScoreBoardComponent from '@/components/scoreboard';
 import useMessageHandler from '@/hooks/useMessageHandler';
 import { useCursorStore } from '@/store/cursorStore';
 import { useTileStore, useTiles } from '@/store/tileStore';
+import { useColoredTileStore, useColorTiles, useMyColoredTiles } from '@/store/coloredTileStore';
 import SkillTree from '@/components/skilltree';
 import ModeFab from '@/components/modeFab';
 import { RENDER_RANGE, MAX_TILE_COUNT, WS_URL } from './constants';
@@ -46,6 +49,17 @@ export default function Play() {
     applyPackedChanges,
     reset: resetTiles,
   } = useTileStore();
+  const cachingColorTiles = useColorTiles();
+  const cachingMyColoredTiles = useMyColoredTiles();
+  const {
+    setColorTiles,
+    setRenderColorTiles,
+    setRenderMyColoredTiles,
+    applyColorChanges,
+    applyMyColoredTileChanges,
+    padColorTiles,
+    reset: resetColorTiles,
+  } = useColoredTileStore();
 
   /** hooks */
   const { windowWidth, windowHeight } = useScreenSize();
@@ -59,6 +73,7 @@ export default function Play() {
 
   // Extracted hooks
   const { activeExplosions, onExplosion, removeExplosion } = useExplosionManager();
+  const { activeBombMarkers, onBombPosition, removeBombMarker } = useBombMarkerManager();
 
   const { replaceTiles } = useTileProcessing({
     padtiles,
@@ -71,6 +86,21 @@ export default function Play() {
     setRenderTiles,
     applyTileChanges,
     applyPackedChanges,
+  });
+
+  const { replaceColoredTiles } = useColoredTileProcessing({
+    padColorTiles,
+    startPoint,
+    cachingColorTiles,
+    cachingMyColoredTiles,
+    cursorPosition,
+    cursorOriginPosition,
+    renderStartPoint,
+    setColorTiles,
+    setRenderColorTiles,
+    setRenderMyColoredTiles,
+    applyColorChanges,
+    applyMyColoredTileChanges,
   });
 
   const { getCurrentTileWidthAndHeight } = useTileViewport({
@@ -117,6 +147,7 @@ export default function Play() {
 
       disconnect();
       resetTiles();
+      resetColorTiles();
       setIsInitialized(false);
       setLeftReviveTime(-1);
     };
@@ -138,9 +169,11 @@ export default function Play() {
   useMessageHandler({
     getCurrentTileWidthAndHeight,
     replaceTiles,
+    replaceColoredTiles,
     setLeftReviveTime,
     setIsInitialized,
     onExplosion,
+    onBombPosition,
   });
 
   useEffect(() => {
@@ -169,6 +202,8 @@ export default function Play() {
         cursorOriginY={cursorOriginPosition.y}
         activeExplosions={activeExplosions}
         removeExplosion={removeExplosion}
+        activeBombMarkers={activeBombMarkers}
+        removeBombMarker={removeBombMarker}
       />
     </div>
   );
