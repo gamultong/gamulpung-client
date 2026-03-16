@@ -1,9 +1,6 @@
 name: Deploy to Local Server
 
-on:
-  push:
-    branches: ["main"]
-  workflow_dispatch:
+on: workflow_dispatch # 수동 실행만 가능 (자동 트리거 비활성화)
 
 concurrency:
   group: "deploy"
