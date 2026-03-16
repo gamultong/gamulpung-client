@@ -1,0 +1,9 @@
+services:
+  gamulpung:
+    build: .
+    container_name: gamulpung
+    restart: unless-stopped
+    ports:
+      - "8645:3000"
+    env_file:
+      - .env

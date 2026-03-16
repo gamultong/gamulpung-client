@@ -1,56 +1,42 @@
-name: Deploy Next.js site to Pages
+name: Deploy to Local Server
 
 on:
   push:
     branches: ["main"]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: "deploy"
+  cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '20'
-
-      - name: Install Rust and wasm-pack
+      - name: Install cloudflared
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-          source $HOME/.cargo/env
-          rustup target add wasm32-unknown-unknown
-          cargo install wasm-pack
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
+          sudo dpkg -i cloudflared.deb
 
-      - name: Build WASM
-        run: cd wasm && wasm-pack build --target web --release --out-dir ../src/wasm-pkg
-
-      - name: Create .env file for production
+      - name: Setup SSH config
         run: |
-          echo "NEXT_PUBLIC_WS_HOST=${{ secrets.NEXT_PUBLIC_WS_HOST }}" >> .env
-          echo "NEXT_PUBLIC_HOST=${{ secrets.NEXT_PUBLIC_HOST }}" >> .env
-      - name: Install dependencies
-        run: npm install --force
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          cat >> ~/.ssh/config << 'EOF'
+          Host deploy-server
+            HostName ssh.kimgh06.com
+            User ${{ secrets.SSH_USERNAME }}
+            IdentityFile ~/.ssh/id_rsa
+            ProxyCommand cloudflared access ssh --hostname %h
+            StrictHostKeyChecking no
+          EOF
 
-      - name: Build Next.js app and Export static site
-        run: npm run build && touch ./out/.nojekyll
-
-      - name: Upload to GitHub Pages
-        uses: jamesIves/github-pages-deploy-action@v4
-        with:
-          branch: gh-pages
-          folder: out
-          token: ${{ secrets.SECRET }}
+      - name: Deploy
+        run: |
+          ssh deploy-server << 'SCRIPT'
+            cd ${{ secrets.PROJECT_PATH }}
+            git pull origin main
+            docker compose up -d --build
+          SCRIPT
