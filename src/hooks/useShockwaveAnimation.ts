@@ -1,25 +1,20 @@
 'use client';
 import { useEffect, useRef, RefObject } from 'react';
-import { ActiveExplosion, XYType } from '@/types';
+import { ActiveExplosion } from '@/types';
+import { useTileStore } from '@/store/tileStore';
+import { useCursorStore } from '@/store/cursorStore';
+import { RENDER_RANGE } from '@/app/play/constants';
 
 interface UseShockwaveAnimationOptions {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   activeExplosions: ActiveExplosion[];
   removeExplosion: (id: number) => void;
-  tileSize: number;
-  startPoint: XYType;
-  tilePaddingWidth: number;
-  tilePaddingHeight: number;
 }
 
 export default function useShockwaveAnimation({
   canvasRef,
   activeExplosions,
   removeExplosion,
-  tileSize,
-  startPoint,
-  tilePaddingWidth,
-  tilePaddingHeight,
 }: UseShockwaveAnimationOptions) {
   // Refs for RAF loop (avoids effect restart on every state change)
   const activeExplosionsRef = useRef<ActiveExplosion[]>([]);
@@ -80,10 +75,13 @@ export default function useShockwaveAnimation({
       }
 
       const completedIds: number[] = [];
-      const ts = tileSize;
-      const sp = startPoint;
-      const tpw = tilePaddingWidth;
-      const tph = tilePaddingHeight;
+      // Read latest values directly from stores every frame (same as useBombMarkerAnimation)
+      const { renderStartPoint: sp, tileSize: ts } = useTileStore.getState();
+      const { originPosition } = useCursorStore.getState();
+      const relX = originPosition.x - sp.x;
+      const relY = originPosition.y - sp.y;
+      const tpw = ((RENDER_RANGE - 1) * relX) / RENDER_RANGE;
+      const tph = ((RENDER_RANGE - 1) * relY) / RENDER_RANGE;
 
       for (const explosion of explosions) {
         const elapsed = now - explosion.startTime;
