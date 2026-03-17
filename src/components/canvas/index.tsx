@@ -121,7 +121,6 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     MOVE_SPEED,
     useAnimation,
     canvasRefs,
-    shockwaveCanvasRef,
     cursors,
   });
 
@@ -176,15 +175,11 @@ const CanvasRenderComponent: React.FC<CanvasRenderComponentProps> = ({
     isPinching,
   });
 
-  // Shockwave animation hook
+  // Shockwave animation hook (reads position from stores directly for frame-accurate sync)
   useShockwaveAnimation({
     canvasRef: shockwaveCanvasRef,
     activeExplosions,
     removeExplosion,
-    tileSize,
-    startPoint,
-    tilePaddingWidth,
-    tilePaddingHeight,
   });
 
   // Bomb marker animation hook (reads position from stores directly for frame-accurate sync)
