@@ -124,6 +124,20 @@ Movement/click inputs are disabled while chatting.
 
 ---
 
+## Keyboard Shortcuts
+
+| **Key** | **Action** | **Note** |
+|---------|-----------|---------|
+| `-` | Zoom out | |
+| `=` | Zoom in | |
+| `Tab` | Toggle bomb mode (Normal ↔ Bomb) | Ignored while chat input is focused |
+| `Enter` | Toggle chat input | |
+| `ESC` | Close chat input | |
+
+In bomb mode, left-click acts as bomb installation. Press `Tab` again to return to normal mode.
+
+---
+
 ## Special Conditions
 
 - **Stun state**: All inputs disabled for 10 seconds when within 3x3 explosion range

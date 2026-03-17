@@ -52,8 +52,16 @@
       "id": 7,
       "gif": "/mainvideos/chat.gif",
       "description": {
-        "en": "If you click on a tile that is not a mine, the number of mines around the tile will be displayed",
+        "en": "Press Enter to open chat, ESC to close. Press Enter again to send.",
         "ko": "엔터 버튼을 누를 경우 채팅이 활성화 되며, 끄려면 ESC를 누르세요. 입력하고 엔터를 다시 누를 경우 채팅이 전송됩니다."
+      }
+    },
+    {
+      "id": 8,
+      "gif": "/mainvideos/zoom.gif",
+      "description": {
+        "en": "Keyboard shortcuts: [-] zoom out, [=] zoom in, [Tab] toggle bomb mode",
+        "ko": "키보드 단축키: [-] 축소, [=] 확대, [Tab] 폭탄 모드 전환"
       }
     }
   ]

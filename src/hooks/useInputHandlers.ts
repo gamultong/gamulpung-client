@@ -142,9 +142,9 @@ export default function useInputHandlers({
     const isFlagged = isTileFlag(clickedTile);
     const [rangeX, rangeY] = [tileX - cursorOriginX, tileY - cursorOriginY];
     const isInRange = rangeX >= -1 && rangeX <= 1 && rangeY >= -1 && rangeY <= 1;
-    // Touch + flag/bomb mode: treat tap as special (flag/bomb action)
-    const isModeTap = pointerTypeRef.current === 'touch' && interactionMode !== 'normal';
-    const clickType = event.buttons !== 2 && !isModeTap ? 'general' : 'special';
+    // Flag/bomb mode: treat click as special (flag/bomb action)
+    const isModeAction = interactionMode !== 'normal';
+    const clickType = event.buttons !== 2 && !isModeAction ? 'general' : 'special';
     const isActionable = isClosed || isFlagged;
     const isBombActionable = isActionable || (isBombMode && (isTileOpen(clickedTile) || isTileBomb(clickedTile)));
 
