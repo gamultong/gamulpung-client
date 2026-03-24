@@ -24,6 +24,7 @@ async function getWasm(): Promise<WasmModule> {
     // Initialize the WASM binary
     await (mod.default as InitFn)();
     wasmModule = mod;
+    console.log('WASM tile engine loaded successfully', performance.now());
     return mod;
   })();
 

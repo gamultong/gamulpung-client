@@ -109,7 +109,7 @@ pub fn process_hex_tiles(
     let column_length = (start_y - end_y + 1).unsigned_abs() as usize;
 
     let y_offset = end_y - start_point_y;
-    let x_offset: i32 = if is_all { 0 } else { start_x - start_point_x - 1 };
+    let x_offset: i32 = if is_all { 0 } else { end_x + 1 - start_point_x };
 
     let gw = grid_width as usize;
     let gh = grid_height as usize;
@@ -189,7 +189,7 @@ pub fn process_hex_tiles_inplace(
     let column_length = (start_y - end_y + 1).unsigned_abs() as usize;
 
     let y_offset = end_y - start_point_y;
-    let x_offset: i32 = if is_all { 0 } else { start_x - start_point_x - 1 };
+    let x_offset: i32 = if is_all { 0 } else { end_x + 1 - start_point_x };
 
     let gw = grid_width as usize;
     let gh = grid_height as usize;
@@ -265,7 +265,7 @@ pub fn process_binary_tiles(
     let column_length = (start_y - end_y + 1).unsigned_abs() as usize;
 
     let y_offset = end_y - start_point_y;
-    let x_offset: i32 = if is_all { 0 } else { start_x - start_point_x - 1 };
+    let x_offset: i32 = if is_all { 0 } else { end_x + 1 - start_point_x };
 
     let gw = grid_width as usize;
     let gh = grid_height as usize;

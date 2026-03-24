@@ -32,7 +32,7 @@ export default function Play() {
   const {} = useClickStore();
   const { isOpen, sendMessage, connect, disconnect } = useWebSocketStore();
   const { position: cursorPosition, zoom, originPosition: cursorOriginPosition } = useCursorStore();
-  const { zoomUp, zoomDown, setZoom } = useCursorStore();
+  const { zoomUp, zoomDown, setZoom, setInteractionMode } = useCursorStore();
   const cachingTiles = useTiles();
   const {
     startPoint,
@@ -117,15 +117,23 @@ export default function Play() {
     sendMessage,
   });
 
-  const zoomHandler = (e: KeyboardEvent) => {
+  const keyHandler = (e: KeyboardEvent) => {
+    // Skip when chat or other input is focused
+    const tag = (document.activeElement?.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return;
+
     const key = e.key.toLowerCase();
     if (['-', '='].includes(key)) e.preventDefault();
+    if (key === 'tab') e.preventDefault();
     switch (key) {
       case '-':
         zoomDown();
         break;
       case '=':
         zoomUp();
+        break;
+      case 'tab':
+        setInteractionMode(useCursorStore.getState().interactionMode === 'normal' ? 'bomb' : 'normal');
         break;
     }
   };
@@ -135,10 +143,10 @@ export default function Play() {
     document.documentElement.style.overflow = 'hidden';
     setIsInitialized(false);
     setZoom(1);
-    document.addEventListener('keydown', zoomHandler);
+    document.addEventListener('keydown', keyHandler);
     return () => {
       document.documentElement.style.overflow = 'auto';
-      document.removeEventListener('keydown', zoomHandler);
+      document.removeEventListener('keydown', keyHandler);
 
       if (reviveTimerRef.current) {
         clearTimeout(reviveTimerRef.current);
