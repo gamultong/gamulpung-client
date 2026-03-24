@@ -205,7 +205,9 @@ export default function useMovement({
       const { interactionCanvasRef: I_canvas, otherCursorsRef: C_canvas, otherPointerRef: P_canvas } = canvasRefs;
       const tilemap = document.getElementById('Tilemap');
       const colorOverlay = document.getElementById('ColorOverlay');
-      const currentRefs = [I_canvas.current, C_canvas.current, P_canvas.current, tilemap, colorOverlay];
+      const shockwave = document.getElementById('ShockwaveCanvas');
+      const bombMarker = document.getElementById('BombMarkerCanvas');
+      const currentRefs = [I_canvas.current, C_canvas.current, P_canvas.current, tilemap, colorOverlay, shockwave, bombMarker];
       const start = performance.now();
       const animate = (now: number) => {
         const elapsed = now - start;
