@@ -1,6 +1,9 @@
 name: ci
 
-on: workflow_dispatch # 수동 실행만 가능 (자동 트리거 비활성화)
+on:
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
 
 jobs:
   lint:
