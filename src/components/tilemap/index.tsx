@@ -30,6 +30,7 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className, style 
 
   // ─── Imperative Pixi sprite pools ───
   const bgLayerRef = useRef<PixiContainer | null>(null);
+  const numberLayerRef = useRef<PixiContainer | null>(null);
   const closedLayerRef = useRef<PixiContainer | null>(null);
   const boomLayerRef = useRef<PixiContainer | null>(null);
   const flagLayerRef = useRef<PixiContainer | null>(null);
@@ -93,7 +94,9 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className, style 
     ensurePool(innerPoolRef.current, bgLayer, maxVisible);
     ensurePool(boomPoolRef.current, boomLayer, maxVisible);
     ensurePool(flagPoolRef.current, flagLayer, maxVisible);
-    ensurePool(numberPoolRef.current, bgLayer, maxVisible);
+    const numberLayer = numberLayerRef.current;
+    if (!numberLayer) return;
+    ensurePool(numberPoolRef.current, numberLayer, maxVisible);
 
     // Ensure closed pool
     while (closedPoolRef.current.length < maxVisible) {
@@ -300,6 +303,7 @@ export default function Tilemap({ tilePadWidth, tilePadHeight, className, style 
     >
       <Container name={'container'} sortableChildren={false} eventMode="none" cacheAsBitmap={false} cullable={true}>
         <Container name={'background'} ref={bgLayerRef} eventMode="none" sortableChildren={false} />
+        <Container name={'number-layer'} ref={numberLayerRef} eventMode="none" sortableChildren={false} />
         <Container name={'closed-layer'} ref={closedLayerRef} eventMode="none" sortableChildren={false} />
         <Container name={'boom-layer'} ref={boomLayerRef} eventMode="none" sortableChildren={false} />
         <Container name={'flag-layer'} ref={flagLayerRef} eventMode="none" sortableChildren={false} />

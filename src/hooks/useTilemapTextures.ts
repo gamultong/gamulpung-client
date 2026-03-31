@@ -47,6 +47,10 @@ export default function useTilemapTextures(tileSize: number, zoom: number) {
   const [numbersReady, setNumbersReady] = useState(false);
 
   useEffect(() => {
+    // tileSize 변경 시 텍스처 재빌드 전까지 렌더링 차단
+    setNumbersReady(false);
+    setTexturesReady(false);
+
     // Pre-render number textures (1-8) in parallel
     const size = tileSize;
     const build = async () => {
