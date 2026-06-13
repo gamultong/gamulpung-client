@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev -p 2001",
     "build": "next build",
+    "build:check": "NEXT_DIST_DIR=.next-build next build",
     "export": "next export",
     "start": "next start",
     "lint": "next lint"
